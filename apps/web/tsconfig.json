@@ -1,0 +1,9 @@
+{
+  "extends": "@testtix/config/tsconfig/react.json",
+  "compilerOptions": {
+    "rootDir": ".",
+    "outDir": "dist",
+    "noEmit": true
+  },
+  "include": ["src", "*.ts"]
+}
