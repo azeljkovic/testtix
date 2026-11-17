@@ -4,7 +4,7 @@ A sample event ticket shop — concerts, talks and meetups — built as a realis
 
 Ticket sales naturally produce the failure modes worth practising on: race conditions on the last seat, time-dependent seat holds, ticket drops with a waiting room, asynchronous checkout with emailed tickets, and a seat map that is hard to make accessible.
 
-> **Status:** early development. The app is being built in small, verifiable chunks (see [Roadmap](#roadmap)).
+> **Status:** early development. The app is being built in small, verifiable chunks — see the [development plan](docs/development-plan.md) and [tech stack decisions](docs/tech-stack-decisions.md).
 
 ## Repository layout
 

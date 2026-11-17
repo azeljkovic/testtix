@@ -1,0 +1,58 @@
+# TestTix — notes for Claude Code
+
+TestTix is a sample event ticket shop (concerts, talks, meetups; seated and general-admission tickets) built as a realistic target for software testing practice. The app must be **correct and testable**: v1 ships with no intentional bugs.
+
+## Source-of-truth docs
+
+- `docs/development-plan.md` — milestones and chunks (C0.1 … C6.5), definition of done, resolved questions. **Work from this plan.**
+- `docs/tech-stack-decisions.md` — architecture and tooling decisions. Don't change a **[Decided]** item without asking; **[Proposed]** items may be adjusted, but record the change in that doc in the same PR.
+- `docs/idea.md` — product idea and the failure modes each feature exists to demonstrate.
+
+When a decision changes, update the docs in the same PR so they stay accurate.
+
+## Current status
+
+- ✅ C0.1 Monorepo scaffold (initial commit on `main`)
+- ⏭️ Next: **C0.2 CI skeleton**, then C0.3–C0.7 (see plan)
+
+Update this list when a chunk is merged.
+
+## Workflow
+
+- One chunk = one branch = one PR into `main`. Branch names: `c0-2-ci-skeleton`, `c3-1-seat-holds-api`.
+- Commits follow Conventional Commits (`feat:`, `fix:`, `chore:`, `docs:`, `test:`, `ci:`), with the chunk ID in the subject or body. Changelogs are generated from these later (release-please).
+- Before opening a PR, run `pnpm lint && pnpm typecheck && pnpm build && pnpm test && pnpm format:check`.
+- The PR description lists verification steps and their results (commands, curl calls, URLs).
+- Follow the plan's **Definition of done** for every chunk.
+
+## Commands
+
+Requires Node 24 (`.nvmrc`, `engine-strict=true`) and pnpm via Corepack (`packageManager` in `package.json`).
+
+```sh
+pnpm install
+pnpm build          # turbo, cached
+pnpm typecheck
+pnpm lint
+pnpm test           # from C0.2
+pnpm format         # / format:check
+```
+
+Run one package: `pnpm --filter @testtix/api <script>`.
+
+## Conventions and gotchas
+
+- **TypeScript is pinned to 6.0.x.** typescript-eslint doesn't support TS 7 yet; don't bump until it does.
+- TS 6 defaults `types` to `[]`. Node packages extend `@testtix/config/tsconfig/node.json` (which sets `types: ["node"]`); add other ambient types (e.g. `vitest/globals`) explicitly.
+- ESM everywhere (`"type": "module"`, `NodeNext` resolution for Node packages, `Bundler` for `apps/web`). Relative imports in Node packages need `.js` extensions. Revisit for NestJS in C0.4 if ESM causes friction, and record the decision.
+- ESLint uses `typescript-eslint` `strictTypeChecked` + Prettier; shared config lives in `packages/config/eslint.js`.
+- Money is stored as integer cents, currency USD, locale `en-US` (`packages/shared`).
+- `packages/shared` is compiled to `dist/`; turbo runs `^build` before dependants' typecheck, lint, test and dev.
+- Pin exact dependency versions (no `^`), matching the existing `package.json` files.
+- Server code must take "now" from `ClockService` (from C1.1), never `Date.now()` / `new Date()` directly.
+- Prefer accessible names over `data-testid` in the UI; use `data-testid` only where no good accessible locator exists.
+- Every list endpoint sorts with a stable tiebreaker (`id`).
+
+## Repo
+
+https://github.com/azeljkovic/testtix — public, MIT. Tests coupled to the code (unit, component, API integration) live here; UI/API e2e and k6 performance tests live in a separate repository.
