@@ -39,6 +39,7 @@ pnpm build
 | `pnpm build`        | Builds every package (Turborepo, cached)      |
 | `pnpm typecheck`    | Type-checks every package with `tsc --noEmit` |
 | `pnpm lint`         | Lints every package with ESLint               |
+| `pnpm test`         | Runs unit tests with Vitest                   |
 | `pnpm format`       | Formats the repo with Prettier                |
 | `pnpm format:check` | Checks formatting without writing             |
 | `pnpm clean`        | Removes build output and Turborepo caches     |
