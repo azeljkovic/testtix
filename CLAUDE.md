@@ -15,7 +15,8 @@ When a decision changes, update the docs in the same PR so they stay accurate.
 - ✅ C0.1 Monorepo scaffold (initial commit on `main`)
 - ✅ C0.2 CI skeleton
 - ✅ C0.3 Local infra
-- ⏭️ Next: **C0.4 API skeleton**, then C0.5–C0.7 (see plan)
+- ✅ C0.4 API skeleton
+- ⏭️ Next: **C0.5 Prisma + integration harness**, C0.6 web skeleton, then C0.7 (see plan)
 
 Update this list when a chunk is merged.
 
@@ -46,8 +47,14 @@ Run one package: `pnpm --filter @testtix/api <script>`.
 
 - **TypeScript is pinned to 6.0.x.** typescript-eslint doesn't support TS 7 yet; don't bump until it does.
 - TS 6 defaults `types` to `[]`. Node packages extend `@testtix/config/tsconfig/node.json` (which sets `types: ["node"]`); add other ambient types (e.g. `vitest/globals`) explicitly.
-- ESM everywhere (`"type": "module"`, `NodeNext` resolution for Node packages, `Bundler` for `apps/web`). Relative imports in Node packages need `.js` extensions. Revisit for NestJS in C0.4 if ESM causes friction, and record the decision.
+- ESM everywhere (`"type": "module"`, `NodeNext` resolution for Node packages, `Bundler` for `apps/web`). Relative imports in Node packages need `.js` extensions. ESM was kept for NestJS in C0.4 (see tech-stack §3).
 - ESLint uses `typescript-eslint` `strictTypeChecked` + Prettier; shared config lives in `packages/config/eslint.js`.
+- **NestJS is pinned to 11.x** because `nestjs-zod` doesn't support 12 yet; don't bump until it does.
+- Nest DI relies on decorator metadata: `apps/api` sets `experimentalDecorators` + `emitDecoratorMetadata`, and Vitest transforms with `unplugin-swc`. Inject interfaces/types with `@Inject(TOKEN)` and `import type`; classes can be injected by type.
+- API tests that don't need real infra use `createTestApp()` (`apps/api/src/testing/test-app.ts`): the real modules and `configureApp()`, with Postgres and Redis faked. Keep app-level setup in `configureApp()` so `main.ts` and tests share it.
+- Every API error goes through `ProblemDetailsFilter` (problem+json). Throw Nest `HttpException`s or let Zod DTOs fail; don't hand-roll error bodies.
+- New API env vars go in `apps/api/src/config/config.schema.ts` and `.env.example`.
+- Root `package.json` `pnpm.ignoredBuiltDependencies` skips install scripts on purpose: `@scarf/scarf` is telemetry, `@swc/core`'s only re-checks its binary.
 - Money is stored as integer cents, currency USD, locale `en-US` (`packages/shared`).
 - `packages/shared` is compiled to `dist/`; turbo runs `^build` before dependants' typecheck, lint, test and dev.
 - Pin exact dependency versions (no `^`), matching the existing `package.json` files.
