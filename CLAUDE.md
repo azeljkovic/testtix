@@ -13,7 +13,8 @@ When a decision changes, update the docs in the same PR so they stay accurate.
 ## Current status
 
 - ✅ C0.1 Monorepo scaffold (initial commit on `main`)
-- ⏭️ Next: **C0.2 CI skeleton**, then C0.3–C0.7 (see plan)
+- ✅ C0.2 CI skeleton
+- ⏭️ Next: **C0.3 Local infra**, then C0.4–C0.7 (see plan)
 
 Update this list when a chunk is merged.
 
@@ -34,7 +35,7 @@ pnpm install
 pnpm build          # turbo, cached
 pnpm typecheck
 pnpm lint
-pnpm test           # from C0.2
+pnpm test
 pnpm format         # / format:check
 ```
 
