@@ -4,7 +4,6 @@ import { stdTimeFunctions } from 'pino';
 
 import { APP_CONFIG } from '../config/config.module.js';
 import type { AppConfig } from '../config/config.schema.js';
-import { resolveRequestId } from './request-id.js';
 
 /** Structured JSON logs (pino). Every request gets an ID that appears in its log lines as `req.id`. */
 @Module({
@@ -16,7 +15,7 @@ import { resolveRequestId } from './request-id.js';
           level: config.logLevel,
           base: { service: 'api' },
           timestamp: stdTimeFunctions.isoTime,
-          genReqId: resolveRequestId,
+          // No genReqId: Fastify assigns `req.id` (see `createHttpAdapter`) and pino-http keeps it.
           customLogLevel: (_req, res, err) => {
             if (err !== undefined || res.statusCode >= 500) return 'error';
             if (res.statusCode >= 400) return 'warn';

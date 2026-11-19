@@ -63,7 +63,19 @@ describe('toProblemDetails', () => {
     expect(problem.detail).toBe('An unexpected error occurred.');
   });
 
-  it('maps an exposable http-errors style error (body-parser)', () => {
+  it('maps a Fastify client error (statusCode) to its status', () => {
+    const error = Object.assign(new Error('Unsupported Media Type: text/csv'), {
+      statusCode: 415,
+      code: 'FST_ERR_CTP_INVALID_MEDIA_TYPE',
+    });
+    expect(toProblemDetails(error, request)).toMatchObject({
+      status: 415,
+      title: 'Unsupported Media Type',
+      detail: 'Unsupported Media Type: text/csv',
+    });
+  });
+
+  it('maps an http-errors style error (status) to its status', () => {
     const error = Object.assign(new Error('request entity too large'), {
       status: 413,
       expose: true,
@@ -80,6 +92,10 @@ describe('toProblemDetails', () => {
     [
       'a non-exposable status error',
       Object.assign(new Error('internal'), { status: 400, expose: false }),
+    ],
+    [
+      'an error with a 5xx statusCode',
+      Object.assign(new Error('pool exhausted'), { statusCode: 503 }),
     ],
     ['a thrown string', 'boom'],
     ['undefined', undefined],

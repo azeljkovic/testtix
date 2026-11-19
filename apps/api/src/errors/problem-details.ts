@@ -70,9 +70,10 @@ export function toProblemDetails(exception: unknown, request: RequestInfo): Prob
     return { ...base, ...statusOnly(status), detail: httpExceptionDetail(exception) };
   }
 
-  // Errors from Express middleware (e.g. body-parser's malformed JSON) follow the `http-errors` convention.
-  if (isExposableHttpError(exception)) {
-    return { ...base, ...statusOnly(exception.status), detail: exception.message };
+  // Framework errors raised before a handler runs (e.g. Fastify's body parser on malformed JSON).
+  const clientStatus = clientErrorStatus(exception);
+  if (clientStatus !== undefined && exception instanceof Error) {
+    return { ...base, ...statusOnly(clientStatus), detail: exception.message };
   }
 
   return { ...base, ...statusOnly(500), detail: INTERNAL_ERROR_DETAIL };
@@ -102,8 +103,18 @@ function toFieldErrors(error: unknown): ProblemFieldError[] {
   }));
 }
 
-function isExposableHttpError(value: unknown): value is { status: number; message: string } {
-  if (!(value instanceof Error)) return false;
-  const { status, expose } = value as Error & { status?: unknown; expose?: unknown };
-  return typeof status === 'number' && status >= 400 && status < 500 && expose === true;
+/**
+ * The 4xx status of an error that carries one, as Fastify (`statusCode`) and `http-errors`
+ * (`status`) errors do. 5xx and errors marked `expose: false` are treated as unexpected.
+ */
+function clientErrorStatus(value: unknown): number | undefined {
+  if (!(value instanceof Error)) return undefined;
+  const { statusCode, status, expose } = value as Error & {
+    statusCode?: unknown;
+    status?: unknown;
+    expose?: unknown;
+  };
+  const code = typeof statusCode === 'number' ? statusCode : status;
+  if (typeof code !== 'number' || code < 400 || code >= 500 || expose === false) return undefined;
+  return code;
 }

@@ -1,5 +1,5 @@
 import { Body, Controller, Get, Post } from '@nestjs/common';
-import type { NestExpressApplication } from '@nestjs/platform-express';
+import type { NestFastifyApplication } from '@nestjs/platform-fastify';
 import { createZodDto } from 'nestjs-zod';
 import request from 'supertest';
 import { afterEach, describe, expect, it } from 'vitest';
@@ -28,9 +28,9 @@ class ProbeController {
   }
 }
 
-let app: NestExpressApplication | undefined;
+let app: NestFastifyApplication | undefined;
 
-async function start(options?: TestAppOptions): Promise<NestExpressApplication> {
+async function start(options?: TestAppOptions): Promise<NestFastifyApplication> {
   app = await createTestApp({ controllers: [ProbeController], ...options });
   return app;
 }

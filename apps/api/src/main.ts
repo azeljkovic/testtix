@@ -1,11 +1,11 @@
 import 'reflect-metadata';
 
 import { NestFactory } from '@nestjs/core';
-import type { NestExpressApplication } from '@nestjs/platform-express';
+import type { NestFastifyApplication } from '@nestjs/platform-fastify';
 import { Logger } from 'nestjs-pino';
 
 import { AppModule } from './app.module.js';
-import { configureApp } from './app.setup.js';
+import { configureApp, createHttpAdapter } from './app.setup.js';
 import { ConfigValidationError, parseConfig } from './config/config.schema.js';
 
 async function bootstrap(): Promise<void> {
@@ -19,8 +19,9 @@ async function bootstrap(): Promise<void> {
     return;
   }
 
-  const app = await NestFactory.create<NestExpressApplication>(
+  const app = await NestFactory.create<NestFastifyApplication>(
     AppModule.forRoot(config),
+    createHttpAdapter(),
     // eslint-disable-next-line @typescript-eslint/no-unsafe-class-instance-assignment -- Nest declares its options type as a class; a literal is the documented usage.
     { bufferLogs: true },
   );

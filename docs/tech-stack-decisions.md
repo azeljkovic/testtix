@@ -62,6 +62,7 @@ Notes:
 | Area       | Decision                                                                                                              | Status   |
 | ---------- | --------------------------------------------------------------------------------------------------------------------- | -------- |
 | Framework  | NestJS                                                                                                                | Decided  |
+| HTTP layer | Fastify (`@nestjs/platform-fastify`), not Express                                                                     | Proposed |
 | API style  | REST + OpenAPI 3 (served at `/docs` and `/openapi.json`)                                                              | Proposed |
 | Validation | Zod via `nestjs-zod`, with schemas shared with the frontend, as the single source of truth for validation and OpenAPI | Proposed |
 | Logging    | `nestjs-pino` (structured JSON logs with request IDs)                                                                 | Proposed |
@@ -74,7 +75,8 @@ Notes:
 - **NestJS 11, not 12.** `nestjs-zod` 5.x declares `@nestjs/common` `^10 || ^11` as its peer range, and Nest 11 is still maintained. Upgrade to 12 once `nestjs-zod` supports it (same rule as the TypeScript pin).
 - **ESM works with Nest.** No friction in C0.4: `tsc` output runs on Node directly, and `nestjs-zod`, `nestjs-pino` and `@nestjs/swagger` load as ESM or CJS without issues. Nest's DI needs `experimentalDecorators` + `emitDecoratorMetadata`, which `tsc` and SWC support (esbuild and oxc don't, hence SWC in Vitest).
 - **Readiness uses `pg` and `ioredis` directly** until Prisma (C0.5) takes over the database check. `ioredis` stays as the Redis client for BullMQ (C3.2).
-- **Request IDs** are assigned by an Express middleware that runs before the body parser, so even a request rejected for malformed JSON gets one. A well-formed incoming `X-Request-Id` is reused.
+- **Fastify instead of Express** (changed during C0.4 review): faster under the ticket-drop load the k6 tests will apply, and its request lifecycle gives every request an ID before body parsing. Nest-level code (controllers, filters, guards, `nestjs-zod`, `nestjs-pino`) is adapter-independent; only code that touches the raw request or reply uses Fastify types. Swagger UI on Fastify needs `@fastify/static`.
+- **Request IDs** come from Fastify's `genReqId`: a well-formed incoming `X-Request-Id` is reused, anything else is replaced with a UUID. An `onRequest` hook echoes it in the response header, and pino-http logs the same ID, so even a request rejected for malformed JSON has one.
 
 ### 3.1 Database
 

@@ -1,9 +1,9 @@
 import type { Type } from '@nestjs/common';
-import type { NestExpressApplication } from '@nestjs/platform-express';
+import type { NestFastifyApplication } from '@nestjs/platform-fastify';
 import { Test } from '@nestjs/testing';
 
 import { AppModule } from '../app.module.js';
-import { configureApp } from '../app.setup.js';
+import { configureApp, createHttpAdapter } from '../app.setup.js';
 import { type AppConfig, parseConfig } from '../config/config.schema.js';
 import { PG_POOL } from '../infra/database.module.js';
 import { REDIS } from '../infra/redis.module.js';
@@ -28,7 +28,7 @@ export interface TestAppOptions {
  * replaced by fakes, for tests that don't need real infrastructure. Integration tests against
  * real services arrive with the harness in C0.5.
  */
-export async function createTestApp(options: TestAppOptions = {}): Promise<NestExpressApplication> {
+export async function createTestApp(options: TestAppOptions = {}): Promise<NestFastifyApplication> {
   const config: AppConfig = parseConfig({ NODE_ENV: 'test', LOG_LEVEL: 'silent', ...options.env });
   const database = options.database ?? up;
   const redis = options.redis ?? up;
@@ -43,8 +43,9 @@ export async function createTestApp(options: TestAppOptions = {}): Promise<NestE
     .useValue({ ping: redis, status: 'end', disconnect: () => undefined })
     .compile();
 
-  const app = moduleRef.createNestApplication<NestExpressApplication>();
+  const app = moduleRef.createNestApplication<NestFastifyApplication>(createHttpAdapter());
   configureApp(app);
   await app.init();
+  await app.getHttpAdapter().getInstance().ready();
   return app;
 }

@@ -54,7 +54,8 @@ Run one package: `pnpm --filter @testtix/api <script>`.
 - API tests that don't need real infra use `createTestApp()` (`apps/api/src/testing/test-app.ts`): the real modules and `configureApp()`, with Postgres and Redis faked. Keep app-level setup in `configureApp()` so `main.ts` and tests share it.
 - Every API error goes through `ProblemDetailsFilter` (problem+json). Throw Nest `HttpException`s or let Zod DTOs fail; don't hand-roll error bodies.
 - New API env vars go in `apps/api/src/config/config.schema.ts` and `.env.example`.
-- Root `package.json` `pnpm.ignoredBuiltDependencies` skips install scripts on purpose: `@scarf/scarf` is telemetry, `@swc/core`'s only re-checks its binary.
+- The API runs on **Fastify** (`@nestjs/platform-fastify`). Use `FastifyRequest` / `FastifyReply` types, never Express ones. `createHttpAdapter()` in `apps/api/src/app.setup.ts` builds the adapter for `main.ts` and tests.
+- Root `package.json` `pnpm.ignoredBuiltDependencies` records that skipping install scripts is deliberate (`@scarf/scarf` is telemetry, `@swc/core`'s only re-checks its binary). pnpm still prints its "Ignored build scripts" reminder; that's expected.
 - Money is stored as integer cents, currency USD, locale `en-US` (`packages/shared`).
 - `packages/shared` is compiled to `dist/`; turbo runs `^build` before dependants' typecheck, lint, test and dev.
 - Pin exact dependency versions (no `^`), matching the existing `package.json` files.

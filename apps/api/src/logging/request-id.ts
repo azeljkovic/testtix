@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import type { IncomingMessage, ServerResponse } from 'node:http';
+import type { IncomingMessage } from 'node:http';
 
 export const REQUEST_ID_HEADER = 'X-Request-Id';
 
@@ -7,26 +7,13 @@ export const REQUEST_ID_HEADER = 'X-Request-Id';
 const REQUEST_ID_PATTERN = /^[A-Za-z0-9._:-]{1,128}$/;
 
 /**
- * Reuses a well-formed `X-Request-Id` from the caller (so a test can correlate its own ID with
- * server logs) or generates a UUID, and echoes it back in the response header.
+ * Fastify's `genReqId`: reuses a well-formed `X-Request-Id` from the caller (so a test can
+ * correlate its own ID with server logs) or generates a UUID. Fastify assigns it before any hook,
+ * middleware or body parsing runs, and pino-http logs the same value as `req.id`.
  */
-export function resolveRequestId(req: IncomingMessage, res: ServerResponse): string {
+export function requestIdFor(req: IncomingMessage): string {
   const incoming = req.headers['x-request-id'];
-  const id =
-    typeof incoming === 'string' && REQUEST_ID_PATTERN.test(incoming) ? incoming : randomUUID();
-  res.setHeader(REQUEST_ID_HEADER, id);
-  return id;
-}
-
-/**
- * Express middleware that assigns `req.id` before anything else runs, including the body parser,
- * so even a request rejected for malformed JSON has an ID. pino-http keeps an existing `req.id`.
- */
-export function requestIdMiddleware(
-  req: IncomingMessage,
-  res: ServerResponse,
-  next: () => void,
-): void {
-  req.id = resolveRequestId(req, res);
-  next();
+  return typeof incoming === 'string' && REQUEST_ID_PATTERN.test(incoming)
+    ? incoming
+    : randomUUID();
 }

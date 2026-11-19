@@ -1,12 +1,12 @@
 import { readFileSync } from 'node:fs';
 
-import type { NestExpressApplication } from '@nestjs/platform-express';
+import { FastifyAdapter, type NestFastifyApplication } from '@nestjs/platform-fastify';
 import { DocumentBuilder, type OpenAPIObject, SwaggerModule } from '@nestjs/swagger';
 import { Logger } from 'nestjs-pino';
 import { cleanupOpenApiDoc } from 'nestjs-zod';
 
 import { addProblemDetailsResponses } from './errors/openapi-problems.js';
-import { requestIdMiddleware } from './logging/request-id.js';
+import { REQUEST_ID_HEADER, requestIdFor } from './logging/request-id.js';
 
 const { version } = JSON.parse(
   readFileSync(new URL('../package.json', import.meta.url), 'utf8'),
@@ -14,8 +14,17 @@ const { version } = JSON.parse(
   version: string;
 };
 
+/** The HTTP adapter shared by `main.ts` and the tests. */
+export function createHttpAdapter(): FastifyAdapter {
+  return new FastifyAdapter({
+    genReqId: requestIdFor,
+    // Fastify would otherwise copy the header verbatim; `requestIdFor` validates it first.
+    requestIdHeader: false,
+  });
+}
+
 /** Builds the OpenAPI document. Also used by the spec export script (C0.7). */
-export function buildOpenApiDocument(app: NestExpressApplication): OpenAPIObject {
+export function buildOpenApiDocument(app: NestFastifyApplication): OpenAPIObject {
   const config = new DocumentBuilder()
     .setTitle('TestTix API')
     .setDescription(
@@ -27,12 +36,20 @@ export function buildOpenApiDocument(app: NestExpressApplication): OpenAPIObject
   return addProblemDetailsResponses(cleanupOpenApiDoc(SwaggerModule.createDocument(app, config)));
 }
 
-/** App-level setup shared by `main.ts` and the tests, so tests exercise the real configuration. */
-export function configureApp(app: NestExpressApplication): void {
-  // Registered now, so it runs before the body parser and module middleware added by `init()`.
-  app.use(requestIdMiddleware);
+/**
+ * App-level setup shared by `main.ts` and the tests, so tests exercise the real configuration.
+ * Call before `init()` / `listen()`.
+ */
+export function configureApp(app: NestFastifyApplication): void {
   app.useLogger(app.get(Logger));
-  app.disable('x-powered-by');
+  // `onRequest` runs first for every request, including 404s and bodies that fail to parse.
+  app
+    .getHttpAdapter()
+    .getInstance()
+    .addHook('onRequest', (request, reply, done) => {
+      void reply.header(REQUEST_ID_HEADER, request.id);
+      done();
+    });
   SwaggerModule.setup('docs', app, () => buildOpenApiDocument(app), {
     jsonDocumentUrl: 'openapi.json',
     customSiteTitle: 'TestTix API docs',

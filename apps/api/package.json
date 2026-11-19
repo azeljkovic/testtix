@@ -15,12 +15,14 @@
     "clean": "rm -rf dist .turbo *.tsbuildinfo"
   },
   "dependencies": {
+    "@fastify/static": "10.1.12",
     "@nestjs/common": "11.2.11",
     "@nestjs/core": "11.2.11",
-    "@nestjs/platform-express": "11.2.11",
+    "@nestjs/platform-fastify": "11.2.11",
     "@nestjs/swagger": "11.4.8",
     "@prometheus-io/client": "0.16.1",
     "@testtix/shared": "workspace:*",
+    "fastify": "5.12.8",
     "ioredis": "6.0.0",
     "nestjs-pino": "5.3.2",
     "nestjs-zod": "5.6.0",
@@ -35,7 +37,6 @@
     "@nestjs/testing": "11.2.11",
     "@swc/core": "1.16.22",
     "@testtix/config": "workspace:*",
-    "@types/express": "5.0.6",
     "@types/node": "24.19.2",
     "@types/pg": "8.23.1",
     "@types/supertest": "7.2.1",

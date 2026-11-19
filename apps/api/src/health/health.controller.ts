@@ -5,7 +5,7 @@ import {
   ApiServiceUnavailableResponse,
   ApiTags,
 } from '@nestjs/swagger';
-import type { Response } from 'express';
+import type { FastifyReply } from 'fastify';
 import { ZodResponse } from 'nestjs-zod';
 
 import { LivenessDto, ReadinessDto, ReadinessSchema } from './health.schemas.js';
@@ -37,11 +37,11 @@ export class HealthController {
     type: ReadinessDto.Output,
     description: 'At least one dependency is down.',
   })
-  async ready(@Res() res: Response): Promise<void> {
+  async ready(@Res() res: FastifyReply): Promise<void> {
     // Sent manually: Nest would otherwise override a 503 set on a passthrough response with 200.
     const report = ReadinessSchema.parse(await this.health.readiness());
-    res
+    await res
       .status(report.status === 'ok' ? HttpStatus.OK : HttpStatus.SERVICE_UNAVAILABLE)
-      .json(report);
+      .send(report);
   }
 }
