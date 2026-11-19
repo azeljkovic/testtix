@@ -1,0 +1,76 @@
+# Local infrastructure for TestTix.
+#
+# Run from the repo root (the root `.env` overrides the defaults below):
+#   pnpm infra:up      # start and wait until every service is healthy
+#   pnpm infra:down    # stop, keep data
+#   pnpm infra:reset   # stop and delete all data volumes
+#
+# Ports bind to 127.0.0.1 only, so the default credentials are never exposed on your network.
+#
+# Profiles (placeholders, filled in by later chunks):
+#   full           api, worker, web and fake-payments as containers (C6.1)
+#   observability  Prometheus + Grafana for k6 runs (C6.2)
+# Services without a profile, the ones below, always start.
+
+name: testtix
+
+services:
+  postgres:
+    image: postgres:18.7-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-testtix}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-testtix}
+      POSTGRES_DB: ${POSTGRES_DB:-testtix}
+    ports:
+      - 127.0.0.1:${POSTGRES_PORT:-5432}:5432
+    volumes:
+      # Postgres 18+ images keep data in a versioned subdirectory of /var/lib/postgresql.
+      - postgres-data:/var/lib/postgresql
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U "$${POSTGRES_USER}" -d "$${POSTGRES_DB}"']
+      interval: 2s
+      timeout: 5s
+      retries: 30
+      start_period: 10s
+    restart: unless-stopped
+
+  redis:
+    image: redis:8.10.3-alpine
+    command: ['redis-server', '--appendonly', 'yes']
+    ports:
+      - 127.0.0.1:${REDIS_PORT:-6379}:6379
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 2s
+      timeout: 5s
+      retries: 30
+      start_period: 5s
+    restart: unless-stopped
+
+  mailpit:
+    image: axllent/mailpit:v1.34.0
+    environment:
+      MP_DATABASE: /data/mailpit.db
+      MP_MAX_MESSAGES: 1000
+      # Accept any SMTP auth (or none), so the app's SMTP settings need no real credentials.
+      MP_SMTP_AUTH_ACCEPT_ANY: 1
+      MP_SMTP_AUTH_ALLOW_INSECURE: 1
+    ports:
+      - 127.0.0.1:${MAILPIT_SMTP_PORT:-1025}:1025
+      - 127.0.0.1:${MAILPIT_UI_PORT:-8025}:8025
+    volumes:
+      - mailpit-data:/data
+    healthcheck:
+      test: ['CMD', '/mailpit', 'readyz']
+      interval: 2s
+      timeout: 5s
+      retries: 30
+      start_period: 5s
+    restart: unless-stopped
+
+volumes:
+  postgres-data:
+  redis-data:
+  mailpit-data:

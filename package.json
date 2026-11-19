@@ -17,7 +17,11 @@
     "test": "turbo run test",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "clean": "turbo run clean"
+    "clean": "turbo run clean",
+    "infra:up": "docker compose --project-directory . -f docker/compose.yml up -d --wait",
+    "infra:check": "bash docker/smoke-test.sh",
+    "infra:down": "docker compose --project-directory . -f docker/compose.yml down",
+    "infra:reset": "docker compose --project-directory . -f docker/compose.yml down --volumes"
   },
   "devDependencies": {
     "@testtix/config": "workspace:*",

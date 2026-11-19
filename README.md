@@ -23,14 +23,31 @@ Tests that are tightly coupled to the code (unit, component, API integration) li
 
 ## Quick start
 
-Requirements: Node.js 24 (see `.nvmrc`) and pnpm 10 (via [Corepack](https://nodejs.org/api/corepack.html)).
+Requirements: Node.js 24 (see `.nvmrc`), pnpm 10 (via [Corepack](https://nodejs.org/api/corepack.html)) and Docker with Compose v2.
 
 ```sh
 nvm use            # or install Node 24 another way
 corepack enable    # provides the pnpm version pinned in package.json
 pnpm install
 pnpm build
+pnpm infra:up      # Postgres, Redis and Mailpit in Docker
 ```
+
+## Local infrastructure
+
+`docker/compose.yml` runs the services the app depends on. `pnpm infra:up` starts them and waits until every health check passes; `pnpm infra:check` then checks each one from the host (a query, a `PING`, an email delivered to Mailpit).
+
+| Service    | Address                                    | Notes                                                         |
+| ---------- | ------------------------------------------ | ------------------------------------------------------------- |
+| PostgreSQL | `localhost:5432`                           | user, password and database: `testtix`                        |
+| Redis      | `localhost:6379`                           | no password, append-only persistence                          |
+| Mailpit    | SMTP `localhost:1025`, UI `localhost:8025` | catches every email the app sends; any SMTP login is accepted |
+
+Open the Mailpit inbox at <http://localhost:8025>. Ports bind to `127.0.0.1` only. If one is already taken (for example by a native Postgres), copy `.env.example` to `.env` and change it there.
+
+Data lives in named Docker volumes, so it survives `pnpm infra:down`. Use `pnpm infra:reset` to delete it and start clean.
+
+The compose file has two placeholder profiles that later milestones fill in: `full` runs the app itself in containers, and `observability` adds Prometheus and Grafana.
 
 ## Scripts
 
@@ -43,6 +60,10 @@ pnpm build
 | `pnpm format`       | Formats the repo with Prettier                |
 | `pnpm format:check` | Checks formatting without writing             |
 | `pnpm clean`        | Removes build output and Turborepo caches     |
+| `pnpm infra:up`     | Starts local infra and waits until healthy    |
+| `pnpm infra:check`  | Smoke-tests the running local infra           |
+| `pnpm infra:down`   | Stops local infra, keeping its data           |
+| `pnpm infra:reset`  | Stops local infra and deletes its data        |
 
 ## Tech stack
 

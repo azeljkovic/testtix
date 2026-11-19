@@ -14,7 +14,8 @@ When a decision changes, update the docs in the same PR so they stay accurate.
 
 - ✅ C0.1 Monorepo scaffold (initial commit on `main`)
 - ✅ C0.2 CI skeleton
-- ⏭️ Next: **C0.3 Local infra**, then C0.4–C0.7 (see plan)
+- ✅ C0.3 Local infra
+- ⏭️ Next: **C0.4 API skeleton**, then C0.5–C0.7 (see plan)
 
 Update this list when a chunk is merged.
 
@@ -53,6 +54,7 @@ Run one package: `pnpm --filter @testtix/api <script>`.
 - Server code must take "now" from `ClockService` (from C1.1), never `Date.now()` / `new Date()` directly.
 - Prefer accessible names over `data-testid` in the UI; use `data-testid` only where no good accessible locator exists.
 - Every list endpoint sorts with a stable tiebreaker (`id`).
+- Local infra is `docker/compose.yml`, driven by `pnpm infra:*` from the repo root (`--project-directory .`, so the root `.env` overrides the compose defaults). Pin image tags to an exact version. New services get a health check, and `docker/smoke-test.sh` checks them.
 
 ## Repo
 
