@@ -16,6 +16,8 @@
     "typecheck": "turbo run typecheck",
     "test": "turbo run test",
     "test:integration": "turbo run test:integration",
+    "openapi": "turbo run openapi",
+    "openapi:check": "bash scripts/check-openapi.sh",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "clean": "turbo run clean",
@@ -42,6 +44,11 @@
       "cpu-features",
       "protobufjs",
       "ssh2"
-    ]
+    ],
+    "peerDependencyRules": {
+      "allowedVersions": {
+        "openapi-typescript>typescript": "6"
+      }
+    }
   }
 }

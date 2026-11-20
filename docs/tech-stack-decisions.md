@@ -1,6 +1,6 @@
 # TestTix — Tech stack decisions
 
-Status: draft v2 (2026-11-17), updated for C0.6 (2026-11-20)
+Status: draft v2 (2026-11-17), updated for C0.7 (2026-11-20)
 Legend: **[Decided]** = chosen by Aleksandar · **[Proposed]** = default pick, open to change
 
 ---
@@ -60,7 +60,7 @@ Notes:
 - **React 19, React Router 8, Vite 8, Tailwind CSS 4** (via `@tailwindcss/vite`, no `tailwind.config`), TanStack Query 5, React Aria Components 1.x. React Router is used in data mode (`createBrowserRouter` with a shared route table), not framework mode, since the app is a plain SPA.
 - **Document titles** use React 19's built-in `<title>` hoisting (`PageTitle`), no helmet library.
 - **React Aria + React Router:** `RootLayout` wraps the app in React Aria's `RouterProvider`, so React Aria links and menus navigate client-side.
-- **API calls** go to `/api/*` on the page's own origin. The Vite dev server proxies them to the API and strips the prefix; production gets the same rule from Caddy (C6.1). This avoids CORS entirely. Until C0.7 the one call (`GET /health`) uses `fetch` directly.
+- **API calls** go to `/api/*` on the page's own origin. The Vite dev server proxies them to the API and strips the prefix; production gets the same rule from Caddy (C6.1). This avoids CORS entirely. Since C0.7 every call goes through the typed client (§3, "Shared schemas and the OpenAPI client").
 - **Lint:** the shared ESLint config gains a `react` option with `eslint-plugin-react-hooks` (recommended rules, including the React Compiler checks). `eslint-plugin-jsx-a11y` is left out because it doesn't support ESLint 10 yet; axe checks in component tests cover accessibility.
 - **Component tests:** Vitest with jsdom, React Testing Library and user-event. MSW 3 answers API calls (`onUnhandledFrame: 'error'`, so an unmocked request fails the test). `vitest-axe` 0.1 still declares its matcher types for an old Vitest, so `src/testing/axe.ts` re-declares `toHaveNoViolations` for Vitest's `Matchers` interface; jsdom can't measure colour contrast, so that axe rule is off in component tests and left to e2e.
 
@@ -86,6 +86,17 @@ Notes:
 - **Readiness** checks Postgres through Prisma (`SELECT 1`, since C0.5) and Redis with `ioredis`, which stays as the Redis client for BullMQ (C3.2).
 - **Fastify instead of Express** (changed during C0.4 review): faster under the ticket-drop load the k6 tests will apply, and its request lifecycle gives every request an ID before body parsing. Nest-level code (controllers, filters, guards, `nestjs-zod`, `nestjs-pino`) is adapter-independent; only code that touches the raw request or reply uses Fastify types. Swagger UI on Fastify needs `@fastify/static`.
 - **Request IDs** come from Fastify's `genReqId`: a well-formed incoming `X-Request-Id` is reused, anything else is replaced with a UUID. An `onRequest` hook echoes it in the response header, and pino-http logs the same ID, so even a request rejected for malformed JSON has one.
+
+**Shared schemas and the OpenAPI client (C0.7)**
+
+- **`packages/shared`** holds what the API and the web app both need at runtime: enums (`ROLES`, `ORDER_STATUSES`, each with a Zod schema), error codes, the `ProblemDetails` schema and money constants. Response schemas only the API uses (e.g. health) stay in the API, and the web app gets their types from the spec. Request schemas that web forms validate with (C1.6 onwards) go in `shared`. Prisma enums (C1.2) must use the same values.
+- **Error codes** are the problem `type`: `PROBLEM_TYPES` maps each code to `urn:testtix:problem:<code in kebab case>` (`VALIDATION_ERROR` → `urn:testtix:problem:validation-error`), and `errorCodeOf(type)` maps back. Error bodies don't get a separate `code` field; RFC 9457 already makes `type` the machine-readable identifier. Chunks add codes as they add errors, e.g. `QUEUE_REQUIRED` in C5.1.
+- **Pipeline:** `pnpm openapi` runs a Turborepo task chain: build the API → `node dist/openapi/export-openapi.js` writes `apps/api/openapi.json` → `openapi-typescript` writes `apps/web/src/api/generated/openapi.ts`. The export boots Nest in **preview mode**, which resolves modules and routes without creating providers, so it needs no Postgres, Redis or env vars. A unit test checks that it matches what `GET /openapi.json` serves.
+- **Both generated files are committed**, so building the web app doesn't depend on building the API, and API changes show up as spec diffs in review. Prettier and ESLint skip them. CI runs `pnpm openapi:check` (regenerate, then `git diff --exit-code`, plus a check for untracked files) and uploads `openapi.json` as the `openapi-spec` artifact.
+- **Client:** `openapi-fetch` (`apps/web/src/api/client.ts`). It looks `fetch` up on each call so MSW, installed after import, still intercepts requests in tests. `unwrap()` returns the data or throws an `ApiError` with `status`, the parsed `problem` and its `code`.
+- **`openapi-typescript` 7.13 declares a TypeScript `^5` peer.** It works with TS 6, and `pnpm.peerDependencyRules.allowedVersions` records the exception. Remove it once a release accepts TS 6.
+- **Release note for C6.5:** the spec's `info.version` comes from `apps/api/package.json`. When release-please bumps the version, the release PR must update `openapi.json` too (as a release-please extra file, or by regenerating it), or the check fails.
+- **Fixed in C0.7:** since C0.4, `components.schemas.ProblemDetails` had been emitted as a `$ref` to `#/definitions/ProblemDetails`, which doesn't exist in an OpenAPI document (`z.toJSONSchema` nests a schema that has an `id`). It's now generated in Zod's registry mode, and a unit test checks that every `$ref` in the spec resolves. `openapi-typescript` refused the old spec, which is how the bug surfaced.
 
 ### 3.1 Database
 

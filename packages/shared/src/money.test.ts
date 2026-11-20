@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { formatPrice } from './index.js';
+import { formatPrice } from './money.js';
 
 describe('formatPrice', () => {
   it.each([

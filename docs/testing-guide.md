@@ -13,7 +13,7 @@ How to test TestTix from the outside: what the API promises, and the hooks it gi
 ## API basics
 
 - Base URL locally: `http://localhost:3000` (`pnpm --filter @testtix/api dev`).
-- OpenAPI 3 spec: `GET /openapi.json`. Swagger UI: `/docs`. Every operation documents its error response.
+- OpenAPI 3 spec: `GET /openapi.json`. Swagger UI: `/docs`. Every operation documents its error response. The same spec is committed as `apps/api/openapi.json` and attached to every CI run as the `openapi-spec` artifact, so you can generate a client or contract checks without running the API.
 - JSON in, JSON out. Money is integer cents, currency USD.
 
 ## Request IDs
@@ -49,6 +49,8 @@ Every error response, whatever the cause, is `application/problem+json` (based o
 | `instance`  | Request path, without the query string                                                                   |
 | `requestId` | Same as the `X-Request-Id` header                                                                        |
 | `errors`    | Field errors for validation failures (`path` is dot-separated, e.g. `items.0.quantity`); otherwise empty |
+
+Branch on `type`, never on `title` or `detail`. App-specific types end in an error code in kebab case: `urn:testtix:problem:validation-error` is the code `VALIDATION_ERROR` (the codes live in `packages/shared/src/problems.ts`).
 
 Problem types so far:
 

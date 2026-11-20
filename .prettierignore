@@ -4,3 +4,5 @@ coverage
 .turbo
 pnpm-lock.yaml
 apps/api/src/generated
+apps/api/openapi.json
+apps/web/src/api/generated

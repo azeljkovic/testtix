@@ -1,7 +1,6 @@
-import type { OpenAPIObject } from '@nestjs/swagger';
+import type { OpenAPIObject, SchemaObject } from '@nestjs/swagger';
+import { PROBLEM_CONTENT_TYPE, ProblemDetailsSchema } from '@testtix/shared';
 import { z } from 'zod';
-
-import { PROBLEM_CONTENT_TYPE, ProblemDetailsSchema } from './problem-details.js';
 
 const HTTP_METHODS = ['get', 'put', 'post', 'delete', 'options', 'head', 'patch', 'trace'] as const;
 
@@ -10,17 +9,20 @@ const HTTP_METHODS = ['get', 'put', 'post', 'delete', 'options', 'head', 'patch'
  * operation, with the `application/problem+json` media type the API actually sends.
  */
 export function addProblemDetailsResponses(document: OpenAPIObject): OpenAPIObject {
-  const {
-    $schema: _ignored,
-    id: _id,
-    ...schema
-  } = z.toJSONSchema(ProblemDetailsSchema, {
+  // Registry mode emits each schema under its own name with `$ref`s that point into
+  // `components.schemas`. Converting the schema alone would nest it under `definitions`.
+  const registry = z.registry<{ id: string }>();
+  registry.add(ProblemDetailsSchema, { id: 'ProblemDetails' });
+  const { schemas } = z.toJSONSchema(registry, {
     target: 'openapi-3.0',
-  }) as Record<string, unknown>;
+    uri: (id) => `#/components/schemas/${id}`,
+  });
 
   document.components ??= {};
   document.components.schemas ??= {};
-  document.components.schemas.ProblemDetails = schema;
+  for (const [name, { $id: _id, ...schema }] of Object.entries(schemas)) {
+    document.components.schemas[name] = schema as SchemaObject;
+  }
 
   for (const pathItem of Object.values(document.paths)) {
     for (const method of HTTP_METHODS) {

@@ -1,42 +1,14 @@
 import { STATUS_CODES } from 'node:http';
 
 import { HttpException } from '@nestjs/common';
+import {
+  PROBLEM_TYPE_BLANK,
+  PROBLEM_TYPES,
+  type ProblemDetails,
+  type ProblemFieldError,
+} from '@testtix/shared';
 import { ZodSerializationException, ZodValidationException } from 'nestjs-zod';
 import { z } from 'zod';
-
-export const PROBLEM_CONTENT_TYPE = 'application/problem+json';
-
-/** `type` for problems that need no more explanation than their HTTP status (RFC 9457 §4.2.1). */
-export const PROBLEM_TYPE_BLANK = 'about:blank';
-export const PROBLEM_TYPE_VALIDATION = 'urn:testtix:problem:validation-error';
-
-export const ProblemFieldErrorSchema = z.object({
-  path: z
-    .string()
-    .describe(
-      'Dot-separated path of the invalid field, e.g. `items.0.quantity`. Empty for the root.',
-    ),
-  code: z.string().describe('Zod issue code, e.g. `invalid_type` or `too_small`'),
-  message: z.string(),
-});
-
-/** Every error response body has this shape (RFC 9457 problem details, plus `requestId` and `errors`). */
-export const ProblemDetailsSchema = z
-  .object({
-    type: z.string().describe('URI that identifies the problem type'),
-    title: z.string().describe('Short summary of the problem type'),
-    status: z.number().int().describe('HTTP status code'),
-    detail: z.string().describe('Explanation of this occurrence'),
-    instance: z.string().describe('Request path'),
-    requestId: z.string().describe('Same value as the `X-Request-Id` response header'),
-    errors: z
-      .array(ProblemFieldErrorSchema)
-      .describe('Field errors. Empty unless the request failed validation.'),
-  })
-  .meta({ id: 'ProblemDetails' });
-
-export type ProblemFieldError = z.infer<typeof ProblemFieldErrorSchema>;
-export type ProblemDetails = z.infer<typeof ProblemDetailsSchema>;
 
 interface RequestInfo {
   path: string;
@@ -52,7 +24,7 @@ export function toProblemDetails(exception: unknown, request: RequestInfo): Prob
   if (exception instanceof ZodValidationException) {
     return {
       ...base,
-      type: PROBLEM_TYPE_VALIDATION,
+      type: PROBLEM_TYPES.VALIDATION_ERROR,
       title: 'Validation failed',
       status: 400,
       detail: 'The request is invalid. See `errors` for each problem.',

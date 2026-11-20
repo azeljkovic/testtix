@@ -1,13 +1,10 @@
 import { ConflictException, HttpException, NotFoundException } from '@nestjs/common';
+import { PROBLEM_TYPE_BLANK, PROBLEM_TYPES } from '@testtix/shared';
 import { ZodSerializationException, ZodValidationException } from 'nestjs-zod';
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
 
-import {
-  PROBLEM_TYPE_BLANK,
-  PROBLEM_TYPE_VALIDATION,
-  toProblemDetails,
-} from './problem-details.js';
+import { toProblemDetails } from './problem-details.js';
 
 const request = { path: '/events/42', requestId: 'req-1' };
 
@@ -46,7 +43,7 @@ describe('toProblemDetails', () => {
     const problem = toProblemDetails(new ZodValidationException(result.error), request);
 
     expect(problem).toMatchObject({
-      type: PROBLEM_TYPE_VALIDATION,
+      type: PROBLEM_TYPES.VALIDATION_ERROR,
       status: 400,
       title: 'Validation failed',
     });
