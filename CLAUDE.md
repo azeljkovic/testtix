@@ -16,7 +16,9 @@ When a decision changes, update the docs in the same PR so they stay accurate.
 - ✅ C0.2 CI skeleton
 - ✅ C0.3 Local infra
 - ✅ C0.4 API skeleton
-- ⏭️ Next: **C0.5 Prisma + integration harness**, C0.6 web skeleton, then C0.7 (see plan)
+- ✅ C0.5 Prisma + integration harness
+- ✅ C0.6 Web skeleton
+- ⏭️ Next: **C0.7 Shared schemas + OpenAPI client pipeline**, then M1 (see plan)
 
 Update this list when a chunk is merged.
 
@@ -58,6 +60,8 @@ Run one package: `pnpm --filter @testtix/api <script>`.
 - New API env vars go in `apps/api/src/config/config.schema.ts` and `.env.example`.
 - The API runs on **Fastify** (`@nestjs/platform-fastify`). Use `FastifyRequest` / `FastifyReply` types, never Express ones. `createHttpAdapter()` in `apps/api/src/app.setup.ts` builds the adapter for `main.ts` and tests.
 - Root `package.json` `pnpm.ignoredBuiltDependencies` records that skipping install scripts is deliberate (`@scarf/scarf` is telemetry, `@swc/core`'s only re-checks its binary). pnpm still prints its "Ignored build scripts" reminder; that's expected.
+- Web (`apps/web`): routes live in `src/app/routes.tsx`, shared by the browser router and tests. Component tests render the whole app with `renderApp(path)` (`src/testing/render.tsx`) and mock the API with MSW (`src/testing/msw-server.ts`; an unmocked request fails the test). Build API URLs with `apiUrl()` (absolute, so Node's `fetch` accepts them). Set page titles with `<PageTitle title="…" />`. Axe checks use `axe` from `src/testing/axe.ts`.
+- React hooks lint rules come from `config({ react: true })` in `@testtix/config/eslint`.
 - Money is stored as integer cents, currency USD, locale `en-US` (`packages/shared`).
 - `packages/shared` is compiled to `dist/`; turbo runs `^build` before dependants' typecheck, lint, test and dev.
 - Pin exact dependency versions (no `^`), matching the existing `package.json` files.

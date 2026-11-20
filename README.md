@@ -53,6 +53,17 @@ curl -i http://localhost:3000/health/ready
 
 Configuration comes from environment variables (see the API section of `.env.example`). They are validated on startup, and the API exits with a list of problems if one is invalid. Logs are JSON lines on stdout; pipe them through `npx pino-pretty` for a readable view. Error responses and request IDs are described in the [testing guide](docs/testing-guide.md).
 
+## Web app
+
+The React single-page app lives in `apps/web` (Vite, React Router, TanStack Query, Tailwind CSS, React Aria Components).
+
+```sh
+pnpm dev                              # API and web app together; or run one:
+pnpm --filter @testtix/web dev        # http://localhost:5173
+```
+
+The dev server forwards `/api/*` to the API with the prefix removed (`/api/health` → `http://127.0.0.1:3000/health`), so the browser only ever talks to its own origin. Set `API_PROXY_TARGET` or `WEB_PORT` in the root `.env` to change either. The footer shows whether the API answers. `pnpm --filter @testtix/web build` writes the static site to `apps/web/dist`.
+
 ## Database
 
 The schema lives in `apps/api/prisma/schema.prisma` and is managed with Prisma Migrate. The generated Prisma client (`apps/api/src/generated/`) is not committed; `pnpm build`, `typecheck`, `lint` and `test` regenerate it.
@@ -65,7 +76,7 @@ pnpm --filter @testtix/api db:reset                    # drop the local database
 
 ## Tests
 
-`pnpm test` runs the unit tests. They need no infrastructure: tests that boot the API replace Postgres and Redis with fakes.
+`pnpm test` runs the unit and component tests. They need no infrastructure: tests that boot the API replace Postgres and Redis with fakes, and the web app's component tests (Vitest, React Testing Library, jsdom) answer API calls with [MSW](https://mswjs.io/) and check pages with axe-core (`vitest-axe`).
 
 `pnpm test:integration` runs the API integration tests (`*.int.test.ts`) against a real Postgres and Redis:
 
@@ -100,6 +111,7 @@ The compose file has two placeholder profiles that later milestones fill in: `fu
 
 | Command                 | What it does                                                |
 | ----------------------- | ----------------------------------------------------------- |
+| `pnpm dev`              | Runs the API and the web app in watch mode                  |
 | `pnpm build`            | Builds every package (Turborepo, cached)                    |
 | `pnpm typecheck`        | Type-checks every package with `tsc --noEmit`               |
 | `pnpm lint`             | Lints every package with ESLint                             |

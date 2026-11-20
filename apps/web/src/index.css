@@ -1,0 +1,13 @@
+@import 'tailwindcss';
+
+@layer base {
+  html {
+    @apply bg-white text-slate-900 antialiased;
+  }
+
+  /* One visible focus style for every focusable element, including React Aria components. */
+  :focus-visible,
+  [data-focus-visible] {
+    @apply outline-2 outline-offset-2 outline-indigo-600;
+  }
+}
