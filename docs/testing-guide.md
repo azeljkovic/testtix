@@ -60,7 +60,7 @@ Problem types so far:
 { "status": "error", "checks": { "database": { "status": "up" }, "redis": { "status": "down" } } }
 ```
 
-Each check times out after `HEALTH_CHECK_TIMEOUT_MS` (default 1000 ms). To try the 503 path locally, stop Redis with `docker compose --project-directory . -f docker/compose.yml stop redis`, then start it again with `pnpm infra:up`. The API reconnects on its own.
+Each check times out after `HEALTH_CHECK_TIMEOUT_MS` (default 1000 ms). Right after the API starts, Redis can report `down` for a moment until its connection is established. To try the 503 path locally, stop Redis with `docker compose --project-directory . -f docker/compose.yml stop redis`, then start it again with `pnpm infra:up`. The API reconnects on its own.
 
 Wait for readiness before a test run instead of sleeping:
 
