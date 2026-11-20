@@ -31,6 +31,7 @@ corepack enable    # provides the pnpm version pinned in package.json
 pnpm install
 pnpm build
 pnpm infra:up      # Postgres, Redis and Mailpit in Docker
+pnpm db:deploy     # apply database migrations to the local Postgres
 ```
 
 ## API
@@ -52,6 +53,33 @@ curl -i http://localhost:3000/health/ready
 
 Configuration comes from environment variables (see the API section of `.env.example`). They are validated on startup, and the API exits with a list of problems if one is invalid. Logs are JSON lines on stdout; pipe them through `npx pino-pretty` for a readable view. Error responses and request IDs are described in the [testing guide](docs/testing-guide.md).
 
+## Database
+
+The schema lives in `apps/api/prisma/schema.prisma` and is managed with Prisma Migrate. The generated Prisma client (`apps/api/src/generated/`) is not committed; `pnpm build`, `typecheck`, `lint` and `test` regenerate it.
+
+```sh
+pnpm db:deploy                                         # apply pending migrations
+pnpm db:migrate --name add-events                      # after editing the schema: create and apply a migration
+pnpm --filter @testtix/api db:reset                    # drop the local database and re-apply every migration
+```
+
+## Tests
+
+`pnpm test` runs the unit tests. They need no infrastructure: tests that boot the API replace Postgres and Redis with fakes.
+
+`pnpm test:integration` runs the API integration tests (`*.int.test.ts`) against a real Postgres and Redis:
+
+- By default it starts both with [Testcontainers](https://testcontainers.com/), so it only needs Docker running.
+- To use services you already have, set `TEST_DATABASE_URL` and `TEST_REDIS_URL` (in the environment or the root `.env`). The tests delete all data in them, so the database must be named `test` or end in `_test`, and Redis must use a database other than 0. With local infra running:
+
+  ```sh
+  docker compose --project-directory . -f docker/compose.yml exec postgres createdb -U testtix testtix_test
+  TEST_DATABASE_URL=postgresql://testtix:testtix@localhost:5432/testtix_test \
+  TEST_REDIS_URL=redis://localhost:6379/1 pnpm test:integration
+  ```
+
+Each run applies the migrations, and each test file starts with empty tables and an empty Redis database.
+
 ## Local infrastructure
 
 `docker/compose.yml` runs the services the app depends on. `pnpm infra:up` starts them and waits until every health check passes; `pnpm infra:check` then checks each one from the host (a query, a `PING`, an email delivered to Mailpit).
@@ -70,19 +98,22 @@ The compose file has two placeholder profiles that later milestones fill in: `fu
 
 ## Scripts
 
-| Command             | What it does                                  |
-| ------------------- | --------------------------------------------- |
-| `pnpm build`        | Builds every package (Turborepo, cached)      |
-| `pnpm typecheck`    | Type-checks every package with `tsc --noEmit` |
-| `pnpm lint`         | Lints every package with ESLint               |
-| `pnpm test`         | Runs unit tests with Vitest                   |
-| `pnpm format`       | Formats the repo with Prettier                |
-| `pnpm format:check` | Checks formatting without writing             |
-| `pnpm clean`        | Removes build output and Turborepo caches     |
-| `pnpm infra:up`     | Starts local infra and waits until healthy    |
-| `pnpm infra:check`  | Smoke-tests the running local infra           |
-| `pnpm infra:down`   | Stops local infra, keeping its data           |
-| `pnpm infra:reset`  | Stops local infra and deletes its data        |
+| Command                 | What it does                                                |
+| ----------------------- | ----------------------------------------------------------- |
+| `pnpm build`            | Builds every package (Turborepo, cached)                    |
+| `pnpm typecheck`        | Type-checks every package with `tsc --noEmit`               |
+| `pnpm lint`             | Lints every package with ESLint                             |
+| `pnpm test`             | Runs unit tests with Vitest                                 |
+| `pnpm test:integration` | Runs API integration tests (needs Docker, or `TEST_*` URLs) |
+| `pnpm db:deploy`        | Applies database migrations                                 |
+| `pnpm db:migrate`       | Creates and applies a migration (development)               |
+| `pnpm format`           | Formats the repo with Prettier                              |
+| `pnpm format:check`     | Checks formatting without writing                           |
+| `pnpm clean`            | Removes build output and Turborepo caches                   |
+| `pnpm infra:up`         | Starts local infra and waits until healthy                  |
+| `pnpm infra:check`      | Smoke-tests the running local infra                         |
+| `pnpm infra:down`       | Stops local infra, keeping its data                         |
+| `pnpm infra:reset`      | Stops local infra and deletes its data                      |
 
 ## Tech stack
 

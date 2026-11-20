@@ -1,11 +1,11 @@
 import type { Type } from '@nestjs/common';
 import type { NestFastifyApplication } from '@nestjs/platform-fastify';
-import { Test } from '@nestjs/testing';
+import { Test, type TestingModule } from '@nestjs/testing';
 
 import { AppModule } from '../app.module.js';
 import { configureApp, createHttpAdapter } from '../app.setup.js';
 import { type AppConfig, parseConfig } from '../config/config.schema.js';
-import { PG_POOL } from '../infra/database.module.js';
+import { PrismaService } from '../infra/prisma.service.js';
 import { REDIS } from '../infra/redis.module.js';
 
 /** Simulates a dependency: resolve for "up", reject or never settle for "down". */
@@ -25,8 +25,8 @@ export interface TestAppOptions {
 
 /**
  * Boots the real app (same modules and `configureApp` as `main.ts`) with Postgres and Redis
- * replaced by fakes, for tests that don't need real infrastructure. Integration tests against
- * real services arrive with the harness in C0.5.
+ * replaced by fakes, for tests that don't need real infrastructure. Tests against real services
+ * use `createIntegrationApp()` (`src/testing/integration/`).
  */
 export async function createTestApp(options: TestAppOptions = {}): Promise<NestFastifyApplication> {
   const config: AppConfig = parseConfig({ NODE_ENV: 'test', LOG_LEVEL: 'silent', ...options.env });
@@ -37,12 +37,16 @@ export async function createTestApp(options: TestAppOptions = {}): Promise<NestF
     imports: [AppModule.forRoot(config)],
     controllers: options.controllers ?? [],
   })
-    .overrideProvider(PG_POOL)
-    .useValue({ query: database, end: () => Promise.resolve() })
+    .overrideProvider(PrismaService)
+    .useValue({ $queryRaw: database })
     .overrideProvider(REDIS)
     .useValue({ ping: redis, status: 'end', disconnect: () => undefined })
     .compile();
+  return startTestingApp(moduleRef);
+}
 
+/** Creates and initialises the HTTP app the way `main.ts` does, without listening on a port. */
+export async function startTestingApp(moduleRef: TestingModule): Promise<NestFastifyApplication> {
   const app = moduleRef.createNestApplication<NestFastifyApplication>(createHttpAdapter());
   configureApp(app);
   await app.init();

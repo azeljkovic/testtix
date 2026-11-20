@@ -74,7 +74,7 @@ Notes:
 
 - **NestJS 11, not 12.** `nestjs-zod` 5.x declares `@nestjs/common` `^10 || ^11` as its peer range, and Nest 11 is still maintained. Upgrade to 12 once `nestjs-zod` supports it (same rule as the TypeScript pin).
 - **ESM works with Nest.** No friction in C0.4: `tsc` output runs on Node directly, and `nestjs-zod`, `nestjs-pino` and `@nestjs/swagger` load as ESM or CJS without issues. Nest's DI needs `experimentalDecorators` + `emitDecoratorMetadata`, which `tsc` and SWC support (esbuild and oxc don't, hence SWC in Vitest).
-- **Readiness uses `pg` and `ioredis` directly** until Prisma (C0.5) takes over the database check. `ioredis` stays as the Redis client for BullMQ (C3.2).
+- **Readiness** checks Postgres through Prisma (`SELECT 1`, since C0.5) and Redis with `ioredis`, which stays as the Redis client for BullMQ (C3.2).
 - **Fastify instead of Express** (changed during C0.4 review): faster under the ticket-drop load the k6 tests will apply, and its request lifecycle gives every request an ID before body parsing. Nest-level code (controllers, filters, guards, `nestjs-zod`, `nestjs-pino`) is adapter-independent; only code that touches the raw request or reply uses Fastify types. Swagger UI on Fastify needs `@fastify/static`.
 - **Request IDs** come from Fastify's `genReqId`: a well-formed incoming `X-Request-Id` is reused, anything else is replaced with a UUID. An `onRequest` hook echoes it in the response header, and pino-http logs the same ID, so even a request rejected for malformed JSON has one.
 
@@ -86,6 +86,14 @@ Notes:
 | ORM        | Prisma                                                                             | Decided  |
 | Migrations | `prisma migrate`                                                                   | Proposed |
 | Seed data  | Deterministic seed script (Faker with a fixed seed) and a few named fixture events | Proposed |
+
+**Versions and notes (C0.5)**
+
+- **Prisma 7, not 8.** npm's `latest` tag for `prisma` points at an 8.0 release candidate; v1 uses the newest stable release (7.10.x). Upgrade once 8 is stable.
+- **Prisma 7 setup:** the `prisma-client` generator writes TypeScript into `apps/api/src/generated/prisma` (git-ignored, ESM, `.js` import extensions), which `tsc` compiles with the rest of the API. Turbo's `generate` task runs `prisma generate` before build, typecheck, lint and tests. The connection URL lives in `apps/api/prisma.config.ts` (Prisma 7 no longer puts it in the schema or reads `.env` itself, so the config loads the root `.env`).
+- **Driver adapter:** Prisma 7 has no built-in query engine; `PrismaService` connects through `@prisma/adapter-pg` (node-postgres). The pool connects lazily, so the API still starts while Postgres is down.
+- **Naming:** models are PascalCase/camelCase in Prisma and snake_case in Postgres (`@@map` / `@map`), e.g. `User` → `users`. Primary keys are UUIDv7 (`@default(uuid(7)) @db.Uuid`).
+- **pnpm build scripts:** `prisma` and `@prisma/engines` are allowed to run install scripts (`onlyBuiltDependencies`), so the migration engine is downloaded at install time.
 
 **Concurrency for "buying the last seat"**
 
@@ -189,6 +197,14 @@ Enabled when `TESTTIX_TEST_MODE=true`.
 | Component (web)                  | Vitest + React Testing Library + MSW                                    | Proposed |
 | API integration                  | Vitest + Supertest against a real Postgres and Redis via Testcontainers | Proposed |
 | Accessibility smoke (components) | `vitest-axe`                                                            | Proposed |
+
+**Integration harness (C0.5)**
+
+- Unit and integration tests are two Vitest projects in `apps/api/vitest.config.ts`. Integration test files are named `*.int.test.ts`; `pnpm test` runs unit tests only, `pnpm test:integration` runs the integration ones.
+- The global setup uses `TEST_DATABASE_URL` / `TEST_REDIS_URL` when set and starts a Testcontainers container for each one that isn't, with the image tags read from `docker/compose.yml`. It then runs `prisma migrate deploy`.
+- Before each test file, every table except `_prisma_migrations` is truncated and the Redis database is flushed. Files therefore run one at a time (`fileParallelism: false`). If that gets slow, the next step is one database per Vitest worker.
+- Because the data is wiped, the harness refuses a `TEST_DATABASE_URL` whose database isn't named `test` or `*_test`, and a `TEST_REDIS_URL` that selects Redis database 0.
+- Tests boot the real app with `createIntegrationApp()` and call it with Supertest. CI runs the integration job after lint, typecheck and unit tests, with Testcontainers.
 
 The OpenAPI spec is published as a CI artifact and with each release, so the external test repo can generate clients or contract checks.
 

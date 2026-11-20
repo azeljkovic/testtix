@@ -1,6 +1,7 @@
 import { config } from '@testtix/config/eslint';
 
 export default [
+  { ignores: ['src/generated/**'] },
   ...config({ tsconfigRootDir: import.meta.dirname }),
   {
     rules: {
