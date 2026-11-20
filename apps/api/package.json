@@ -2,22 +2,49 @@
   "name": "@testtix/api",
   "version": "0.0.0",
   "private": true,
-  "description": "TestTix REST API (NestJS). Placeholder until C0.4.",
+  "description": "TestTix REST API (NestJS).",
   "license": "MIT",
   "type": "module",
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
+    "dev": "tsc-watch -p tsconfig.build.json --noClear --onSuccess \"node --env-file-if-exists=../../.env --enable-source-maps dist/main.js\"",
+    "start": "node --env-file-if-exists=../../.env --enable-source-maps dist/main.js",
     "typecheck": "tsc --noEmit",
     "lint": "eslint .",
+    "test": "vitest run",
     "clean": "rm -rf dist .turbo *.tsbuildinfo"
   },
   "dependencies": {
-    "@testtix/shared": "workspace:*"
+    "@fastify/static": "10.1.12",
+    "@nestjs/common": "11.2.11",
+    "@nestjs/core": "11.2.11",
+    "@nestjs/platform-fastify": "11.2.11",
+    "@nestjs/swagger": "11.4.8",
+    "@prometheus-io/client": "0.16.1",
+    "@testtix/shared": "workspace:*",
+    "fastify": "5.12.8",
+    "ioredis": "6.0.0",
+    "nestjs-pino": "5.3.2",
+    "nestjs-zod": "5.6.0",
+    "pg": "8.23.1",
+    "pino": "10.4.0",
+    "pino-http": "11.0.0",
+    "reflect-metadata": "0.2.2",
+    "rxjs": "7.8.2",
+    "zod": "4.6.7"
   },
   "devDependencies": {
+    "@nestjs/testing": "11.2.11",
+    "@swc/core": "1.16.22",
     "@testtix/config": "workspace:*",
     "@types/node": "24.19.2",
+    "@types/pg": "8.23.1",
+    "@types/supertest": "7.2.1",
     "eslint": "10.15.0",
-    "typescript": "6.0.3"
+    "supertest": "7.3.2",
+    "tsc-watch": "7.2.1",
+    "typescript": "6.0.3",
+    "unplugin-swc": "2.0.0",
+    "vitest": "5.1.1"
   }
 }

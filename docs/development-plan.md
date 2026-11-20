@@ -79,7 +79,7 @@ Claude's workspace has no Docker daemon, so Testcontainers can't run there. Beca
 
 - NestJS app, `nestjs-pino` with request IDs, Zod-validated config module (fails fast on bad env).
 - `nestjs-zod` wired. OpenAPI at `/docs` and `/openapi.json`.
-- `GET /health` (liveness) and `GET /health/ready` (checks db and redis), `/metrics` (`prom-client` defaults).
+- `GET /health` (liveness) and `GET /health/ready` (checks db and redis), `/metrics` (`@prometheus-io/client` defaults; `prom-client` is deprecated in its favour).
 - Global error format (problem+json style: `type`, `title`, `status`, `detail`, `errors[]`).
 - Vitest + `unplugin-swc` set up, unit test for the config schema.
 - Verify: `curl /health` returns 200, `/docs` renders, logs are JSON with a request ID.

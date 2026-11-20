@@ -33,6 +33,25 @@ pnpm build
 pnpm infra:up      # Postgres, Redis and Mailpit in Docker
 ```
 
+## API
+
+The NestJS API lives in `apps/api`. With local infra running:
+
+```sh
+pnpm --filter @testtix/api dev     # rebuilds on change, then restarts; reads the root .env if present
+curl -i http://localhost:3000/health/ready
+```
+
+| Endpoint            | What it is                                                                     |
+| ------------------- | ------------------------------------------------------------------------------ |
+| `GET /health`       | Liveness: 200 while the process is up                                          |
+| `GET /health/ready` | Readiness: checks Postgres and Redis; 503 with per-check status if one is down |
+| `GET /metrics`      | Prometheus metrics (Node.js process defaults)                                  |
+| `/docs`             | Swagger UI                                                                     |
+| `/openapi.json`     | OpenAPI 3 spec                                                                 |
+
+Configuration comes from environment variables (see the API section of `.env.example`). They are validated on startup, and the API exits with a list of problems if one is invalid. Logs are JSON lines on stdout; pipe them through `npx pino-pretty` for a readable view. Error responses and request IDs are described in the [testing guide](docs/testing-guide.md).
+
 ## Local infrastructure
 
 `docker/compose.yml` runs the services the app depends on. `pnpm infra:up` starts them and waits until every health check passes; `pnpm infra:check` then checks each one from the host (a query, a `PING`, an email delivered to Mailpit).

@@ -1,6 +1,6 @@
 # TestTix — Tech stack decisions
 
-Status: draft v2 (2026-11-17)
+Status: draft v2 (2026-11-17), updated for C0.4 (2026-11-19)
 Legend: **[Decided]** = chosen by Aleksandar · **[Proposed]** = default pick, open to change
 
 ---
@@ -62,10 +62,21 @@ Notes:
 | Area       | Decision                                                                                                              | Status   |
 | ---------- | --------------------------------------------------------------------------------------------------------------------- | -------- |
 | Framework  | NestJS                                                                                                                | Decided  |
+| HTTP layer | Fastify (`@nestjs/platform-fastify`), not Express                                                                     | Proposed |
 | API style  | REST + OpenAPI 3 (served at `/docs` and `/openapi.json`)                                                              | Proposed |
 | Validation | Zod via `nestjs-zod`, with schemas shared with the frontend, as the single source of truth for validation and OpenAPI | Proposed |
 | Logging    | `nestjs-pino` (structured JSON logs with request IDs)                                                                 | Proposed |
-| Metrics    | Prometheus endpoint `/metrics` (`prom-client`)                                                                        | Proposed |
+| Metrics    | Prometheus endpoint `/metrics` (`@prometheus-io/client`, the successor of the deprecated `prom-client`)               | Proposed |
+| Modules    | ESM (`"type": "module"`, `NodeNext`), compiled by `tsc`; Vitest uses `unplugin-swc` for decorator metadata            | Proposed |
+| Errors     | `application/problem+json` (RFC 9457) for every error, plus `requestId` and `errors[]`; see `docs/testing-guide.md`   | Proposed |
+
+**Versions and notes (C0.4)**
+
+- **NestJS 11, not 12.** `nestjs-zod` 5.x declares `@nestjs/common` `^10 || ^11` as its peer range, and Nest 11 is still maintained. Upgrade to 12 once `nestjs-zod` supports it (same rule as the TypeScript pin).
+- **ESM works with Nest.** No friction in C0.4: `tsc` output runs on Node directly, and `nestjs-zod`, `nestjs-pino` and `@nestjs/swagger` load as ESM or CJS without issues. Nest's DI needs `experimentalDecorators` + `emitDecoratorMetadata`, which `tsc` and SWC support (esbuild and oxc don't, hence SWC in Vitest).
+- **Readiness uses `pg` and `ioredis` directly** until Prisma (C0.5) takes over the database check. `ioredis` stays as the Redis client for BullMQ (C3.2).
+- **Fastify instead of Express** (changed during C0.4 review): faster under the ticket-drop load the k6 tests will apply, and its request lifecycle gives every request an ID before body parsing. Nest-level code (controllers, filters, guards, `nestjs-zod`, `nestjs-pino`) is adapter-independent; only code that touches the raw request or reply uses Fastify types. Swagger UI on Fastify needs `@fastify/static`.
+- **Request IDs** come from Fastify's `genReqId`: a well-formed incoming `X-Request-Id` is reused, anything else is replaced with a UUID. An `onRequest` hook echoes it in the response header, and pino-http logs the same ID, so even a request rejected for malformed JSON has one.
 
 ### 3.1 Database
 

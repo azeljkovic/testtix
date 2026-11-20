@@ -27,5 +27,11 @@
     "@testtix/config": "workspace:*",
     "prettier": "3.10.1",
     "turbo": "2.11.11"
+  },
+  "pnpm": {
+    "ignoredBuiltDependencies": [
+      "@scarf/scarf",
+      "@swc/core"
+    ]
   }
 }
