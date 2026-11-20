@@ -2,6 +2,14 @@
 
 How to test TestTix from the outside: what the API promises, and the hooks it gives testers. This guide grows with each milestone; the test API, seed scenarios, test cards and the clock are added in M1–M5.
 
+## Web app basics
+
+- URL locally: `http://localhost:5173` (`pnpm --filter @testtix/web dev`). The page calls the API on its own origin under `/api` (`/api/health` → `GET /health`).
+- Every page has the same landmarks: a header (`banner`) with the main navigation (`navigation` named "Main"), one `main` and a footer (`contentinfo`). The current navigation link has `aria-current="page"`.
+- The first Tab stop is a "Skip to main content" link. Activating it moves focus to `main` without changing the URL.
+- Each route sets the document title to `<page> · TestTix` (just `TestTix` on the home page). Unknown paths render a "Page not found" page with that title; the server still answers 200, since routing happens in the browser.
+- Locate elements by role and accessible name. `data-testid` is only added where no good accessible locator exists.
+
 ## API basics
 
 - Base URL locally: `http://localhost:3000` (`pnpm --filter @testtix/api dev`).

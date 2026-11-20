@@ -1,6 +1,6 @@
 # TestTix — Tech stack decisions
 
-Status: draft v2 (2026-11-17), updated for C0.4 (2026-11-19)
+Status: draft v2 (2026-11-17), updated for C0.6 (2026-11-20)
 Legend: **[Decided]** = chosen by Aleksandar · **[Proposed]** = default pick, open to change
 
 ---
@@ -54,6 +54,15 @@ Notes:
 
 - Search input is debounced (fixed, documented delay) on purpose to support the debounced-search demo.
 - All interactive elements get stable accessible names. `data-testid` is used only where no good accessible locator exists, so locator strategy stays a meaningful exercise.
+
+**Versions and notes (C0.6)**
+
+- **React 19, React Router 8, Vite 8, Tailwind CSS 4** (via `@tailwindcss/vite`, no `tailwind.config`), TanStack Query 5, React Aria Components 1.x. React Router is used in data mode (`createBrowserRouter` with a shared route table), not framework mode, since the app is a plain SPA.
+- **Document titles** use React 19's built-in `<title>` hoisting (`PageTitle`), no helmet library.
+- **React Aria + React Router:** `RootLayout` wraps the app in React Aria's `RouterProvider`, so React Aria links and menus navigate client-side.
+- **API calls** go to `/api/*` on the page's own origin. The Vite dev server proxies them to the API and strips the prefix; production gets the same rule from Caddy (C6.1). This avoids CORS entirely. Until C0.7 the one call (`GET /health`) uses `fetch` directly.
+- **Lint:** the shared ESLint config gains a `react` option with `eslint-plugin-react-hooks` (recommended rules, including the React Compiler checks). `eslint-plugin-jsx-a11y` is left out because it doesn't support ESLint 10 yet; axe checks in component tests cover accessibility.
+- **Component tests:** Vitest with jsdom, React Testing Library and user-event. MSW 3 answers API calls (`onUnhandledFrame: 'error'`, so an unmocked request fails the test). `vitest-axe` 0.1 still declares its matcher types for an old Vitest, so `src/testing/axe.ts` re-declares `toHaveNoViolations` for Vitest's `Matchers` interface; jsdom can't measure colour contrast, so that axe rule is off in component tests and left to e2e.
 
 ---
 

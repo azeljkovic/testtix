@@ -4,13 +4,15 @@
 //   export default config({ tsconfigRootDir: import.meta.dirname });
 import js from '@eslint/js';
 import prettier from 'eslint-config-prettier';
+import reactHooks from 'eslint-plugin-react-hooks';
 import globals from 'globals';
 import tseslint from 'typescript-eslint';
 
 /**
- * @param {{ tsconfigRootDir: string, browser?: boolean }} options
+ * @param {{ tsconfigRootDir: string, browser?: boolean, react?: boolean }} options
+ *   `react` adds the React hooks rules (including the React Compiler checks).
  */
-export function config({ tsconfigRootDir, browser = false }) {
+export function config({ tsconfigRootDir, browser = false, react = false }) {
   return tseslint.config(
     {
       ignores: ['**/dist/**', '**/coverage/**', '**/.turbo/**', '**/node_modules/**'],
@@ -41,6 +43,7 @@ export function config({ tsconfigRootDir, browser = false }) {
         'no-console': 'warn',
       },
     },
+    ...(react ? [reactHooks.configs.flat['recommended-latest']] : []),
     {
       files: ['**/*.js', '**/*.mjs', '**/*.cjs'],
       ...tseslint.configs.disableTypeChecked,

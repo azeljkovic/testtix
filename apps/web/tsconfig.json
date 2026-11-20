@@ -2,8 +2,9 @@
   "extends": "@testtix/config/tsconfig/react.json",
   "compilerOptions": {
     "rootDir": ".",
-    "outDir": "dist",
-    "noEmit": true
+    "noEmit": true,
+    // `vite/client`: CSS imports and `import.meta.env`. `node`: vite.config.ts.
+    "types": ["vite/client", "node"]
   },
   "include": ["src", "*.ts"]
 }
