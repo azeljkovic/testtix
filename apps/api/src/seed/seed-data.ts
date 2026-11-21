@@ -3,12 +3,11 @@ import {
   type DayTime,
   EVENT_SPECS,
   type EventSpec,
-  eventId,
   SEED_CITY,
   SEED_TIMEZONE,
   type SectionSpec,
   VENUE_SPECS,
-  venueId,
+  type VenueSpec,
 } from './fixtures.js';
 import { generateEventSpecs } from './generated-events.js';
 import { seedId } from './seed-id.js';
@@ -36,12 +35,40 @@ const DAY_MS = 24 * 60 * MINUTE_MS;
  * has no holds, orders or tickets: everything is `AVAILABLE`.
  */
 export function buildSeedData(now: Date): SeedData {
-  const dayStart = now.getTime() - (((now.getTime() % DAY_MS) + DAY_MS) % DAY_MS);
-  const at = ([days, time]: DayTime): Date => {
-    const [hours = 0, minutes = 0] = time.split(':').map(Number);
-    return new Date(dayStart + days * DAY_MS + (hours * 60 + minutes) * MINUTE_MS);
-  };
-  const createdAt = at([-90, '12:00']);
+  return buildCatalogue(now, {
+    venues: VENUE_SPECS,
+    events: [...EVENT_SPECS, ...generateEventSpecs()],
+    id: seedId,
+    createdAt: [-90, '12:00'],
+  });
+}
+
+/** An event to build. Like `EventSpec`, but at any venue, not only a seeded one. */
+export type CatalogueEventSpec = Omit<EventSpec, 'venue'> & { readonly venue: string };
+
+export interface CatalogueSpec {
+  readonly venues: readonly VenueSpec[];
+  /** Each event's `venue` is the slug of one of `venues`. */
+  readonly events: readonly CatalogueEventSpec[];
+  /**
+   * The ID of the row with this key, e.g. `venue:<slug>` or `unit:<event slug>:<seat ID>`. The
+   * baseline uses `seedId` (stable IDs); test scenarios use random ones.
+   */
+  readonly id: (key: string) => string;
+  /** `createdAt` (and `updatedAt`) of every row: a time relative to the seed day, or exact. */
+  readonly createdAt: DayTime | Date;
+}
+
+/**
+ * Builds venues (with their sections and seats) and events (with their batches and one
+ * `AVAILABLE` inventory unit per seat or GA place of every released section). Dates in the specs
+ * are relative to the start of `now`'s UTC day. Shared by the baseline seed and the test API's
+ * scenarios (`src/test-api/scenarios/`).
+ */
+export function buildCatalogue(now: Date, spec: CatalogueSpec): SeedData {
+  const at = (dayTime: DayTime): Date => dayAt(now, dayTime);
+  const { id: rowId } = spec;
+  const createdAt = spec.createdAt instanceof Date ? spec.createdAt : at(spec.createdAt);
 
   const data: SeedData = {
     venues: [],
@@ -55,8 +82,8 @@ export function buildSeedData(now: Date): SeedData {
   /** Per venue and section name: the section's ID and what its inventory units point at. */
   const layouts = new Map<string, Map<string, { id: string; units: (string | null)[] }>>();
 
-  for (const venue of VENUE_SPECS) {
-    const id = venueId(venue.slug);
+  for (const venue of spec.venues) {
+    const id = rowId(`venue:${venue.slug}`);
     data.venues.push({
       id,
       slug: venue.slug,
@@ -68,7 +95,7 @@ export function buildSeedData(now: Date): SeedData {
     });
     const sections = new Map<string, { id: string; units: (string | null)[] }>();
     venue.sections.forEach((section: SectionSpec, sortOrder) => {
-      const sectionId = seedId(`section:${venue.slug}:${section.name}`);
+      const sectionId = rowId(`section:${venue.slug}:${section.name}`);
       data.sections.push({
         id: sectionId,
         venueId: id,
@@ -88,7 +115,7 @@ export function buildSeedData(now: Date): SeedData {
       for (let rowIndex = 0; rowIndex < section.rows; rowIndex++) {
         const row = rowLabel(rowIndex);
         for (let number = 1; number <= section.seatsPerRow; number++) {
-          const seatId = seedId(`seat:${venue.slug}:${section.name}:${row}${number}`);
+          const seatId = rowId(`seat:${venue.slug}:${section.name}:${row}${number}`);
           data.seats.push({ id: seatId, sectionId, row, rowIndex, number });
           seatIds.push(seatId);
         }
@@ -98,9 +125,8 @@ export function buildSeedData(now: Date): SeedData {
     layouts.set(venue.slug, sections);
   }
 
-  const events: readonly EventSpec[] = [...EVENT_SPECS, ...generateEventSpecs()];
-  for (const event of events) {
-    const id = eventId(event.slug);
+  for (const event of spec.events) {
+    const id = rowId(`event:${event.slug}`);
     const startsAt = at(event.starts);
     data.events.push({
       id,
@@ -110,7 +136,7 @@ export function buildSeedData(now: Date): SeedData {
       description: event.description,
       category: event.category,
       status: event.status,
-      venueId: venueId(event.venue),
+      venueId: rowId(`venue:${event.venue}`),
       startsAt,
       endsAt: new Date(startsAt.getTime() + event.durationMin * MINUTE_MS),
       salesOpenAt: at(event.salesOpen),
@@ -121,7 +147,7 @@ export function buildSeedData(now: Date): SeedData {
     const layout = layouts.get(event.venue);
     const released = new Set<string>();
     for (const batch of event.batches) {
-      const batchId = seedId(`batch:${event.slug}:${batch.name}`);
+      const batchId = rowId(`batch:${event.slug}:${batch.name}`);
       data.ticketBatches.push({
         id: batchId,
         eventId: id,
@@ -143,7 +169,7 @@ export function buildSeedData(now: Date): SeedData {
         released.add(sectionName);
         section.units.forEach((seatId, index) => {
           data.inventoryUnits.push({
-            id: seedId(`unit:${event.slug}:${seatId ?? `${section.id}:${index + 1}`}`),
+            id: rowId(`unit:${event.slug}:${seatId ?? `${section.id}:${index + 1}`}`),
             eventId: id,
             sectionId: section.id,
             seatId,
@@ -157,6 +183,13 @@ export function buildSeedData(now: Date): SeedData {
   }
 
   return data;
+}
+
+/** `dayTime` (days and `HH:MM` UTC) after the start of `now`'s UTC day. */
+export function dayAt(now: Date, [days, time]: DayTime): Date {
+  const dayStart = now.getTime() - (((now.getTime() % DAY_MS) + DAY_MS) % DAY_MS);
+  const [hours = 0, minutes = 0] = time.split(':').map(Number);
+  return new Date(dayStart + days * DAY_MS + (hours * 60 + minutes) * MINUTE_MS);
 }
 
 /** 0 → "A", 25 → "Z", 26 → "AA", 27 → "AB". */

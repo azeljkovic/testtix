@@ -89,10 +89,12 @@ On startup the API logs a `TestMode` warning saying whether test mode is on and 
 
 Some test endpoints affect everyone using the server: freezing the clock or wiping the data breaks every other tester's session on a shared instance such as the hosted demo. When the server sets `TEST_API_KEY` (at least 16 characters), those endpoints require the same value in an `X-Test-Key` header and answer 401 without it (with a `WWW-Authenticate` header). When `TEST_API_KEY` is unset, as it is locally, they are open.
 
-| Endpoint             | Needs `X-Test-Key` (when configured) |
-| -------------------- | ------------------------------------ |
-| `GET /__test/clock`  | no                                   |
-| `POST /__test/clock` | yes                                  |
+| Endpoint                       | Needs `X-Test-Key` (when configured) |
+| ------------------------------ | ------------------------------------ |
+| `GET /__test/clock`            | no                                   |
+| `POST /__test/clock`           | yes                                  |
+| `POST /__test/reset`           | yes                                  |
+| `POST /__test/seed/{scenario}` | no (it only adds data)               |
 
 ### The server clock
 
@@ -139,7 +141,7 @@ The clock is global to the server: reset it when your test is done, and don't ru
 
 ## Seed data
 
-The baseline data set (`pnpm db:seed` on an empty database; `POST /__test/reset` from C1.3) has four venues, eight named fixture events and 36 generated ones. It is deterministic: seeding twice gives identical rows, and every slug and ID below is the same on every machine and every run.
+The baseline data set (`pnpm db:seed` on an empty database, or [`POST /__test/reset`](#resetting-the-data) at any time) has four venues, eight named fixture events and 36 generated ones. It is deterministic: seeding twice gives identical rows, and every slug and ID below is the same on every machine and every run.
 
 Dates are relative to the **seed day**: the UTC date of the server clock when the seed ran (so with a frozen test clock, the frozen date). Below, `D+21 23:30` means 21 days after the start of that day, at 23:30 UTC. Seeding at any time on the same day gives the same dates; seeding on another day shifts every date but keeps every ID. Venues are in the fictional city of Port Ellis (time zone `America/New_York`).
 
@@ -174,3 +176,101 @@ Unless noted, sales opened at D−30 15:00, and every batch puts all seats (or G
 ### Generated events
 
 36 more published events, on sale since D−14 15:00, fill the catalogue for pagination, filters and search. Faker generates them with a fixed seed: concerts by made-up bands at Riverside Hall or The Warehouse, talks at Harbor Auditorium and meetups at Loft 23, starting between D+1 and D+90. Their slugs end in a number (`the-neon-owls-live-4`) and are stable too, but prefer the fixtures above in tests: the generated list may change when the seed is extended.
+
+## Resetting the data
+
+`POST /__test/reset` puts the server back into its baseline state in one call:
+
+1. It resets the server clock to the real time, or freezes it at `freezeAt` if the body has one.
+2. It deletes every row (users, sessions, holds, orders and scenario data included) and inserts the [baseline seed](#seed-data) for the clock's UTC date.
+
+The data swap is one database transaction: while it runs, other requests wait or see the old data, never an empty or half-seeded database. Concurrent resets run one after the other. On a server with a [test API key](#test-api-key) it needs `X-Test-Key`.
+
+The body is optional. Send none (or `{}`) to reset the clock, or `{ "freezeAt": "<ISO date-time>" }` (with `Z` or an offset) to freeze it. Resetting twice with a `freezeAt` on the same UTC day gives identical data, dates included; without it, the dates follow the real date. Unknown fields are a 400 `validation-error`.
+
+```sh
+curl -s -X POST http://localhost:3000/__test/reset
+curl -s -X POST http://localhost:3000/__test/reset -H 'Content-Type: application/json' \
+  -d '{"freezeAt":"2026-12-01T10:00:00Z"}'
+```
+
+```json
+{
+  "seedDay": "2026-12-01",
+  "clock": { "now": "2026-12-01T10:00:00.000Z", "mode": "frozen", "offsetMs": 842070954 },
+  "rows": {
+    "venues": 4,
+    "sections": 6,
+    "seats": 412,
+    "events": 44,
+    "ticketBatches": 56,
+    "inventoryUnits": 6370
+  }
+}
+```
+
+`seedDay` is `D` in the [fixture tables](#fixture-events). `rows` counts what was inserted; every other table is empty.
+
+Run it before a test suite (or each test that needs the baseline), not in parallel with other tests against the same server: it logs everyone out and removes their data.
+
+## Seed scenarios
+
+`POST /__test/seed/{scenario}` adds a ready-made situation that the baseline doesn't have and answers 201 with the IDs it created. Scenarios only **add** rows: each call creates its own venue, events and (where needed) a buyer and orders, with fresh IDs. Every slug and title ends in a random 8-character suffix, so calls never collide, existing data isn't touched, and parallel tests can each create their own data. That is also why scenarios stay open on a server with a test API key.
+
+Scenario data stays until the next reset. It is real data: scenario events are published and appear in the public catalogue next to the baseline. To find just your run's events, search for its suffix.
+
+Dates are relative to the clock's UTC day (`D`), like the baseline: every scenario event has been on sale since D−1 15:00 and starts at D+7 to D+14, at 23:00 UTC. Rows get `createdAt` = the server clock. Unknown scenario names answer 404.
+
+| Scenario          | Creates                                                                                                                                                                                                    |
+| ----------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `basic-catalogue` | A venue with Seats (rows A–C × 6) and Standing (GA, capacity 20), and three published events on sale: a concert using both ($40.00 seats, $25.00 standing), a seated talk ($15.00) and a GA meetup ($5.00) |
+| `sold-out-event`  | A published concert on sale whose 12 tickets (Seats rows A–B × 4 at $50.00, Standing GA capacity 4 at $30.00) are all sold, through confirmed orders of a new buyer (at most 6 tickets per order)          |
+| `one-seat-left`   | A published concert on sale with 8 seats (rows A–B × 4, $45.00); all are sold through confirmed orders except row B seat 4                                                                                 |
+
+Buyers are customers with a verified email `buyer-<suffix>@scenario.testtix.test` and no usable password: nobody can log in as them. Their orders are `CONFIRMED` and every sold ticket has a ticket code.
+
+```sh
+curl -s -X POST http://localhost:3000/__test/seed/one-seat-left
+```
+
+Every response has a `venue` (ID, slug, name and sections with their IDs) and the events, each with its ID, slug, title, category, status, `startsAt`, `salesOpenAt` and a ticket count by status:
+
+```json
+{
+  "venue": {
+    "id": "019ac6b2-…",
+    "slug": "scenario-venue-3f9a1c2b",
+    "name": "Scenario Venue 3f9a1c2b",
+    "sections": [{ "id": "019ac6b2-…", "name": "Seats", "type": "SEATED", "capacity": null }]
+  },
+  "event": {
+    "id": "019ac6b2-…",
+    "slug": "one-seat-left-3f9a1c2b",
+    "title": "One Seat Left 3f9a1c2b",
+    "category": "CONCERT",
+    "status": "PUBLISHED",
+    "venueId": "019ac6b2-…",
+    "startsAt": "2026-12-05T23:00:00.000Z",
+    "salesOpenAt": "2026-11-20T15:00:00.000Z",
+    "tickets": { "total": 8, "available": 1, "sold": 7 }
+  },
+  "buyer": { "id": "019ac6b2-…", "email": "buyer-3f9a1c2b@scenario.testtix.test" },
+  "orderIds": ["019ac6b2-…", "019ac6b2-…"],
+  "seat": {
+    "id": "019ac6b2-…",
+    "sectionId": "019ac6b2-…",
+    "row": "B",
+    "number": 4,
+    "inventoryUnitId": "019ac6b2-…",
+    "priceCents": 4500
+  }
+}
+```
+
+| Scenario          | Response fields                                                                           |
+| ----------------- | ----------------------------------------------------------------------------------------- |
+| `basic-catalogue` | `venue`, `events.concert`, `events.talk`, `events.meetup`                                 |
+| `sold-out-event`  | `venue`, `event`, `buyer`, `orderIds`                                                     |
+| `one-seat-left`   | `venue`, `event`, `buyer`, `orderIds`, `seat` (the available seat and its inventory unit) |
+
+The OpenAPI spec documents each response in full. Later milestones add scenarios (holds about to expire, GA last tickets, confirmed orders, ticket drops).

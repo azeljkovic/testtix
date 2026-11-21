@@ -88,6 +88,86 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/__test/reset": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Reset all data to the baseline seed and reset the clock
+         * @description Test mode only. Deletes every row (users, sessions, holds, orders and scenario data included), resets the clock (or freezes it at `freezeAt`) and inserts the baseline seed for the clock date. The swap is atomic: other requests see the old data or the new baseline, never a half-empty database. Affects every client of this server, so it needs `X-Test-Key` when the server has a test API key.
+         */
+        post: operations["TestResetController_reset"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/__test/seed/basic-catalogue": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Seed scenario: a small catalogue
+         * @description Three published events on sale: a concert (seats and a GA area), a seated talk and a GA meetup, at one new venue. Test mode only. Adds a new venue, events (and orders) with fresh IDs on every call; the slugs and titles end in a random suffix, so calls never collide and existing data is not touched. Open even when the server has a test API key, since it only adds data.
+         */
+        post: operations["TestScenariosController_basicCatalogue"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/__test/seed/sold-out-event": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Seed scenario: a sold-out event
+         * @description A published event on sale whose 12 tickets (8 seats, 4 GA places) are all sold, through confirmed orders of a new buyer. Test mode only. Adds a new venue, events (and orders) with fresh IDs on every call; the slugs and titles end in a random suffix, so calls never collide and existing data is not touched. Open even when the server has a test API key, since it only adds data.
+         */
+        post: operations["TestScenariosController_soldOutEvent"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/__test/seed/one-seat-left": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Seed scenario: one seat left
+         * @description A published seated event on sale with 8 seats, all sold except row B seat 4. Test mode only. Adds a new venue, events (and orders) with fresh IDs on every call; the slugs and titles end in a random suffix, so calls never collide and existing data is not touched. Open even when the server has a test API key, since it only adds data.
+         */
+        post: operations["TestScenariosController_oneSeatLeft"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -147,6 +227,129 @@ export interface components {
              * @enum {boolean}
              */
             reset?: true;
+        };
+        /** @description Optional. Send no body (or `{}`) to reset the clock to the real time. */
+        ResetRequestDto: {
+            /**
+             * Format: date-time
+             * @description Freeze the clock at this ISO 8601 date-time (with `Z` or an offset) instead of resetting it to the real time. The data is then seeded relative to this date, so every reset with the same `freezeAt` day gives identical data.
+             */
+            freezeAt?: string;
+        };
+        ResetResponseDto_Output: {
+            /**
+             * Format: date
+             * @description UTC date the seed data is relative to (`D` in the testing guide): the clock date
+             */
+            seedDay: string;
+            /** @description The server clock after the reset */
+            clock: {
+                /**
+                 * Format: date-time
+                 * @description Server "now" as an ISO 8601 date-time in UTC
+                 */
+                now: string;
+                /**
+                 * @description `real`: the real time. `frozen`: stopped at `now`. `offset`: running, shifted by `offsetMs`.
+                 * @enum {string}
+                 */
+                mode: "real" | "frozen" | "offset";
+                /** @description Server "now" minus the real time, in milliseconds (0 in `real` mode) */
+                offsetMs: number;
+            };
+            /** @description Rows inserted per table. Every other table is empty. */
+            rows: {
+                venues: number;
+                sections: number;
+                seats: number;
+                events: number;
+                ticketBatches: number;
+                inventoryUnits: number;
+            };
+        };
+        ScenarioVenue_Output: {
+            /** Format: uuid */
+            id: string;
+            slug: string;
+            name: string;
+            sections: {
+                /** Format: uuid */
+                id: string;
+                name: string;
+                type: components["schemas"]["SectionType_Output"];
+                /** @description GA sections only: how many places */
+                capacity: number | null;
+            }[];
+        };
+        /** @enum {string} */
+        SectionType_Output: "SEATED" | "GA";
+        /** @enum {string} */
+        EventCategory_Output: "CONCERT" | "TALK" | "MEETUP";
+        /** @enum {string} */
+        EventStatus_Output: "DRAFT" | "PUBLISHED" | "CANCELLED";
+        ScenarioEvent_Output: {
+            /** Format: uuid */
+            id: string;
+            slug: string;
+            title: string;
+            category: components["schemas"]["EventCategory_Output"];
+            status: components["schemas"]["EventStatus_Output"];
+            /** Format: uuid */
+            venueId: string;
+            /** Format: date-time */
+            startsAt: string;
+            /** Format: date-time */
+            salesOpenAt: string;
+            /** @description Inventory units (seats and GA places) of the event, by status */
+            tickets: {
+                total: number;
+                available: number;
+                sold: number;
+            };
+        };
+        BasicCatalogueResultDto_Output: {
+            venue: components["schemas"]["ScenarioVenue_Output"];
+            events: {
+                /** @description Seated section and a GA section */
+                concert: components["schemas"]["ScenarioEvent_Output"];
+                /** @description Seated only */
+                talk: components["schemas"]["ScenarioEvent_Output"];
+                /** @description GA only */
+                meetup: components["schemas"]["ScenarioEvent_Output"];
+            };
+        };
+        /** @description The customer who bought the sold tickets. Has no password: you cannot log in as them. */
+        ScenarioBuyer_Output: {
+            /** Format: uuid */
+            id: string;
+            /** Format: email */
+            email: string;
+        };
+        SoldOutEventResultDto_Output: {
+            venue: components["schemas"]["ScenarioVenue_Output"];
+            event: components["schemas"]["ScenarioEvent_Output"];
+            buyer: components["schemas"]["ScenarioBuyer_Output"];
+            /** @description The confirmed orders that bought every ticket */
+            orderIds: string[];
+        };
+        OneSeatLeftResultDto_Output: {
+            venue: components["schemas"]["ScenarioVenue_Output"];
+            event: components["schemas"]["ScenarioEvent_Output"];
+            buyer: components["schemas"]["ScenarioBuyer_Output"];
+            /** @description The confirmed orders that bought the other seats */
+            orderIds: string[];
+            /** @description The one seat that is still available */
+            seat: {
+                /** Format: uuid */
+                id: string;
+                /** Format: uuid */
+                sectionId: string;
+                row: string;
+                number: number;
+                /** Format: uuid */
+                inventoryUnitId: string;
+                priceCents: number;
+            };
         };
         ProblemDetails: {
             /** @description URI that identifies the problem type: `about:blank` or `urn:testtix:problem:<error-code>` */
@@ -336,6 +539,138 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Error. The body is an RFC 9457 problem details object. */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    TestResetController_reset: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Required when the server sets `TEST_API_KEY` (e.g. the hosted demo). */
+                "X-Test-Key"?: string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["ResetRequestDto"];
+            };
+        };
+        responses: {
+            /** @description The baseline is in place. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResetResponseDto_Output"];
+                };
+            };
+            /** @description The server requires an `X-Test-Key` header and it is missing or wrong. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Error. The body is an RFC 9457 problem details object. */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    TestScenariosController_basicCatalogue: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description What was created. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BasicCatalogueResultDto_Output"];
+                };
+            };
+            /** @description Error. The body is an RFC 9457 problem details object. */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    TestScenariosController_soldOutEvent: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description What was created. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SoldOutEventResultDto_Output"];
+                };
+            };
+            /** @description Error. The body is an RFC 9457 problem details object. */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    TestScenariosController_oneSeatLeft: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description What was created. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OneSeatLeftResultDto_Output"];
                 };
             };
             /** @description Error. The body is an RFC 9457 problem details object. */

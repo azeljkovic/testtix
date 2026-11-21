@@ -151,6 +151,7 @@ Claude's workspace has no Docker daemon, so Testcontainers can't run there. Beca
 - CSRF double-submit (`GET /auth/csrf` or a cookie, plus a header on state-changing requests).
 - `@Roles()` decorator + guards for `CUSTOMER` and `ADMIN`.
 - `POST /__test/sessions` `{ role, email? }` → creates the user and returns a session cookie and CSRF token.
+- Users whose `passwordHash` isn't an argon2 hash (seed scenario buyers, `!locked`) can't log in: login answers like a wrong password, never 500.
 - Verify: integration tests for wrong password, duplicate email, an expired session (advance the clock), a missing CSRF token returning 403, and customer vs admin guard checks.
 
 **C1.5 Mailer + verification email**

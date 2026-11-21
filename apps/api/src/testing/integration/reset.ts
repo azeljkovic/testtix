@@ -2,6 +2,7 @@ import { PrismaPg } from '@prisma/adapter-pg';
 import { Redis } from 'ioredis';
 
 import { PrismaClient } from '../../generated/prisma/client.js';
+import { truncateAllTables } from '../../seed/seed.js';
 import type { IntegrationTargets } from './targets-context.js';
 
 /**
@@ -15,13 +16,7 @@ export async function resetState(targets: IntegrationTargets): Promise<void> {
 async function resetDatabase(databaseUrl: string): Promise<void> {
   const prisma = new PrismaClient({ adapter: new PrismaPg({ connectionString: databaseUrl }) });
   try {
-    const tables = await prisma.$queryRaw<{ tablename: string }[]>`
-      SELECT tablename FROM pg_tables
-      WHERE schemaname = 'public' AND tablename <> '_prisma_migrations'
-      ORDER BY tablename`;
-    if (tables.length === 0) return;
-    const list = tables.map(({ tablename }) => `"public"."${tablename.replaceAll('"', '""')}"`);
-    await prisma.$executeRawUnsafe(`TRUNCATE TABLE ${list.join(', ')} RESTART IDENTITY CASCADE`);
+    await truncateAllTables(prisma);
   } finally {
     await prisma.$disconnect();
   }

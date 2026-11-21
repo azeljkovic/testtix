@@ -1,7 +1,7 @@
 import { createZodDto } from 'nestjs-zod';
 import { z } from 'zod';
 
-import { CLOCK_MODES } from '../clock/clock-state.js';
+import { CLOCK_MODES, type ClockReading } from '../clock/clock-state.js';
 
 /** Upper bound for one `advanceBy` step: 366 days. Call again to go further. */
 export const MAX_ADVANCE_MS = 366 * 24 * 60 * 60 * 1000;
@@ -46,6 +46,16 @@ export const ClockStateSchema = z.object({
 });
 
 export type ClockCommand = z.infer<typeof ClockCommandSchema>;
+export type ClockState = z.infer<typeof ClockStateSchema>;
+
+/** The response body for a clock reading. */
+export function toClockState(reading: ClockReading): ClockState {
+  return {
+    now: new Date(reading.nowMs).toISOString(),
+    mode: reading.mode,
+    offsetMs: reading.offsetMs,
+  };
+}
 
 export class ClockCommandDto extends createZodDto(ClockCommandSchema) {}
 export class ClockStateDto extends createZodDto(ClockStateSchema) {}
