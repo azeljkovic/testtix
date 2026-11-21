@@ -23,6 +23,12 @@ export const envSchema = z
       .url({ protocol: /^rediss?$/, error: 'Must be a redis:// or rediss:// URL' })
       .optional(),
     HEALTH_CHECK_TIMEOUT_MS: z.coerce.number().int().min(1).max(60_000).default(1000),
+    // Enables the test API (`/__test/*`) and the controllable clock. Never on for a real shop.
+    TESTTIX_TEST_MODE: z
+      .stringbool({ truthy: ['true'], falsy: ['false'], error: 'Must be true or false' })
+      .default(false),
+    // When set, global-effect test endpoints (clock, reset) require it in an `X-Test-Key` header.
+    TEST_API_KEY: z.string().min(16, 'Must be at least 16 characters').optional(),
   })
   .superRefine((env, ctx) => {
     // Dev defaults carry well-known credentials, so production must set connection URLs explicitly.
@@ -45,6 +51,8 @@ export const envSchema = z
     databaseUrl: env.DATABASE_URL ?? DEV_DATABASE_URL,
     redisUrl: env.REDIS_URL ?? DEV_REDIS_URL,
     healthCheckTimeoutMs: env.HEALTH_CHECK_TIMEOUT_MS,
+    testMode: env.TESTTIX_TEST_MODE,
+    testApiKey: env.TEST_API_KEY,
   }));
 
 export type AppConfig = Readonly<z.output<typeof envSchema>>;

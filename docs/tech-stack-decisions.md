@@ -1,6 +1,6 @@
 # TestTix — Tech stack decisions
 
-Status: draft v2 (2026-11-17), updated for C0.7 (2026-11-20)
+Status: draft v2 (2026-11-17), updated for C1.1 (2026-11-21)
 Legend: **[Decided]** = chosen by Aleksandar · **[Proposed]** = default pick, open to change
 
 ---
@@ -128,6 +128,13 @@ Notes:
 - **Injectable `ClockService`:** all server-side "now" goes through it. In test mode the clock can be frozen, set or advanced through the test API, so hold expiry is testable server-side and not just in the browser (Playwright's clock only covers the browser).
 - Default hold duration is 10 minutes, configurable per event.
 
+**ClockService (C1.1)**
+
+- `ClockService.now()` is **async** (`await clock.now()`): in test mode it reads the clock state from Redis on every call, so a change made through one replica is seen by all of them at once, with no cache to invalidate. With test mode off it returns the real time without touching Redis. If Redis is down in test mode it throws instead of falling back to the real time, since a silently wrong clock would make tests lie.
+- State is one Redis hash, `testtix:clock`, with `frozenAt` and/or `offsetMs` (epoch milliseconds). `frozenAt` wins. `advanceBy` is a Lua script that increments whichever field applies, so concurrent advances from different replicas all count.
+- `advanceBy` is an integer number of milliseconds (1 to 366 days per call), not an ISO 8601 duration: easier to compute in test code, and no duration parser needed. Moving backwards is only possible by freezing at an earlier time.
+- An ESLint rule (`no-restricted-syntax` in `apps/api/eslint.config.js`) bans `new Date()`, `Date()` and `Date.now()` in `apps/api/src` outside `clock.service.ts`, tests and the test harness. `new Date(value)` stays allowed.
+
 ### 3.3 Background jobs
 
 | Area  | Decision                                                                                       | Status   |
@@ -192,6 +199,12 @@ Enabled when `TESTTIX_TEST_MODE=true`.
 - `POST /__test/seed/{scenario}`: load named scenarios, e.g. `sold-out-event`, `one-seat-left`, `drop-in-5-min`.
 - `POST /__test/clock` with `{ freezeAt | advanceBy | reset }`.
 - `POST /__test/sessions`: see Auth.
+
+**Implementation notes (C1.1)**
+
+- The test API is `TestApiModule` (`apps/api/src/test-api/`). `AppModule` imports it only in test mode, so outside test mode `/__test/*` is a plain 404 and none of its code runs.
+- `TESTTIX_TEST_MODE` accepts only `true` or `false`. `TEST_API_KEY` must be at least 16 characters; `TestKeyGuard` compares SHA-256 digests with `timingSafeEqual` and sends `WWW-Authenticate: TestKey realm="test-api"` with its 401, as RFC 9110 requires. Endpoints opt in with `@RequiresTestKey()`, which also documents the header and the 401.
+- The committed `openapi.json` is exported with test mode on, so it documents the test API (tag `test`). A server with test mode off serves a spec without those paths.
 
 **Intentional bugs [Decided]: none in v1.** The first version ships bug-free. Bug toggles (with a `GET/PUT /__test/bugs` endpoint) or versioned buggy deployments come in a later version. Candidate bugs for that version:
 

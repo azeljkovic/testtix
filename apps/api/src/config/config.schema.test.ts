@@ -27,6 +27,8 @@ describe('parseConfig', () => {
       databaseUrl: DEV_DATABASE_URL,
       redisUrl: DEV_REDIS_URL,
       healthCheckTimeoutMs: 1000,
+      testMode: false,
+      testApiKey: undefined,
     });
   });
 
@@ -39,6 +41,8 @@ describe('parseConfig', () => {
       DATABASE_URL: 'postgres://u:p@db:5432/app',
       REDIS_URL: 'rediss://cache:6380',
       HEALTH_CHECK_TIMEOUT_MS: '250',
+      TESTTIX_TEST_MODE: 'true',
+      TEST_API_KEY: 'a-long-enough-test-key',
     });
     expect(config).toEqual({
       nodeEnv: 'production',
@@ -48,7 +52,30 @@ describe('parseConfig', () => {
       databaseUrl: 'postgres://u:p@db:5432/app',
       redisUrl: 'rediss://cache:6380',
       healthCheckTimeoutMs: 250,
+      testMode: true,
+      testApiKey: 'a-long-enough-test-key',
     });
+  });
+
+  it.each([
+    ['true', true],
+    ['TRUE', true],
+    ['false', false],
+  ])('reads TESTTIX_TEST_MODE=%s as %s', (value, expected) => {
+    expect(parseConfig({ TESTTIX_TEST_MODE: value }).testMode).toBe(expected);
+  });
+
+  it.each(['1', 'yes', 'on', 'enabled'])('rejects TESTTIX_TEST_MODE=%s', (value) => {
+    const error = parseError({ TESTTIX_TEST_MODE: value });
+    expect(error.issues.map((issue) => issue.path.join('.'))).toEqual(['TESTTIX_TEST_MODE']);
+    expect(error.issues[0]?.message).toBe('Must be true or false');
+  });
+
+  it('rejects a TEST_API_KEY shorter than 16 characters', () => {
+    expect(parseConfig({ TEST_API_KEY: 'x'.repeat(16) }).testApiKey).toBe('x'.repeat(16));
+    const error = parseError({ TEST_API_KEY: 'x'.repeat(15) });
+    expect(error.issues[0]?.path).toEqual(['TEST_API_KEY']);
+    expect(error.issues[0]?.message).toBe('Must be at least 16 characters');
   });
 
   it('ignores unrelated variables', () => {

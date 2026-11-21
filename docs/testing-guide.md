@@ -15,6 +15,7 @@ How to test TestTix from the outside: what the API promises, and the hooks it gi
 - Base URL locally: `http://localhost:3000` (`pnpm --filter @testtix/api dev`).
 - OpenAPI 3 spec: `GET /openapi.json`. Swagger UI: `/docs`. Every operation documents its error response. The same spec is committed as `apps/api/openapi.json` and attached to every CI run as the `openapi-spec` artifact, so you can generate a client or contract checks without running the API.
 - JSON in, JSON out. Money is integer cents, currency USD.
+- Test-only endpoints live under `/__test/*` and are tagged `test` in the spec; see [Test mode](#test-mode).
 
 ## Request IDs
 
@@ -54,10 +55,10 @@ Branch on `type`, never on `title` or `detail`. App-specific types end in an err
 
 Problem types so far:
 
-| `type`                                 | Status | When                                           |
-| -------------------------------------- | ------ | ---------------------------------------------- |
-| `about:blank`                          | any    | Unknown route (404), malformed JSON (400), 5xx |
-| `urn:testtix:problem:validation-error` | 400    | Body, query or path parameters fail validation |
+| `type`                                 | Status | When                                                                                |
+| -------------------------------------- | ------ | ----------------------------------------------------------------------------------- |
+| `about:blank`                          | any    | Unknown route (404), malformed JSON (400), missing or wrong `X-Test-Key` (401), 5xx |
+| `urn:testtix:problem:validation-error` | 400    | Body, query or path parameters fail validation                                      |
 
 ## Health and readiness
 
@@ -77,3 +78,61 @@ Wait for readiness before a test run instead of sleeping:
 ```sh
 until curl -sf http://localhost:3000/health/ready > /dev/null; do sleep 1; done
 ```
+
+## Test mode
+
+Test mode gives testers hooks that a real shop would never expose: the test API under `/__test/*` and a server clock you can control. Turn it on with `TESTTIX_TEST_MODE=true` (`.env.example` sets it, so a local `.env` copied from it has test mode on; without a `.env` it is off). With test mode off, every `/__test/*` path answers 404 like any unknown route, and the clock is always the real time.
+
+On startup the API logs a `TestMode` warning saying whether test mode is on and whether the test API is key-protected.
+
+### Test API key
+
+Some test endpoints affect everyone using the server: freezing the clock or wiping the data breaks every other tester's session on a shared instance such as the hosted demo. When the server sets `TEST_API_KEY` (at least 16 characters), those endpoints require the same value in an `X-Test-Key` header and answer 401 without it (with a `WWW-Authenticate` header). When `TEST_API_KEY` is unset, as it is locally, they are open.
+
+| Endpoint             | Needs `X-Test-Key` (when configured) |
+| -------------------- | ------------------------------------ |
+| `GET /__test/clock`  | no                                   |
+| `POST /__test/clock` | yes                                  |
+
+### The server clock
+
+All server-side time (hold expiry, session expiry, ticket drops) comes from one clock. In test mode you can freeze it, move it forward or reset it, so time-dependent behaviour is testable through the API instead of by waiting. The clock state lives in Redis, so every API instance and background worker sees the same time.
+
+The clock only changes server time. Browser time is separate: in UI tests, control it with your browser tool (for example Playwright's `page.clock`) as well.
+
+`GET /__test/clock` reads it, and `POST /__test/clock` changes it and returns the result. Both return:
+
+```json
+{ "now": "2026-12-01T18:30:00.000Z", "mode": "frozen", "offsetMs": 856800000 }
+```
+
+| Field      | Meaning                                                                                      |
+| ---------- | -------------------------------------------------------------------------------------------- |
+| `now`      | Server time, ISO 8601 in UTC with milliseconds                                               |
+| `mode`     | `real`: the real time. `frozen`: stopped at `now`. `offset`: running, shifted forward        |
+| `offsetMs` | `now` minus the real time, in milliseconds. 0 in `real` mode, negative if frozen in the past |
+
+The `POST` body holds exactly one of these (anything else is a 400 `validation-error`, as are unknown fields):
+
+| Body                                     | Effect                                                                                                                                                                  |
+| ---------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `{ "freezeAt": "2026-12-01T19:30:00Z" }` | Stop the clock at that time, in the past or future. The time needs `Z` or an offset (`+01:00`). It replaces any earlier freeze or offset                                |
+| `{ "advanceBy": 600000 }`                | Move forward by that many milliseconds (an integer from 1 to 31 622 400 000, i.e. 366 days). A frozen clock stays frozen at the later time; a running one keeps running |
+| `{ "reset": true }`                      | Back to the real time                                                                                                                                                   |
+
+The clock never moves backwards on its own: `advanceBy` only accepts positive values. To go back, freeze at an earlier time or reset. Concurrent `advanceBy` calls all count, even when they reach different API instances.
+
+```sh
+# Freeze, then jump 10 minutes ahead (e.g. past a seat hold's expiry)
+curl -s -X POST http://localhost:3000/__test/clock -H 'Content-Type: application/json' \
+  -d '{"freezeAt":"2026-12-01T19:30:00Z"}'
+curl -s -X POST http://localhost:3000/__test/clock -H 'Content-Type: application/json' \
+  -d '{"advanceBy":600000}'
+# → {"now":"2026-12-01T19:40:00.000Z","mode":"frozen",...}
+
+# Back to real time; add the key on a server that has one
+curl -s -X POST http://localhost:3000/__test/clock -H 'Content-Type: application/json' \
+  -H "X-Test-Key: $TEST_API_KEY" -d '{"reset":true}'
+```
+
+The clock is global to the server: reset it when your test is done, and don't run tests that change it in parallel against the same server.
