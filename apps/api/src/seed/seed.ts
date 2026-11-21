@@ -11,6 +11,7 @@ const SEED_LOCK_KEY = 'testtix:seed';
 const SEED_TRANSACTION_TIMEOUT_MS = 60_000;
 
 export interface SeedSummary {
+  users: number;
   venues: number;
   sections: number;
   seats: number;
@@ -67,7 +68,6 @@ export async function resetAndSeedDatabase(prisma: PrismaClient, now: Date): Pro
 
 /** Rows of tables the baseline leaves empty, for data sets that add them (test scenarios). */
 export interface ExtraRows {
-  users: Prisma.UserCreateManyInput[];
   orders: Prisma.OrderCreateManyInput[];
   orderItems: Prisma.OrderItemCreateManyInput[];
   tickets: Prisma.TicketCreateManyInput[];
@@ -78,7 +78,7 @@ export async function insertRows(
   tx: Prisma.TransactionClient,
   data: SeedData & Partial<ExtraRows>,
 ): Promise<void> {
-  for (const rows of chunks(data.users ?? [])) await tx.user.createMany({ data: rows });
+  for (const rows of chunks(data.users)) await tx.user.createMany({ data: rows });
   for (const rows of chunks(data.venues)) await tx.venue.createMany({ data: rows });
   for (const rows of chunks(data.sections)) await tx.section.createMany({ data: rows });
   for (const rows of chunks(data.seats)) await tx.seat.createMany({ data: rows });
@@ -115,6 +115,7 @@ async function lockSeed(tx: Prisma.TransactionClient): Promise<void> {
 
 function summarize(data: SeedData): SeedSummary {
   return {
+    users: data.users.length,
     venues: data.venues.length,
     sections: data.sections.length,
     seats: data.seats.length,

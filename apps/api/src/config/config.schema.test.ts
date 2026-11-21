@@ -29,6 +29,8 @@ describe('parseConfig', () => {
       healthCheckTimeoutMs: 1000,
       testMode: false,
       testApiKey: undefined,
+      sessionTtlMs: 7 * 24 * 60 * 60 * 1000,
+      cookieSecure: false,
     });
   });
 
@@ -43,6 +45,8 @@ describe('parseConfig', () => {
       HEALTH_CHECK_TIMEOUT_MS: '250',
       TESTTIX_TEST_MODE: 'true',
       TEST_API_KEY: 'a-long-enough-test-key',
+      SESSION_TTL_HOURS: '2',
+      COOKIE_SECURE: 'false',
     });
     expect(config).toEqual({
       nodeEnv: 'production',
@@ -54,6 +58,8 @@ describe('parseConfig', () => {
       healthCheckTimeoutMs: 250,
       testMode: true,
       testApiKey: 'a-long-enough-test-key',
+      sessionTtlMs: 2 * 60 * 60 * 1000,
+      cookieSecure: false,
     });
   });
 
@@ -76,6 +82,19 @@ describe('parseConfig', () => {
     const error = parseError({ TEST_API_KEY: 'x'.repeat(15) });
     expect(error.issues[0]?.path).toEqual(['TEST_API_KEY']);
     expect(error.issues[0]?.message).toBe('Must be at least 16 characters');
+  });
+
+  it.each([
+    [{ NODE_ENV: 'development' }, false],
+    [{ NODE_ENV: 'test' }, false],
+    [{ NODE_ENV: 'production', DATABASE_URL: 'postgres://db/app', REDIS_URL: 'redis://r' }, true],
+    [{ NODE_ENV: 'development', COOKIE_SECURE: 'true' }, true],
+  ])('derives cookieSecure from %j', (env, expected) => {
+    expect(parseConfig(env).cookieSecure).toBe(expected);
+  });
+
+  it.each(['0', '8761', '1.5'])('rejects SESSION_TTL_HOURS=%s', (value) => {
+    expect(parseError({ SESSION_TTL_HOURS: value }).issues[0]?.path).toEqual(['SESSION_TTL_HOURS']);
   });
 
   it('ignores unrelated variables', () => {

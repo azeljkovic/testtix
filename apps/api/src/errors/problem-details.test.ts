@@ -5,6 +5,7 @@ import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
 
 import { toProblemDetails } from './problem-details.js';
+import { ProblemException } from './problem.exception.js';
 
 const request = { path: '/events/42', requestId: 'req-1' };
 
@@ -18,6 +19,26 @@ describe('toProblemDetails', () => {
       instance: '/events/42',
       requestId: 'req-1',
       errors: [],
+    });
+  });
+
+  it('maps a ProblemException to its app-specific type, title and field errors', () => {
+    const fieldError = { path: 'email', code: 'email_taken', message: 'Already registered' };
+    const exception = new ProblemException(
+      'EMAIL_ALREADY_REGISTERED',
+      409,
+      'Email already registered',
+      'An account with this email address already exists.',
+      [fieldError],
+    );
+    expect(toProblemDetails(exception, request)).toEqual({
+      type: PROBLEM_TYPES.EMAIL_ALREADY_REGISTERED,
+      title: 'Email already registered',
+      status: 409,
+      detail: 'An account with this email address already exists.',
+      instance: '/events/42',
+      requestId: 'req-1',
+      errors: [fieldError],
     });
   });
 

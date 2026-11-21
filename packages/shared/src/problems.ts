@@ -13,6 +13,9 @@ export const PROBLEM_TYPE_BLANK = 'about:blank';
  */
 export const PROBLEM_TYPES = {
   VALIDATION_ERROR: 'urn:testtix:problem:validation-error',
+  INVALID_CREDENTIALS: 'urn:testtix:problem:invalid-credentials',
+  EMAIL_ALREADY_REGISTERED: 'urn:testtix:problem:email-already-registered',
+  CSRF_TOKEN_INVALID: 'urn:testtix:problem:csrf-token-invalid',
 } as const satisfies Record<string, `urn:testtix:problem:${string}`>;
 
 export type ErrorCode = keyof typeof PROBLEM_TYPES;

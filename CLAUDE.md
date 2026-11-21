@@ -22,7 +22,8 @@ When a decision changes, update the docs in the same PR so they stay accurate.
 - ✅ C1.1 Test mode + ClockService
 - ✅ C1.2 Domain data model + deterministic seed
 - ✅ C1.3 Test API: reset, seed scenarios
-- ⏭️ Next: **C1.4 Auth API (sessions, roles, CSRF)** (see plan)
+- ✅ C1.4 Auth API (sessions, roles, CSRF)
+- ⏭️ Next: **C1.5 Mailer + account verification email** (see plan)
 
 Update this list when a chunk is merged.
 
@@ -77,6 +78,8 @@ Run one package: `pnpm --filter @testtix/api <script>`.
 - Server code must take "now" from `ClockService` (`await clock.now()`; global, inject by type), never `Date.now()` / `new Date()` directly. ESLint enforces it in `apps/api/src` (tests and `src/testing/` are exempt).
 - Test-only endpoints go in `TestApiModule` (`apps/api/src/test-api/`, routes under `/__test/`), which is loaded only when `TESTTIX_TEST_MODE=true`. Put `@RequiresTestKey()` on endpoints with a global effect (clock, reset). Tests turn test mode on with `env: { TESTTIX_TEST_MODE: 'true' }`; the clock is global, so tests that change it reset it.
 - `POST /__test/reset` reseeds via `resetAndSeedDatabase()` (truncate + seed in one transaction). Seed scenarios (`src/test-api/scenarios/`) are one route each under `/__test/seed/`, built by pure functions that reuse `buildCatalogue()`; they only add rows, with random IDs (`uuidv7(now)`) and a random suffix in slugs, titles and emails. Document new scenarios in `docs/testing-guide.md`.
+- **Auth is deny-by-default.** The global `AuthGuard` requires a session on every route; mark open routes (or controllers) `@Public()`, restrict with `@Roles('ADMIN')`, read the user with `@CurrentUser()` (`src/auth/auth.decorators.ts`). The global `CsrfGuard` requires `X-CSRF-Token` on every POST/PUT/PATCH/DELETE unless `@SkipCsrf()`. New test API controllers use `@TestApiController(path)` (public, no CSRF). In tests, `openBrowser(app)` / `createTestSession(app, { role })` (`src/testing/auth.ts`) give a logged-in client; `createIntegrationApp({ controllers })` adds probe routes.
+- Prisma unique-constraint races: catch `P2002` (`isUniqueViolation()` in `src/auth/auth.service.ts`) rather than checking first.
 - Prefer accessible names over `data-testid` in the UI; use `data-testid` only where no good accessible locator exists.
 - Every list endpoint sorts with a stable tiebreaker (`id`).
 - Local infra is `docker/compose.yml`, driven by `pnpm infra:*` from the repo root (`--project-directory .`, so the root `.env` overrides the compose defaults). Pin image tags to an exact version. New services get a health check, and `docker/smoke-test.sh` checks them.

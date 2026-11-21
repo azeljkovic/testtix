@@ -58,7 +58,7 @@ describe('POST /__test/reset', () => {
 
     expect(await dataHash(prisma)).toEqual(expected);
     expect(body.seedDay).toBe('2026-11-21');
-    expect(body.rows).toMatchObject({ venues: 4, events: 44 });
+    expect(body.rows).toMatchObject({ users: 3, venues: 4, events: 44 });
     expect(body.rows.inventoryUnits).toBe(await prisma.inventoryUnit.count());
   });
 

@@ -1,6 +1,7 @@
+import { verify } from '@node-rs/argon2';
 import { describe, expect, it } from 'vitest';
 
-import { EVENT_SPECS, SEED_FIXTURES, VENUE_SPECS } from './fixtures.js';
+import { EVENT_SPECS, SEED_FIXTURES, USER_SPECS, VENUE_SPECS } from './fixtures.js';
 import { GENERATED_EVENT_COUNT } from './generated-events.js';
 import { buildSeedData, rowLabel } from './seed-data.js';
 
@@ -157,4 +158,45 @@ describe('rowLabel', () => {
   ])('labels row %i as %s', (index, label) => {
     expect(rowLabel(index)).toBe(label);
   });
+});
+
+describe('seeded users', () => {
+  it('has the documented accounts with stable IDs', () => {
+    expect(
+      data.users.map(({ id, email, role, emailVerifiedAt }) => ({
+        id,
+        email,
+        role,
+        verified: emailVerifiedAt !== null,
+      })),
+    ).toEqual([
+      {
+        id: SEED_FIXTURES.users['admin@testtix.test'],
+        email: 'admin@testtix.test',
+        role: 'ADMIN',
+        verified: true,
+      },
+      {
+        id: SEED_FIXTURES.users['customer@testtix.test'],
+        email: 'customer@testtix.test',
+        role: 'CUSTOMER',
+        verified: true,
+      },
+      {
+        id: SEED_FIXTURES.users['unverified@testtix.test'],
+        email: 'unverified@testtix.test',
+        role: 'CUSTOMER',
+        verified: false,
+      },
+    ]);
+  });
+
+  it.each(USER_SPECS)(
+    'stores an argon2id hash of the documented password for $email',
+    async (user) => {
+      expect(user.passwordHash).toMatch(/^\$argon2id\$/);
+      expect(await verify(user.passwordHash, user.password)).toBe(true);
+      expect(await verify(user.passwordHash, `${user.password}x`)).toBe(false);
+    },
+  );
 });

@@ -1,13 +1,13 @@
-import { Body, Controller, Get, Post } from '@nestjs/common';
-import { ApiOperation, ApiTags } from '@nestjs/swagger';
+import { Body, Get, Post } from '@nestjs/common';
+import { ApiOperation } from '@nestjs/swagger';
 import { ZodResponse } from 'nestjs-zod';
 
 import { ClockService } from '../clock/clock.service.js';
 import { ClockCommandDto, ClockStateDto, toClockState } from './clock.schemas.js';
+import { TestApiController } from './test-api.decorator.js';
 import { RequiresTestKey } from './test-key.guard.js';
 
-@ApiTags('test')
-@Controller('__test/clock')
+@TestApiController('clock')
 export class TestClockController {
   constructor(private readonly clock: ClockService) {}
 

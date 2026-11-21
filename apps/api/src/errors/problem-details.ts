@@ -10,6 +10,8 @@ import {
 import { ZodSerializationException, ZodValidationException } from 'nestjs-zod';
 import { z } from 'zod';
 
+import { ProblemException } from './problem.exception.js';
+
 interface RequestInfo {
   path: string;
   requestId: string;
@@ -35,6 +37,17 @@ export function toProblemDetails(exception: unknown, request: RequestInfo): Prob
   if (exception instanceof ZodSerializationException) {
     // A response that doesn't match its own schema is a server bug, not something to show the client.
     return { ...base, ...statusOnly(500), detail: INTERNAL_ERROR_DETAIL };
+  }
+
+  if (exception instanceof ProblemException) {
+    return {
+      ...base,
+      type: PROBLEM_TYPES[exception.code],
+      title: exception.title,
+      status: exception.getStatus(),
+      detail: exception.message,
+      errors: [...exception.fieldErrors],
+    };
   }
 
   if (exception instanceof HttpException) {

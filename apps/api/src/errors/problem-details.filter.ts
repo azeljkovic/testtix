@@ -3,6 +3,7 @@ import type { FastifyReply, FastifyRequest } from 'fastify';
 import { PROBLEM_CONTENT_TYPE } from '@testtix/shared';
 import { ZodSerializationException } from 'nestjs-zod';
 
+import { SESSION_CHALLENGE } from '../auth/auth.guard.js';
 import { toProblemDetails } from './problem-details.js';
 
 /** Global filter: every error leaves the API as `application/problem+json`. */
@@ -27,6 +28,10 @@ export class ProblemDetailsFilter implements ExceptionFilter {
     }
 
     if (reply.sent) return;
+    // RFC 9110 requires a challenge on every 401. Guards with another scheme set their own first.
+    if (problem.status === 401 && !reply.hasHeader('WWW-Authenticate')) {
+      void reply.header('WWW-Authenticate', SESSION_CHALLENGE);
+    }
     void reply
       .status(problem.status)
       .header('Content-Type', `${PROBLEM_CONTENT_TYPE}; charset=utf-8`)

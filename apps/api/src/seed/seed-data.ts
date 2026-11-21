@@ -6,6 +6,8 @@ import {
   SEED_CITY,
   SEED_TIMEZONE,
   type SectionSpec,
+  USER_SPECS,
+  userId,
   VENUE_SPECS,
   type VenueSpec,
 } from './fixtures.js';
@@ -14,6 +16,7 @@ import { seedId } from './seed-id.js';
 
 /** Every row the baseline seed inserts, table by table, in insertion order. */
 export interface SeedData {
+  users: Prisma.UserCreateManyInput[];
   venues: Prisma.VenueCreateManyInput[];
   sections: Prisma.SectionCreateManyInput[];
   seats: Prisma.SeatCreateManyInput[];
@@ -35,12 +38,25 @@ const DAY_MS = 24 * 60 * MINUTE_MS;
  * has no holds, orders or tickets: everything is `AVAILABLE`.
  */
 export function buildSeedData(now: Date): SeedData {
-  return buildCatalogue(now, {
+  const createdAt: DayTime = [-90, '12:00'];
+  const catalogue = buildCatalogue(now, {
     venues: VENUE_SPECS,
     events: [...EVENT_SPECS, ...generateEventSpecs()],
     id: seedId,
-    createdAt: [-90, '12:00'],
+    createdAt,
   });
+  const userCreatedAt = dayAt(now, createdAt);
+  catalogue.users = USER_SPECS.map((user) => ({
+    id: userId(user.email),
+    email: user.email,
+    passwordHash: user.passwordHash,
+    name: user.name,
+    role: user.role,
+    emailVerifiedAt: user.emailVerified ? userCreatedAt : null,
+    createdAt: userCreatedAt,
+    updatedAt: userCreatedAt,
+  }));
+  return catalogue;
 }
 
 /** An event to build. Like `EventSpec`, but at any venue, not only a seeded one. */
@@ -71,6 +87,7 @@ export function buildCatalogue(now: Date, spec: CatalogueSpec): SeedData {
   const createdAt = spec.createdAt instanceof Date ? spec.createdAt : at(spec.createdAt);
 
   const data: SeedData = {
+    users: [],
     venues: [],
     sections: [],
     seats: [],

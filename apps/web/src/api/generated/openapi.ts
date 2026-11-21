@@ -4,6 +4,106 @@
  */
 
 export interface paths {
+    "/auth/csrf": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get a CSRF token
+         * @description Sets the `testtix_csrf` cookie (readable by scripts, 30 days) and returns the same token. Send it back in the `X-CSRF-Token` header of every POST, PUT, PATCH and DELETE request, together with the cookie. Returns the existing token when the request already has one, and renews the cookie.
+         */
+        get: operations["AuthController_csrf"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/register": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Create a customer account and log in
+         * @description The new account has the CUSTOMER role and an unverified email address. Sets the `testtix_session` cookie (HttpOnly, SameSite=Lax) and ends the session the request came with, if any. 409 `email-already-registered` when the email is taken.
+         */
+        post: operations["AuthController_register"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/login": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Log in with email and password
+         * @description Sets the `testtix_session` cookie (HttpOnly, SameSite=Lax) and ends the session the request came with, if any. A wrong password, an unknown email and an account without a password all give the same 401 `invalid-credentials`.
+         */
+        post: operations["AuthController_login"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/logout": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Log out
+         * @description Ends the request's session and clears the `testtix_session` cookie. Succeeds without a session too, so it is safe to repeat.
+         */
+        post: operations["AuthController_logout"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/me": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The logged-in user
+         * @description Also moves the session expiry forward, like every authenticated request.
+         */
+        get: operations["AuthController_me"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/health": {
         parameters: {
             query?: never;
@@ -168,10 +268,77 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/__test/sessions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Create a user with a role and log it in
+         * @description Test mode only. Skips registration and login for API-based test setup: creates a new user (ADMIN or CUSTOMER, email verified unless `emailVerified` is false) and a session, sets the session and CSRF cookies, and returns the same tokens in the body. Send both cookies plus the `X-CSRF-Token` header on state-changing requests. Open even when the server has a test API key, since it only adds data.
+         */
+        post: operations["TestSessionsController_create"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        CsrfTokenDto_Output: {
+            /** @description Send it in the `X-CSRF-Token` header of every POST, PUT, PATCH and DELETE */
+            csrfToken: string;
+        };
+        RegisterRequestDto: {
+            /**
+             * Format: email
+             * @description Email address. Surrounding spaces are removed and it is matched case-insensitively.
+             */
+            email: string;
+            /** @description 8–128 characters, used exactly as typed */
+            password: string;
+            /** @description Display name. Surrounding spaces are removed. */
+            name: string;
+        };
+        AuthUser_Output: {
+            /** Format: uuid */
+            id: string;
+            /** Format: email */
+            email: string;
+            name: string;
+            role: components["schemas"]["Role_Output"];
+            /** @description Unverified users can log in but not check out */
+            emailVerified: boolean;
+            /** Format: date-time */
+            createdAt: string;
+        };
+        /** @enum {string} */
+        Role_Output: "CUSTOMER" | "ADMIN";
+        AuthSession_Output: {
+            user: components["schemas"]["AuthUser_Output"];
+            session: {
+                /**
+                 * Format: date-time
+                 * @description When the session ends if unused (server clock). Each authenticated request moves it forward.
+                 */
+                expiresAt: string;
+            };
+        };
+        LoginRequestDto: {
+            /**
+             * Format: email
+             * @description Email address. Surrounding spaces are removed and it is matched case-insensitively.
+             */
+            email: string;
+            password: string;
+        };
         LivenessDto_Output: {
             /** @enum {string} */
             status: "ok";
@@ -259,6 +426,7 @@ export interface components {
             };
             /** @description Rows inserted per table. Every other table is empty. */
             rows: {
+                users: number;
                 venues: number;
                 sections: number;
                 seats: number;
@@ -351,6 +519,39 @@ export interface components {
                 priceCents: number;
             };
         };
+        /** @enum {string} */
+        Role: "CUSTOMER" | "ADMIN";
+        TestSessionRequestDto: {
+            /** @description Role of the new user */
+            role: components["schemas"]["Role"];
+            /**
+             * Format: email
+             * @description Email of the new user. Default: `user-<random>@session.testtix.test`. 409 `email-already-registered` if taken.
+             */
+            email?: string;
+            /** @description Default: `Test Customer <random>` or `Test Admin <random>` */
+            name?: string;
+            /** @description Lets the user also log in through `POST /auth/login` (e.g. a UI test of the login form). Without it the user has no password and only this session. */
+            password?: string;
+            /**
+             * @description Default `true`. Unverified users can log in but not check out.
+             * @default true
+             */
+            emailVerified: boolean;
+        };
+        TestSessionResponseDto_Output: {
+            user: components["schemas"]["AuthUser_Output"];
+            session: {
+                /** @description Value of the `testtix_session` cookie */
+                token: string;
+                /** Format: date-time */
+                expiresAt: string;
+            };
+            /** @description Value of the `testtix_csrf` cookie; send it in `X-CSRF-Token` too */
+            csrfToken: string;
+            /** @description A ready-made `Cookie` request header with both cookies, for clients without a cookie jar */
+            cookie: string;
+        };
         ProblemDetails: {
             /** @description URI that identifies the problem type: `about:blank` or `urn:testtix:problem:<error-code>` */
             type: string;
@@ -382,6 +583,202 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    AuthController_csrf: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The CSRF token. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CsrfTokenDto_Output"];
+                };
+            };
+            /** @description Error. The body is an RFC 9457 problem details object. */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    AuthController_register: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description The CSRF token from `GET /auth/csrf`. Must equal the `testtix_csrf` cookie, which must be sent too. */
+                "X-CSRF-Token": string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RegisterRequestDto"];
+            };
+        };
+        responses: {
+            /** @description Registered and logged in. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AuthSession_Output"];
+                };
+            };
+            /** @description The `X-CSRF-Token` header is missing or doesn't match the `testtix_csrf` cookie (type `csrf-token-invalid`). */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Error. The body is an RFC 9457 problem details object. */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    AuthController_login: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description The CSRF token from `GET /auth/csrf`. Must equal the `testtix_csrf` cookie, which must be sent too. */
+                "X-CSRF-Token": string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LoginRequestDto"];
+            };
+        };
+        responses: {
+            /** @description Logged in. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AuthSession_Output"];
+                };
+            };
+            /** @description The `X-CSRF-Token` header is missing or doesn't match the `testtix_csrf` cookie (type `csrf-token-invalid`). */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Error. The body is an RFC 9457 problem details object. */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    AuthController_logout: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description The CSRF token from `GET /auth/csrf`. Must equal the `testtix_csrf` cookie, which must be sent too. */
+                "X-CSRF-Token": string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Logged out. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description The `X-CSRF-Token` header is missing or doesn't match the `testtix_csrf` cookie (type `csrf-token-invalid`). */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Error. The body is an RFC 9457 problem details object. */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    AuthController_me: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The user and session. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AuthSession_Output"];
+                };
+            };
+            /** @description No session cookie, or the session has expired or was ended. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Error. The body is an RFC 9457 problem details object. */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
     HealthController_live: {
         parameters: {
             query?: never;
@@ -671,6 +1068,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["OneSeatLeftResultDto_Output"];
+                };
+            };
+            /** @description Error. The body is an RFC 9457 problem details object. */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    TestSessionsController_create: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TestSessionRequestDto"];
+            };
+        };
+        responses: {
+            /** @description The user and session. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TestSessionResponseDto_Output"];
                 };
             };
             /** @description Error. The body is an RFC 9457 problem details object. */

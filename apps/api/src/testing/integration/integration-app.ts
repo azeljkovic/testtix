@@ -1,5 +1,6 @@
 import { once } from 'node:events';
 
+import type { Type } from '@nestjs/common';
 import type { NestFastifyApplication } from '@nestjs/platform-fastify';
 import { Test } from '@nestjs/testing';
 import type { Redis } from 'ioredis';
@@ -20,6 +21,8 @@ export interface IntegrationAppOptions {
    * Pass `false` when Redis is meant to be unreachable.
    */
   waitForRedis?: boolean;
+  /** Extra controllers, e.g. probe routes that exercise the auth guards. */
+  controllers?: Type[];
 }
 
 const REDIS_READY_TIMEOUT_MS = 10_000;
@@ -41,6 +44,7 @@ export async function createIntegrationApp(
   });
   const moduleRef = await Test.createTestingModule({
     imports: [AppModule.forRoot(config)],
+    controllers: options.controllers ?? [],
   }).compile();
   const app = await startTestingApp(moduleRef);
   if (options.waitForRedis ?? true) {

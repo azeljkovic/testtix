@@ -29,6 +29,13 @@ export const envSchema = z
       .default(false),
     // When set, global-effect test endpoints (clock, reset) require it in an `X-Test-Key` header.
     TEST_API_KEY: z.string().min(16, 'Must be at least 16 characters').optional(),
+    // Idle timeout of a login session: each authenticated request moves its expiry this far ahead.
+    SESSION_TTL_HOURS: z.coerce.number().int().min(1).max(8760).default(168),
+    // `Secure` attribute of the session and CSRF cookies. Defaults to on in production only, since
+    // browsers drop Secure cookies on plain-HTTP origins such as http://localhost.
+    COOKIE_SECURE: z
+      .stringbool({ truthy: ['true'], falsy: ['false'], error: 'Must be true or false' })
+      .optional(),
   })
   .superRefine((env, ctx) => {
     // Dev defaults carry well-known credentials, so production must set connection URLs explicitly.
@@ -53,6 +60,8 @@ export const envSchema = z
     healthCheckTimeoutMs: env.HEALTH_CHECK_TIMEOUT_MS,
     testMode: env.TESTTIX_TEST_MODE,
     testApiKey: env.TEST_API_KEY,
+    sessionTtlMs: env.SESSION_TTL_HOURS * 60 * 60 * 1000,
+    cookieSecure: env.COOKIE_SECURE ?? env.NODE_ENV === 'production',
   }));
 
 export type AppConfig = Readonly<z.output<typeof envSchema>>;
