@@ -130,12 +130,12 @@ Claude's workspace has no Docker daemon, so Testcontainers can't run there. Beca
 
 **C1.2 Domain data model + seed**
 
-- Prisma models: `User`, `Session`, `Venue`, `Section` (type `SEATED` or `GA`; GA has a capacity), `Seat` (venue layout, seated sections only), `Event` (category: concert / talk / meetup; status: draft / published / cancelled; `salesOpenAt`, `holdDurationSec`, `maxTicketsPerOrder`, drop settings), `InventoryUnit` (one sellable ticket for an event: `sectionId`, nullable `seatId` (null for GA), `status`, `priceCents`, `heldBy`, `heldUntil`, `batchId`), `TicketBatch`, `Order`, `OrderItem`, `Ticket`, `PaymentEvent` (webhook idempotency).
+- Prisma models: `User`, `Session`, `Venue`, `Section` (type `SEATED` or `GA`; GA has a capacity), `Seat` (venue layout, seated sections only), `Event` (category: concert / talk / meetup; status: draft / published / cancelled; `salesOpenAt`, `holdDurationSec`, `maxTicketsPerOrder`, drop settings), `InventoryUnit` (one sellable ticket for an event: `sectionId`, nullable `seatId` (null for GA), `status`, `priceCents`, `holdId`, `heldUntil`, `batchId`), `Hold` (one per user and event; added in C1.2, see tech-stack §3.1), `TicketBatch`, `Order`, `OrderItem`, `Ticket`, `PaymentEvent` (webhook idempotency).
 - Seated and GA inventory share one model, so holds, expiry, orders and tickets use one code path. An event can mix both, e.g. a festival stage with seated stands and a GA standing area.
 - Money is stored as integer cents, currency USD (constant in `shared`).
 - Indexes for list queries and inventory lookups. Every list sort has a unique tiebreaker (`id`).
 - Seed: Faker with a fixed seed, plus named fixture venues and events (stable slugs and IDs).
-- Verify: running the seed twice produces an identical data hash (tested), and `prisma migrate reset` works.
+- Verify: running the seed twice produces an identical data hash (tested), and `prisma migrate reset` works (Prisma 7 no longer seeds on reset: `pnpm db:reset && pnpm db:seed`).
 
 **C1.3 Test API: reset and scenarios**
 

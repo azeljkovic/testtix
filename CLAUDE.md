@@ -20,7 +20,8 @@ When a decision changes, update the docs in the same PR so they stay accurate.
 - ✅ C0.6 Web skeleton
 - ✅ C0.7 Shared schemas + OpenAPI client pipeline
 - ✅ C1.1 Test mode + ClockService
-- ⏭️ Next: **C1.2 Domain data model + deterministic seed** (see plan)
+- ✅ C1.2 Domain data model + deterministic seed
+- ⏭️ Next: **C1.3 Test API: reset, seed scenarios** (see plan)
 
 Update this list when a chunk is merged.
 
@@ -58,6 +59,9 @@ Run one package: `pnpm --filter @testtix/api <script>`.
 - API tests that don't need real infra use `createTestApp()` (`apps/api/src/testing/test-app.ts`): the real modules and `configureApp()`, with Postgres and Redis faked. Keep app-level setup in `configureApp()` so `main.ts` and tests share it.
 - Integration tests are `*.int.test.ts` files run by `pnpm test:integration` (Vitest project `integration`) against real Postgres and Redis: Testcontainers by default (Docker must be running), or `TEST_DATABASE_URL` / `TEST_REDIS_URL`. Boot the app with `createIntegrationApp()` (`apps/api/src/testing/integration/`). Each file starts with empty tables and Redis; files run one at a time.
 - Prisma 7: the client is generated into `apps/api/src/generated/prisma` (git-ignored; turbo's `generate` task runs first). Import it from `../generated/prisma/client.js` and inject `PrismaService`. After a schema change, create a migration with `pnpm db:migrate --name <change>` (needs local infra) and commit it.
+- Timestamp columns are `timestamptz` with no `now()` default and no `@updatedAt`: pass `createdAt` / `updatedAt` from `ClockService`. CHECK constraints Prisma can't express are appended by hand to the migration SQL (Migrate leaves them alone); run `pnpm --filter @testtix/api exec prisma migrate diff --from-config-datasource --to-schema prisma/schema.prisma --script` to confirm no drift.
+- Prisma enum values must equal the arrays in `packages/shared` (`src/infra/prisma-enums.test.ts` checks it). Add the shared array first.
+- Seed (`apps/api/src/seed/`): `buildSeedData(now)` is pure and day-anchored; seed rows get stable IDs from `seedId(key)`, never `@default(uuid(7))`. Fixture slugs and IDs are documented in `docs/testing-guide.md` — never change them. `pnpm db:seed` only seeds an empty database (`pnpm db:reset && pnpm db:seed`). Compare database states in tests with `dataHash()` (`src/testing/integration/data-hash.ts`).
 - **OpenAPI pipeline:** after changing an API route or schema, run `pnpm openapi` and commit `apps/api/openapi.json` and `apps/web/src/api/generated/` (CI's `pnpm openapi:check` fails otherwise). Never edit the generated files by hand.
 - `packages/shared` holds enums (`ROLES`, `ORDER_STATUSES`), error codes (`PROBLEM_TYPES`, problem `type` = `urn:testtix:problem:<kebab-code>`) and `ProblemDetailsSchema`. Use them instead of string literals on both sides; add a code to `PROBLEM_TYPES` when adding an app-specific error.
 - Every API error goes through `ProblemDetailsFilter` (problem+json). Throw Nest `HttpException`s or let Zod DTOs fail; don't hand-roll error bodies.
