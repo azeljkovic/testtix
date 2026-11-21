@@ -136,3 +136,41 @@ curl -s -X POST http://localhost:3000/__test/clock -H 'Content-Type: application
 ```
 
 The clock is global to the server: reset it when your test is done, and don't run tests that change it in parallel against the same server.
+
+## Seed data
+
+The baseline data set (`pnpm db:seed` on an empty database; `POST /__test/reset` from C1.3) has four venues, eight named fixture events and 36 generated ones. It is deterministic: seeding twice gives identical rows, and every slug and ID below is the same on every machine and every run.
+
+Dates are relative to the **seed day**: the UTC date of the server clock when the seed ran (so with a frozen test clock, the frozen date). Below, `D+21 23:30` means 21 days after the start of that day, at 23:30 UTC. Seeding at any time on the same day gives the same dates; seeding on another day shifts every date but keeps every ID. Venues are in the fictional city of Port Ellis (time zone `America/New_York`).
+
+The baseline has no users, holds or orders: every ticket is `AVAILABLE`. (Seeded accounts arrive with sign-in in C1.4.)
+
+### Venues
+
+| Slug                | ID                                     | Layout                                                              |
+| ------------------- | -------------------------------------- | ------------------------------------------------------------------- |
+| `riverside-hall`    | `019b76da-a800-7fbc-a24e-2ac58eab7ced` | Seated: Stalls (rows A–J × 20 seats), Balcony (rows A–D × 16)       |
+| `the-warehouse`     | `019b76da-a800-7664-aea7-0601ec1983ba` | Mixed: Standing Floor (GA, capacity 250), Mezzanine (rows A–C × 12) |
+| `harbor-auditorium` | `019b76da-a800-7501-8b17-e21d3d3d2902` | Seated: Main Floor (rows A–H × 14)                                  |
+| `loft-23`           | `019b76da-a800-7258-bef4-ba77cca0deac` | GA: Loft (capacity 60)                                              |
+
+Seat rows are lettered from the front (`A`), and seats are numbered from 1 within a row.
+
+### Fixture events
+
+| Slug                               | ID                                     | Status, starts        | What it's for                                                                                      |
+| ---------------------------------- | -------------------------------------- | --------------------- | -------------------------------------------------------------------------------------------------- |
+| `midnight-echoes-live`             | `019b76da-a800-7758-9ad4-dec842184578` | Published, D+21 23:30 | Seated concert. Stalls on sale at $89.00; the Balcony batch ($59.00) is only released at D+3 15:00 |
+| `warehouse-sessions-static-lights` | `019b76da-a800-776b-a16b-343f20473dbe` | Published, D+10 00:00 | Mixed seated + GA: Standing $45.00 (250 GA tickets), Mezzanine $75.00 (36 seats)                   |
+| `testing-in-production-safely`     | `019b76da-a800-7913-96f9-35b2f7f50dd5` | Published, D+7 23:00  | Talk, 112 seats at $25.00                                                                          |
+| `flaky-tests-clinic`               | `019b76da-a800-709a-8e78-794ac8523db8` | Published, D+7 23:00  | GA meetup, 60 tickets at $10.00. Starts at the same time as the talk above (sort tiebreaker)       |
+| `summer-sounds-preview`            | `019b76da-a800-76de-b7e6-667e253a5e53` | Published, D+60 23:00 | Not on sale yet: sales open at D+14 15:00                                                          |
+| `season-opener-showcase`           | `019b76da-a800-748c-b62b-9a1a51bcaaa8` | Published, D−7 23:00  | Already happened (sales opened at D−60 15:00)                                                      |
+| `unannounced-headliner`            | `019b76da-a800-7fdf-8a97-784175aa9759` | Draft, D+45 23:30     | Not in the public catalogue; no tickets released                                                   |
+| `acoustic-night-cancelled`         | `019b76da-a800-7e6d-8fd4-edb91a27a3cb` | Cancelled, D+3 23:30  | Cancelled event                                                                                    |
+
+Unless noted, sales opened at D−30 15:00, and every batch puts all seats (or GA places) of its sections on sale.
+
+### Generated events
+
+36 more published events, on sale since D−14 15:00, fill the catalogue for pagination, filters and search. Faker generates them with a fixed seed: concerts by made-up bands at Riverside Hall or The Warehouse, talks at Harbor Auditorium and meetups at Loft 23, starting between D+1 and D+90. Their slugs end in a number (`the-neon-owls-live-4`) and are stable too, but prefer the fixtures above in tests: the generated list may change when the seed is extended.

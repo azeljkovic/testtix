@@ -26,7 +26,9 @@
     "infra:down": "docker compose --project-directory . -f docker/compose.yml down",
     "infra:reset": "docker compose --project-directory . -f docker/compose.yml down --volumes",
     "db:migrate": "pnpm --filter @testtix/api db:migrate",
-    "db:deploy": "pnpm --filter @testtix/api db:deploy"
+    "db:deploy": "pnpm --filter @testtix/api db:deploy",
+    "db:reset": "pnpm --filter @testtix/api db:reset",
+    "db:seed": "turbo run db:seed"
   },
   "devDependencies": {
     "@testtix/config": "workspace:*",

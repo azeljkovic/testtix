@@ -1,6 +1,6 @@
 # TestTix — Tech stack decisions
 
-Status: draft v2 (2026-11-17), updated for C1.1 (2026-11-21)
+Status: draft v2 (2026-11-17), updated for C1.2 (2026-11-21)
 Legend: **[Decided]** = chosen by Aleksandar · **[Proposed]** = default pick, open to change
 
 ---
@@ -115,15 +115,32 @@ Notes:
 - **Naming:** models are PascalCase/camelCase in Prisma and snake_case in Postgres (`@@map` / `@map`), e.g. `User` → `users`. Primary keys are UUIDv7 (`@default(uuid(7)) @db.Uuid`).
 - **pnpm build scripts:** `prisma` and `@prisma/engines` are allowed to run install scripts (`onlyBuiltDependencies`), so the migration engine is downloaded at install time.
 
+**Data model (C1.2)**
+
+- Models: `User`, `Session`, `Venue`, `Section` (`SEATED` with seats, or `GA` with a capacity), `Seat`, `Event`, `TicketBatch`, `InventoryUnit`, `Hold`, `Order`, `OrderItem`, `Ticket`, `PaymentEvent`. Seated and GA tickets are both `InventoryUnit` rows (one per sellable ticket, `seatId` null for GA), created when a batch is released; a batch's `releasesAt` keeps scheduled inventory off sale.
+- **`Hold` is its own model** (added to the plan's list in C1.2): C3.1 needs hold IDs (`DELETE /holds/:id`, `POST /orders { holdId }`) and one hold per user and event (unique index). A unit points at its hold (`holdId`) and keeps a copy of the expiry (`heldUntil`), so a claim stays one conditional `UPDATE` on `inventory_units`.
+- **Timestamps come from `ClockService`.** Columns are `timestamptz(3)` with no `now()` default and no `@updatedAt`: both would read the real time and ignore the test clock. The app passes `createdAt` / `updatedAt` explicitly.
+- **CHECK constraints** that Prisma's schema can't express are appended by hand to the migration (GA capacity, `endsAt > startsAt`, non-negative prices, positive limits, lower-case emails, and "a unit is `HELD` exactly when it has a hold and an expiry"). Prisma Migrate ignores CHECK constraints, so later migrations don't drop them. Cross-table rules (a seat belongs to the unit's section, the section to the event's venue) are enforced by the app.
+- Enum values live in `packages/shared` (`ROLES`, `EVENT_CATEGORIES`, `EVENT_STATUSES`, `SECTION_TYPES`, `INVENTORY_STATUSES`, `ORDER_STATUSES`); a unit test checks the Prisma enums match.
+- Emails are stored lower-cased (CHECK constraint) rather than using `citext`.
+
+**Seed (C1.2)**
+
+- `apps/api/src/seed/`: named fixtures (`fixtures.ts`) plus 36 Faker-generated events (`generated-events.ts`, fixed Faker seed, curated band-name words so nothing looks like a real artist). `buildSeedData(now)` is a pure function; `seedDatabase(prisma, now)` inserts it in one transaction.
+- **IDs:** `seedId(key)` derives a UUIDv7-shaped ID from SHA-256 of a stable key (`venue:riverside-hall`) with a fixed timestamp (2026-01-01), so fixture IDs can be documented and seed rows sort before app-created ones.
+- **Dates are relative to the start of the UTC day of "now"** (from `ClockService`), so upcoming events stay upcoming whenever the seed runs, and any run on the same day gives identical data. The determinism test compares a per-table MD5 of every row (`src/testing/integration/data-hash.ts`).
+- It refuses to run when venues or events exist (an advisory lock serializes concurrent runs) instead of mixing data sets. Faker is a runtime dependency, because the test API's reset (C1.3) reseeds inside the running API.
+- `pnpm db:seed` runs `prisma db seed`, which runs the compiled CLI (`dist/seed/main.js`). Prisma 7's `migrate reset` no longer seeds, so a fresh start is `pnpm db:reset && pnpm db:seed`.
+
 **Concurrency for "buying the last seat"**
 
-- Seat claims use an atomic conditional update inside a Prisma interactive transaction, e.g. `UPDATE seat SET status='HELD', held_by=…, held_until=… WHERE id=… AND status='AVAILABLE'`. If 0 rows were affected, the seat is already taken and the API returns 409.
+- Seat claims use an atomic conditional update inside a Prisma interactive transaction, e.g. `UPDATE inventory_units SET status='HELD', hold_id=…, held_until=… WHERE id=… AND (status='AVAILABLE' OR held_until < now)`. If 0 rows were affected, the seat is already taken and the API returns 409.
 - Order creation re-validates the hold in the same transaction.
 - Later (not v1): a bug toggle `RACE_CONDITION_LAST_SEAT` switches to a naive read-then-write path so the race is reproducible.
 
 ### 3.2 Seat holds and time
 
-- Holds live in Postgres (`held_until` on the seat/hold row). A hold counts as expired when `held_until < clock.now()`, evaluated lazily on every read and write.
+- Holds live in Postgres (a `holds` row, plus `held_until` on each held inventory unit). A hold counts as expired when `held_until < clock.now()`, evaluated lazily on every read and write.
 - A BullMQ repeatable job sweeps expired holds for cleanup only. Correctness never depends on the sweeper.
 - **Injectable `ClockService`:** all server-side "now" goes through it. In test mode the clock can be frozen, set or advanced through the test API, so hold expiry is testable server-side and not just in the browser (Playwright's clock only covers the browser).
 - Default hold duration is 10 minutes, configurable per event.

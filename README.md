@@ -32,6 +32,7 @@ pnpm install
 pnpm build
 pnpm infra:up      # Postgres, Redis and Mailpit in Docker
 pnpm db:deploy     # apply database migrations to the local Postgres
+pnpm db:seed       # load the deterministic sample data (venues, events, tickets)
 ```
 
 ## API
@@ -79,8 +80,11 @@ The schema lives in `apps/api/prisma/schema.prisma` and is managed with Prisma M
 ```sh
 pnpm db:deploy                                         # apply pending migrations
 pnpm db:migrate --name add-events                      # after editing the schema: create and apply a migration
-pnpm --filter @testtix/api db:reset                    # drop the local database and re-apply every migration
+pnpm db:reset                                          # drop the local database and re-apply every migration
+pnpm db:seed                                           # load the sample data into an empty database
 ```
+
+The seed is deterministic: the same venues, events and IDs on every run, with dates relative to the day it runs. It refuses to run on a database that already has venues or events, so start over with `pnpm db:reset && pnpm db:seed`. The fixtures are listed in [`docs/testing-guide.md`](docs/testing-guide.md#seed-data).
 
 ## Tests
 
@@ -129,6 +133,8 @@ The compose file has two placeholder profiles that later milestones fill in: `fu
 | `pnpm openapi:check`    | Fails if the committed spec or client types are stale       |
 | `pnpm db:deploy`        | Applies database migrations                                 |
 | `pnpm db:migrate`       | Creates and applies a migration (development)               |
+| `pnpm db:reset`         | Drops the local database and re-applies every migration     |
+| `pnpm db:seed`          | Builds the API and seeds an empty database                  |
 | `pnpm format`           | Formats the repo with Prettier                              |
 | `pnpm format:check`     | Checks formatting without writing                           |
 | `pnpm clean`            | Removes build output and Turborepo caches                   |
