@@ -18,7 +18,8 @@ When a decision changes, update the docs in the same PR so they stay accurate.
 - ✅ C0.4 API skeleton
 - ✅ C0.5 Prisma + integration harness
 - ✅ C0.6 Web skeleton
-- ⏭️ Next: **C0.7 Shared schemas + OpenAPI client pipeline**, then M1 (see plan)
+- ✅ C0.7 Shared schemas + OpenAPI client pipeline
+- ⏭️ Next: **M1, starting with C1.1 Test mode + ClockService** (see plan)
 
 Update this list when a chunk is merged.
 
@@ -26,7 +27,7 @@ Update this list when a chunk is merged.
 
 - One chunk = one branch = one PR into `main`. Branch names: `c0-2-ci-skeleton`, `c3-1-seat-holds-api`.
 - Commits follow Conventional Commits (`feat:`, `fix:`, `chore:`, `docs:`, `test:`, `ci:`), with the chunk ID in the subject or body. Changelogs are generated from these later (release-please).
-- Before opening a PR, run `pnpm lint && pnpm typecheck && pnpm build && pnpm test && pnpm format:check`.
+- Before opening a PR, run `pnpm lint && pnpm typecheck && pnpm build && pnpm test && pnpm format:check`, plus `pnpm openapi:check` if the API changed.
 - The PR description lists verification steps and their results (commands, curl calls, URLs).
 - Follow the plan's **Definition of done** for every chunk.
 
@@ -56,11 +57,13 @@ Run one package: `pnpm --filter @testtix/api <script>`.
 - API tests that don't need real infra use `createTestApp()` (`apps/api/src/testing/test-app.ts`): the real modules and `configureApp()`, with Postgres and Redis faked. Keep app-level setup in `configureApp()` so `main.ts` and tests share it.
 - Integration tests are `*.int.test.ts` files run by `pnpm test:integration` (Vitest project `integration`) against real Postgres and Redis: Testcontainers by default (Docker must be running), or `TEST_DATABASE_URL` / `TEST_REDIS_URL`. Boot the app with `createIntegrationApp()` (`apps/api/src/testing/integration/`). Each file starts with empty tables and Redis; files run one at a time.
 - Prisma 7: the client is generated into `apps/api/src/generated/prisma` (git-ignored; turbo's `generate` task runs first). Import it from `../generated/prisma/client.js` and inject `PrismaService`. After a schema change, create a migration with `pnpm db:migrate --name <change>` (needs local infra) and commit it.
+- **OpenAPI pipeline:** after changing an API route or schema, run `pnpm openapi` and commit `apps/api/openapi.json` and `apps/web/src/api/generated/` (CI's `pnpm openapi:check` fails otherwise). Never edit the generated files by hand.
+- `packages/shared` holds enums (`ROLES`, `ORDER_STATUSES`), error codes (`PROBLEM_TYPES`, problem `type` = `urn:testtix:problem:<kebab-code>`) and `ProblemDetailsSchema`. Use them instead of string literals on both sides; add a code to `PROBLEM_TYPES` when adding an app-specific error.
 - Every API error goes through `ProblemDetailsFilter` (problem+json). Throw Nest `HttpException`s or let Zod DTOs fail; don't hand-roll error bodies.
 - New API env vars go in `apps/api/src/config/config.schema.ts` and `.env.example`.
 - The API runs on **Fastify** (`@nestjs/platform-fastify`). Use `FastifyRequest` / `FastifyReply` types, never Express ones. `createHttpAdapter()` in `apps/api/src/app.setup.ts` builds the adapter for `main.ts` and tests.
 - Root `package.json` `pnpm.ignoredBuiltDependencies` records that skipping install scripts is deliberate (`@scarf/scarf` is telemetry, `@swc/core`'s only re-checks its binary). pnpm still prints its "Ignored build scripts" reminder; that's expected.
-- Web (`apps/web`): routes live in `src/app/routes.tsx`, shared by the browser router and tests. Component tests render the whole app with `renderApp(path)` (`src/testing/render.tsx`) and mock the API with MSW (`src/testing/msw-server.ts`; an unmocked request fails the test). Build API URLs with `apiUrl()` (absolute, so Node's `fetch` accepts them). Set page titles with `<PageTitle title="…" />`. Axe checks use `axe` from `src/testing/axe.ts`.
+- Web (`apps/web`): routes live in `src/app/routes.tsx`, shared by the browser router and tests. Component tests render the whole app with `renderApp(path)` (`src/testing/render.tsx`) and mock the API with MSW (`src/testing/msw-server.ts`; an unmocked request fails the test). Call the API through the typed client `api` (`src/api/client.ts`) and `unwrap()` the result (non-2xx → `ApiError` with `problem` and `code`). Type MSW mock bodies with `Schemas[...]` from `src/testing/msw-server.ts`. Set page titles with `<PageTitle title="…" />`. Axe checks use `axe` from `src/testing/axe.ts`.
 - React hooks lint rules come from `config({ react: true })` in `@testtix/config/eslint`.
 - Money is stored as integer cents, currency USD, locale `en-US` (`packages/shared`).
 - `packages/shared` is compiled to `dist/`; turbo runs `^build` before dependants' typecheck, lint, test and dev.

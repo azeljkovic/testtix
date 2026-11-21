@@ -1,8 +1,9 @@
 import { type ArgumentsHost, Catch, type ExceptionFilter, Logger } from '@nestjs/common';
 import type { FastifyReply, FastifyRequest } from 'fastify';
+import { PROBLEM_CONTENT_TYPE } from '@testtix/shared';
 import { ZodSerializationException } from 'nestjs-zod';
 
-import { PROBLEM_CONTENT_TYPE, toProblemDetails } from './problem-details.js';
+import { toProblemDetails } from './problem-details.js';
 
 /** Global filter: every error leaves the API as `application/problem+json`. */
 @Catch()

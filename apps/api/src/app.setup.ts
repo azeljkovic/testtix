@@ -23,7 +23,7 @@ export function createHttpAdapter(): FastifyAdapter {
   });
 }
 
-/** Builds the OpenAPI document. Also used by the spec export script (C0.7). */
+/** Builds the OpenAPI document. Also used by `pnpm openapi` (`src/openapi/`). */
 export function buildOpenApiDocument(app: NestFastifyApplication): OpenAPIObject {
   const config = new DocumentBuilder()
     .setTitle('TestTix API')

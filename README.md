@@ -64,6 +64,13 @@ pnpm --filter @testtix/web dev        # http://localhost:5173
 
 The dev server forwards `/api/*` to the API with the prefix removed (`/api/health` → `http://127.0.0.1:3000/health`), so the browser only ever talks to its own origin. Set `API_PROXY_TARGET` or `WEB_PORT` in the root `.env` to change either. The footer shows whether the API answers. `pnpm --filter @testtix/web build` writes the static site to `apps/web/dist`.
 
+The web app calls the API through a typed client generated from the API's OpenAPI spec. After changing an API route or schema, regenerate the spec and the client types, then commit both. CI fails when they are stale.
+
+```sh
+pnpm openapi          # apps/api/openapi.json and apps/web/src/api/generated/openapi.ts
+pnpm openapi:check    # what CI runs: regenerate, then fail on any difference
+```
+
 ## Database
 
 The schema lives in `apps/api/prisma/schema.prisma` and is managed with Prisma Migrate. The generated Prisma client (`apps/api/src/generated/`) is not committed; `pnpm build`, `typecheck`, `lint` and `test` regenerate it.
@@ -117,6 +124,8 @@ The compose file has two placeholder profiles that later milestones fill in: `fu
 | `pnpm lint`             | Lints every package with ESLint                             |
 | `pnpm test`             | Runs unit tests with Vitest                                 |
 | `pnpm test:integration` | Runs API integration tests (needs Docker, or `TEST_*` URLs) |
+| `pnpm openapi`          | Regenerates the OpenAPI spec and the web client types       |
+| `pnpm openapi:check`    | Fails if the committed spec or client types are stale       |
 | `pnpm db:deploy`        | Applies database migrations                                 |
 | `pnpm db:migrate`       | Creates and applies a migration (development)               |
 | `pnpm format`           | Formats the repo with Prettier                              |
