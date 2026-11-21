@@ -109,6 +109,100 @@
           "metrics"
         ]
       }
+    },
+    "/__test/clock": {
+      "get": {
+        "description": "Test mode only. Returns the time the server uses for holds, sessions and drops.",
+        "operationId": "TestClockController_get",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "The current server clock.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClockStateDto_Output"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error. The body is an RFC 9457 problem details object.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Read the server clock",
+        "tags": [
+          "test"
+        ]
+      },
+      "post": {
+        "description": "Test mode only. Affects every client of this server, so it needs `X-Test-Key` when the server has a test API key.",
+        "operationId": "TestClockController_set",
+        "parameters": [
+          {
+            "name": "X-Test-Key",
+            "in": "header",
+            "description": "Required when the server sets `TEST_API_KEY` (e.g. the hosted demo).",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ClockCommandDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The server clock after the change.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClockStateDto_Output"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "The server requires an `X-Test-Key` header and it is missing or wrong.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error. The body is an RFC 9457 problem details object.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Freeze, advance or reset the server clock",
+        "tags": [
+          "test"
+        ]
+      }
     }
   },
   "info": {
@@ -196,6 +290,64 @@
           "status",
           "checks"
         ],
+        "additionalProperties": false
+      },
+      "ClockStateDto_Output": {
+        "type": "object",
+        "properties": {
+          "now": {
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+            "description": "Server \"now\" as an ISO 8601 date-time in UTC"
+          },
+          "mode": {
+            "type": "string",
+            "enum": [
+              "real",
+              "frozen",
+              "offset"
+            ],
+            "description": "`real`: the real time. `frozen`: stopped at `now`. `offset`: running, shifted by `offsetMs`."
+          },
+          "offsetMs": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991,
+            "description": "Server \"now\" minus the real time, in milliseconds (0 in `real` mode)"
+          }
+        },
+        "required": [
+          "now",
+          "mode",
+          "offsetMs"
+        ],
+        "additionalProperties": false
+      },
+      "ClockCommandDto": {
+        "type": "object",
+        "properties": {
+          "freezeAt": {
+            "description": "Stop the clock at this ISO 8601 date-time (with `Z` or an offset, e.g. `2026-12-01T19:30:00Z`). It stays there until advanced or reset.",
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$"
+          },
+          "advanceBy": {
+            "description": "Move the clock forward by this many milliseconds (at most 366 days per call). A frozen clock stays frozen at the later time; a running clock keeps running.",
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 31622400000
+          },
+          "reset": {
+            "description": "`true` to go back to the real time.",
+            "type": "boolean",
+            "enum": [
+              true
+            ]
+          }
+        },
+        "description": "Exactly one of `freezeAt`, `advanceBy` or `reset`.",
         "additionalProperties": false
       },
       "ProblemDetails": {

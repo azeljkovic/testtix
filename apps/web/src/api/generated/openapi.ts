@@ -64,6 +64,30 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/__test/clock": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read the server clock
+         * @description Test mode only. Returns the time the server uses for holds, sessions and drops.
+         */
+        get: operations["TestClockController_get"];
+        put?: never;
+        /**
+         * Freeze, advance or reset the server clock
+         * @description Test mode only. Affects every client of this server, so it needs `X-Test-Key` when the server has a test API key.
+         */
+        post: operations["TestClockController_set"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -94,6 +118,35 @@ export interface components {
                     status: "up" | "down";
                 };
             };
+        };
+        ClockStateDto_Output: {
+            /**
+             * Format: date-time
+             * @description Server "now" as an ISO 8601 date-time in UTC
+             */
+            now: string;
+            /**
+             * @description `real`: the real time. `frozen`: stopped at `now`. `offset`: running, shifted by `offsetMs`.
+             * @enum {string}
+             */
+            mode: "real" | "frozen" | "offset";
+            /** @description Server "now" minus the real time, in milliseconds (0 in `real` mode) */
+            offsetMs: number;
+        };
+        /** @description Exactly one of `freezeAt`, `advanceBy` or `reset`. */
+        ClockCommandDto: {
+            /**
+             * Format: date-time
+             * @description Stop the clock at this ISO 8601 date-time (with `Z` or an offset, e.g. `2026-12-01T19:30:00Z`). It stays there until advanced or reset.
+             */
+            freezeAt?: string;
+            /** @description Move the clock forward by this many milliseconds (at most 366 days per call). A frozen clock stays frozen at the later time; a running clock keeps running. */
+            advanceBy?: number;
+            /**
+             * @description `true` to go back to the real time.
+             * @enum {boolean}
+             */
+            reset?: true;
         };
         ProblemDetails: {
             /** @description URI that identifies the problem type: `about:blank` or `urn:testtix:problem:<error-code>` */
@@ -209,6 +262,80 @@ export interface operations {
                 };
                 content: {
                     "text/plain; version=0.0.4; charset=utf-8": string;
+                };
+            };
+            /** @description Error. The body is an RFC 9457 problem details object. */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    TestClockController_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The current server clock. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ClockStateDto_Output"];
+                };
+            };
+            /** @description Error. The body is an RFC 9457 problem details object. */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    TestClockController_set: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Required when the server sets `TEST_API_KEY` (e.g. the hosted demo). */
+                "X-Test-Key"?: string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ClockCommandDto"];
+            };
+        };
+        responses: {
+            /** @description The server clock after the change. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ClockStateDto_Output"];
+                };
+            };
+            /** @description The server requires an `X-Test-Key` header and it is missing or wrong. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
                 };
             };
             /** @description Error. The body is an RFC 9457 problem details object. */

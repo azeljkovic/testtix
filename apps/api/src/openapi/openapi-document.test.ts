@@ -41,7 +41,7 @@ function resolvePointer(document: unknown, ref: string): unknown {
 
 describe('createOpenApiDocument', () => {
   it('builds the document that GET /openapi.json serves, without any infrastructure', async () => {
-    app = await createTestApp();
+    app = await createTestApp({ env: { TESTTIX_TEST_MODE: 'true' } });
     const served: unknown = (await request(app.getHttpServer()).get('/openapi.json')).body;
 
     expect(await createOpenApiDocument()).toEqual(served);

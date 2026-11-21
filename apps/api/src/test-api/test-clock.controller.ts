@@ -1,0 +1,55 @@
+import { Body, Controller, Get, Post } from '@nestjs/common';
+import { ApiOperation, ApiTags } from '@nestjs/swagger';
+import { ZodResponse } from 'nestjs-zod';
+
+import type { ClockReading } from '../clock/clock-state.js';
+import { ClockService } from '../clock/clock.service.js';
+import { ClockCommandDto, ClockStateDto } from './clock.schemas.js';
+import { RequiresTestKey } from './test-key.guard.js';
+
+@ApiTags('test')
+@Controller('__test/clock')
+export class TestClockController {
+  constructor(private readonly clock: ClockService) {}
+
+  @Get()
+  @ApiOperation({
+    summary: 'Read the server clock',
+    description: 'Test mode only. Returns the time the server uses for holds, sessions and drops.',
+  })
+  @ZodResponse({ status: 200, type: ClockStateDto, description: 'The current server clock.' })
+  async get() {
+    return toClockState(await this.clock.read());
+  }
+
+  @Post()
+  @RequiresTestKey()
+  @ApiOperation({
+    summary: 'Freeze, advance or reset the server clock',
+    description:
+      'Test mode only. Affects every client of this server, so it needs `X-Test-Key` when the server has a test API key.',
+  })
+  @ZodResponse({
+    status: 200,
+    type: ClockStateDto,
+    description: 'The server clock after the change.',
+  })
+  async set(@Body() command: ClockCommandDto) {
+    if (command.freezeAt !== undefined) {
+      await this.clock.freezeAt(new Date(command.freezeAt));
+    } else if (command.advanceBy !== undefined) {
+      await this.clock.advanceBy(command.advanceBy);
+    } else {
+      await this.clock.reset();
+    }
+    return toClockState(await this.clock.read());
+  }
+}
+
+function toClockState(reading: ClockReading) {
+  return {
+    now: new Date(reading.nowMs).toISOString(),
+    mode: reading.mode,
+    offsetMs: reading.offsetMs,
+  };
+}

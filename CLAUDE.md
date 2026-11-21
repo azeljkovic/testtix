@@ -19,7 +19,8 @@ When a decision changes, update the docs in the same PR so they stay accurate.
 - ✅ C0.5 Prisma + integration harness
 - ✅ C0.6 Web skeleton
 - ✅ C0.7 Shared schemas + OpenAPI client pipeline
-- ⏭️ Next: **M1, starting with C1.1 Test mode + ClockService** (see plan)
+- ✅ C1.1 Test mode + ClockService
+- ⏭️ Next: **C1.2 Domain data model + deterministic seed** (see plan)
 
 Update this list when a chunk is merged.
 
@@ -68,7 +69,8 @@ Run one package: `pnpm --filter @testtix/api <script>`.
 - Money is stored as integer cents, currency USD, locale `en-US` (`packages/shared`).
 - `packages/shared` is compiled to `dist/`; turbo runs `^build` before dependants' typecheck, lint, test and dev.
 - Pin exact dependency versions (no `^`), matching the existing `package.json` files.
-- Server code must take "now" from `ClockService` (from C1.1), never `Date.now()` / `new Date()` directly.
+- Server code must take "now" from `ClockService` (`await clock.now()`; global, inject by type), never `Date.now()` / `new Date()` directly. ESLint enforces it in `apps/api/src` (tests and `src/testing/` are exempt).
+- Test-only endpoints go in `TestApiModule` (`apps/api/src/test-api/`, routes under `/__test/`), which is loaded only when `TESTTIX_TEST_MODE=true`. Put `@RequiresTestKey()` on endpoints with a global effect (clock, reset). Tests turn test mode on with `env: { TESTTIX_TEST_MODE: 'true' }`; the clock is global, so tests that change it reset it.
 - Prefer accessible names over `data-testid` in the UI; use `data-testid` only where no good accessible locator exists.
 - Every list endpoint sorts with a stable tiebreaker (`id`).
 - Local infra is `docker/compose.yml`, driven by `pnpm infra:*` from the repo root (`--project-directory .`, so the root `.env` overrides the compose defaults). Pin image tags to an exact version. New services get a health check, and `docker/smoke-test.sh` checks them.

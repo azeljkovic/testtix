@@ -7,13 +7,14 @@ import { buildOpenApiDocument, createHttpAdapter } from '../app.setup.js';
 import { parseConfig } from '../config/config.schema.js';
 
 /**
- * Builds the OpenAPI document without starting the API. Nest's preview mode resolves the module
+ * Builds the OpenAPI document without starting the API. Test mode is on, so the test API
+ * (`/__test/*`, tag `test`) is documented too. Nest's preview mode resolves the module
  * graph and routes but creates no providers, so nothing connects to Postgres or Redis and the
- * process environment is ignored. The result is the document `GET /openapi.json` serves.
+ * process environment is ignored. The result is the document `GET /openapi.json` serves in test mode.
  */
 export async function createOpenApiDocument(): Promise<OpenAPIObject> {
   const app = await NestFactory.create<NestFastifyApplication>(
-    AppModule.forRoot(parseConfig({ LOG_LEVEL: 'silent' })),
+    AppModule.forRoot(parseConfig({ LOG_LEVEL: 'silent', TESTTIX_TEST_MODE: 'true' })),
     createHttpAdapter(),
     // eslint-disable-next-line @typescript-eslint/no-unsafe-class-instance-assignment -- Nest declares its options type as a class; a literal is the documented usage.
     { preview: true, logger: false },
