@@ -223,6 +223,14 @@ Enabled when `TESTTIX_TEST_MODE=true`.
 - `TESTTIX_TEST_MODE` accepts only `true` or `false`. `TEST_API_KEY` must be at least 16 characters; `TestKeyGuard` compares SHA-256 digests with `timingSafeEqual` and sends `WWW-Authenticate: TestKey realm="test-api"` with its 401, as RFC 9110 requires. Endpoints opt in with `@RequiresTestKey()`, which also documents the header and the 401.
 - The committed `openapi.json` is exported with test mode on, so it documents the test API (tag `test`). A server with test mode off serves a spec without those paths.
 
+**Implementation notes (C1.3)**
+
+- `POST /__test/reset` resets the clock first (or freezes it at an optional `freezeAt`), then truncates every table except `_prisma_migrations` and inserts the baseline seed for the clock's UTC day, all in **one transaction** (`resetAndSeedDatabase`). Other requests never see an empty database, a failure changes nothing, and the seed's advisory lock serializes concurrent resets and seeds. The body is optional, so `curl -X POST …/__test/reset` works; the optional `freezeAt` makes a reset fully reproducible (identical data hash). Later chunks clear their Redis state (queues, waiting rooms, rate limits) in `TestResetService` too.
+- `POST /__test/seed/{scenario}` is **one route per scenario** (not a path parameter), so each documents its own response in OpenAPI and an unknown name is a plain 404. Scenarios are pure builders (`src/test-api/scenarios/scenarios.ts`) that reuse the seed's `buildCatalogue` and return the rows plus the response body; the service inserts the rows in one transaction.
+- Scenarios are additive and isolated: each run creates its own small venue, events and buyer, with random UUIDv7 IDs (`uuidv7(now)`, timestamp from `ClockService`) and a random 8-hex suffix in every slug, title and email. They don't depend on the baseline, so they also work on an empty database.
+- Sold inventory is backed by real data, as checkout will create it (C4): `CONFIRMED` orders of a scenario buyer (at most `maxTicketsPerOrder` items each), one order item and one ticket per unit. Buyers have the password hash `!locked`, which is not an argon2 hash, so nobody can log in as them; C1.4's login must treat a hash that doesn't parse as a wrong password, not a 500.
+- Separate rate limiting and audit logging of `/__test/*` are deferred to C5.3 (TODO in `TestApiModule`).
+
 **Intentional bugs [Decided]: none in v1.** The first version ships bug-free. Bug toggles (with a `GET/PUT /__test/bugs` endpoint) or versioned buggy deployments come in a later version. Candidate bugs for that version:
 
 - `RACE_CONDITION_LAST_SEAT`: no atomic seat claim.

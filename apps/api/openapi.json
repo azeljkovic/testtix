@@ -203,6 +203,168 @@
           "test"
         ]
       }
+    },
+    "/__test/reset": {
+      "post": {
+        "description": "Test mode only. Deletes every row (users, sessions, holds, orders and scenario data included), resets the clock (or freezes it at `freezeAt`) and inserts the baseline seed for the clock date. The swap is atomic: other requests see the old data or the new baseline, never a half-empty database. Affects every client of this server, so it needs `X-Test-Key` when the server has a test API key.",
+        "operationId": "TestResetController_reset",
+        "parameters": [
+          {
+            "name": "X-Test-Key",
+            "in": "header",
+            "description": "Required when the server sets `TEST_API_KEY` (e.g. the hosted demo).",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ResetRequestDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The baseline is in place.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResetResponseDto_Output"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "The server requires an `X-Test-Key` header and it is missing or wrong.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error. The body is an RFC 9457 problem details object.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Reset all data to the baseline seed and reset the clock",
+        "tags": [
+          "test"
+        ]
+      }
+    },
+    "/__test/seed/basic-catalogue": {
+      "post": {
+        "description": "Three published events on sale: a concert (seats and a GA area), a seated talk and a GA meetup, at one new venue. Test mode only. Adds a new venue, events (and orders) with fresh IDs on every call; the slugs and titles end in a random suffix, so calls never collide and existing data is not touched. Open even when the server has a test API key, since it only adds data.",
+        "operationId": "TestScenariosController_basicCatalogue",
+        "parameters": [],
+        "responses": {
+          "201": {
+            "description": "What was created.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BasicCatalogueResultDto_Output"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error. The body is an RFC 9457 problem details object.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Seed scenario: a small catalogue",
+        "tags": [
+          "test"
+        ]
+      }
+    },
+    "/__test/seed/sold-out-event": {
+      "post": {
+        "description": "A published event on sale whose 12 tickets (8 seats, 4 GA places) are all sold, through confirmed orders of a new buyer. Test mode only. Adds a new venue, events (and orders) with fresh IDs on every call; the slugs and titles end in a random suffix, so calls never collide and existing data is not touched. Open even when the server has a test API key, since it only adds data.",
+        "operationId": "TestScenariosController_soldOutEvent",
+        "parameters": [],
+        "responses": {
+          "201": {
+            "description": "What was created.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SoldOutEventResultDto_Output"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error. The body is an RFC 9457 problem details object.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Seed scenario: a sold-out event",
+        "tags": [
+          "test"
+        ]
+      }
+    },
+    "/__test/seed/one-seat-left": {
+      "post": {
+        "description": "A published seated event on sale with 8 seats, all sold except row B seat 4. Test mode only. Adds a new venue, events (and orders) with fresh IDs on every call; the slugs and titles end in a random suffix, so calls never collide and existing data is not touched. Open even when the server has a test API key, since it only adds data.",
+        "operationId": "TestScenariosController_oneSeatLeft",
+        "parameters": [],
+        "responses": {
+          "201": {
+            "description": "What was created.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OneSeatLeftResultDto_Output"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error. The body is an RFC 9457 problem details object.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Seed scenario: one seat left",
+        "tags": [
+          "test"
+        ]
+      }
     }
   },
   "info": {
@@ -348,6 +510,430 @@
           }
         },
         "description": "Exactly one of `freezeAt`, `advanceBy` or `reset`.",
+        "additionalProperties": false
+      },
+      "ResetRequestDto": {
+        "type": "object",
+        "properties": {
+          "freezeAt": {
+            "description": "Freeze the clock at this ISO 8601 date-time (with `Z` or an offset) instead of resetting it to the real time. The data is then seeded relative to this date, so every reset with the same `freezeAt` day gives identical data.",
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$"
+          }
+        },
+        "description": "Optional. Send no body (or `{}`) to reset the clock to the real time.",
+        "additionalProperties": false
+      },
+      "ResetResponseDto_Output": {
+        "type": "object",
+        "properties": {
+          "seedDay": {
+            "type": "string",
+            "format": "date",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$",
+            "description": "UTC date the seed data is relative to (`D` in the testing guide): the clock date"
+          },
+          "clock": {
+            "type": "object",
+            "properties": {
+              "now": {
+                "type": "string",
+                "format": "date-time",
+                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+                "description": "Server \"now\" as an ISO 8601 date-time in UTC"
+              },
+              "mode": {
+                "type": "string",
+                "enum": [
+                  "real",
+                  "frozen",
+                  "offset"
+                ],
+                "description": "`real`: the real time. `frozen`: stopped at `now`. `offset`: running, shifted by `offsetMs`."
+              },
+              "offsetMs": {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991,
+                "description": "Server \"now\" minus the real time, in milliseconds (0 in `real` mode)"
+              }
+            },
+            "required": [
+              "now",
+              "mode",
+              "offsetMs"
+            ],
+            "additionalProperties": false,
+            "description": "The server clock after the reset"
+          },
+          "rows": {
+            "type": "object",
+            "properties": {
+              "venues": {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              },
+              "sections": {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              },
+              "seats": {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              },
+              "events": {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              },
+              "ticketBatches": {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              },
+              "inventoryUnits": {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              }
+            },
+            "required": [
+              "venues",
+              "sections",
+              "seats",
+              "events",
+              "ticketBatches",
+              "inventoryUnits"
+            ],
+            "additionalProperties": false,
+            "description": "Rows inserted per table. Every other table is empty."
+          }
+        },
+        "required": [
+          "seedDay",
+          "clock",
+          "rows"
+        ],
+        "additionalProperties": false
+      },
+      "ScenarioVenue_Output": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          },
+          "slug": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "sections": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "format": "uuid",
+                  "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                },
+                "name": {
+                  "type": "string"
+                },
+                "type": {
+                  "$ref": "#/components/schemas/SectionType_Output"
+                },
+                "capacity": {
+                  "type": "integer",
+                  "minimum": -9007199254740991,
+                  "maximum": 9007199254740991,
+                  "description": "GA sections only: how many places",
+                  "nullable": true
+                }
+              },
+              "required": [
+                "id",
+                "name",
+                "type",
+                "capacity"
+              ],
+              "additionalProperties": false
+            }
+          }
+        },
+        "required": [
+          "id",
+          "slug",
+          "name",
+          "sections"
+        ],
+        "additionalProperties": false
+      },
+      "SectionType_Output": {
+        "type": "string",
+        "enum": [
+          "SEATED",
+          "GA"
+        ]
+      },
+      "EventCategory_Output": {
+        "type": "string",
+        "enum": [
+          "CONCERT",
+          "TALK",
+          "MEETUP"
+        ]
+      },
+      "EventStatus_Output": {
+        "type": "string",
+        "enum": [
+          "DRAFT",
+          "PUBLISHED",
+          "CANCELLED"
+        ]
+      },
+      "ScenarioEvent_Output": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          },
+          "slug": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "category": {
+            "$ref": "#/components/schemas/EventCategory_Output"
+          },
+          "status": {
+            "$ref": "#/components/schemas/EventStatus_Output"
+          },
+          "venueId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          },
+          "startsAt": {
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+          },
+          "salesOpenAt": {
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+          },
+          "tickets": {
+            "type": "object",
+            "properties": {
+              "total": {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              },
+              "available": {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              },
+              "sold": {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              }
+            },
+            "required": [
+              "total",
+              "available",
+              "sold"
+            ],
+            "additionalProperties": false,
+            "description": "Inventory units (seats and GA places) of the event, by status"
+          }
+        },
+        "required": [
+          "id",
+          "slug",
+          "title",
+          "category",
+          "status",
+          "venueId",
+          "startsAt",
+          "salesOpenAt",
+          "tickets"
+        ],
+        "additionalProperties": false
+      },
+      "BasicCatalogueResultDto_Output": {
+        "type": "object",
+        "properties": {
+          "venue": {
+            "$ref": "#/components/schemas/ScenarioVenue_Output"
+          },
+          "events": {
+            "type": "object",
+            "properties": {
+              "concert": {
+                "description": "Seated section and a GA section",
+                "$ref": "#/components/schemas/ScenarioEvent_Output"
+              },
+              "talk": {
+                "description": "Seated only",
+                "$ref": "#/components/schemas/ScenarioEvent_Output"
+              },
+              "meetup": {
+                "description": "GA only",
+                "$ref": "#/components/schemas/ScenarioEvent_Output"
+              }
+            },
+            "required": [
+              "concert",
+              "talk",
+              "meetup"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "venue",
+          "events"
+        ],
+        "additionalProperties": false
+      },
+      "ScenarioBuyer_Output": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          },
+          "email": {
+            "type": "string",
+            "format": "email",
+            "pattern": "^(?:[A-Za-z0-9_'+\\-]+\\.)*[A-Za-z0-9_'+\\-]*[A-Za-z0-9_+-]@(?:[A-Za-z0-9][A-Za-z0-9\\-]*\\.)+[A-Za-z]{2,}$"
+          }
+        },
+        "required": [
+          "id",
+          "email"
+        ],
+        "additionalProperties": false,
+        "description": "The customer who bought the sold tickets. Has no password: you cannot log in as them."
+      },
+      "SoldOutEventResultDto_Output": {
+        "type": "object",
+        "properties": {
+          "venue": {
+            "$ref": "#/components/schemas/ScenarioVenue_Output"
+          },
+          "event": {
+            "$ref": "#/components/schemas/ScenarioEvent_Output"
+          },
+          "buyer": {
+            "$ref": "#/components/schemas/ScenarioBuyer_Output"
+          },
+          "orderIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            },
+            "description": "The confirmed orders that bought every ticket"
+          }
+        },
+        "required": [
+          "venue",
+          "event",
+          "buyer",
+          "orderIds"
+        ],
+        "additionalProperties": false
+      },
+      "OneSeatLeftResultDto_Output": {
+        "type": "object",
+        "properties": {
+          "venue": {
+            "$ref": "#/components/schemas/ScenarioVenue_Output"
+          },
+          "event": {
+            "$ref": "#/components/schemas/ScenarioEvent_Output"
+          },
+          "buyer": {
+            "$ref": "#/components/schemas/ScenarioBuyer_Output"
+          },
+          "orderIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            },
+            "description": "The confirmed orders that bought the other seats"
+          },
+          "seat": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "format": "uuid",
+                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+              },
+              "sectionId": {
+                "type": "string",
+                "format": "uuid",
+                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+              },
+              "row": {
+                "type": "string"
+              },
+              "number": {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              },
+              "inventoryUnitId": {
+                "type": "string",
+                "format": "uuid",
+                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+              },
+              "priceCents": {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              }
+            },
+            "required": [
+              "id",
+              "sectionId",
+              "row",
+              "number",
+              "inventoryUnitId",
+              "priceCents"
+            ],
+            "additionalProperties": false,
+            "description": "The one seat that is still available"
+          }
+        },
+        "required": [
+          "venue",
+          "event",
+          "buyer",
+          "orderIds",
+          "seat"
+        ],
         "additionalProperties": false
       },
       "ProblemDetails": {

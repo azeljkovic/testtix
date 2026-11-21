@@ -1,5 +1,7 @@
 import { createHash } from 'node:crypto';
 
+import { formatUuid } from '../infra/uuid.js';
+
 /** Timestamp in every seed ID, so seed rows sort before rows the app creates later. */
 const SEED_ID_TIME_MS = Date.UTC(2026, 0, 1);
 
@@ -18,12 +20,5 @@ export function seedId(key: string): string {
   hash.copy(bytes, 6, 0, 10);
   bytes.writeUInt8(0x70 | (bytes.readUInt8(6) & 0x0f), 6); // version 7
   bytes.writeUInt8(0x80 | (bytes.readUInt8(8) & 0x3f), 8); // variant 10xx
-  const hex = bytes.toString('hex');
-  return [
-    hex.slice(0, 8),
-    hex.slice(8, 12),
-    hex.slice(12, 16),
-    hex.slice(16, 20),
-    hex.slice(20),
-  ].join('-');
+  return formatUuid(bytes);
 }

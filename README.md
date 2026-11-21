@@ -84,7 +84,7 @@ pnpm db:reset                                          # drop the local database
 pnpm db:seed                                           # load the sample data into an empty database
 ```
 
-The seed is deterministic: the same venues, events and IDs on every run, with dates relative to the day it runs. It refuses to run on a database that already has venues or events, so start over with `pnpm db:reset && pnpm db:seed`. The fixtures are listed in [`docs/testing-guide.md`](docs/testing-guide.md#seed-data).
+The seed is deterministic: the same venues, events and IDs on every run, with dates relative to the day it runs. It refuses to run on a database that already has venues or events, so start over with `pnpm db:reset && pnpm db:seed`. With the API running in test mode, `curl -X POST http://localhost:3000/__test/reset` does the same in one call (and resets the test clock). The fixtures, the reset and the additive seed scenarios are described in [`docs/testing-guide.md`](docs/testing-guide.md#seed-data).
 
 ## Tests
 

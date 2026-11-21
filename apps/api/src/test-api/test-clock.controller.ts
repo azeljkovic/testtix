@@ -2,9 +2,8 @@ import { Body, Controller, Get, Post } from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import { ZodResponse } from 'nestjs-zod';
 
-import type { ClockReading } from '../clock/clock-state.js';
 import { ClockService } from '../clock/clock.service.js';
-import { ClockCommandDto, ClockStateDto } from './clock.schemas.js';
+import { ClockCommandDto, ClockStateDto, toClockState } from './clock.schemas.js';
 import { RequiresTestKey } from './test-key.guard.js';
 
 @ApiTags('test')
@@ -44,12 +43,4 @@ export class TestClockController {
     }
     return toClockState(await this.clock.read());
   }
-}
-
-function toClockState(reading: ClockReading) {
-  return {
-    now: new Date(reading.nowMs).toISOString(),
-    mode: reading.mode,
-    offsetMs: reading.offsetMs,
-  };
 }

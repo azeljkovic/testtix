@@ -27,6 +27,10 @@ describe('test mode off', () => {
   it.each([
     ['GET', '/__test/clock'],
     ['POST', '/__test/clock'],
+    ['POST', '/__test/reset'],
+    ['POST', '/__test/seed/basic-catalogue'],
+    ['POST', '/__test/seed/sold-out-event'],
+    ['POST', '/__test/seed/one-seat-left'],
   ])('%s %s answers 404', async (method, path) => {
     const http = await start({});
     const res = await (method === 'GET' ? http.get(path) : http.post(path).send({ reset: true }));
@@ -121,5 +125,54 @@ describe('X-Test-Key guard', () => {
   it('lets a request with the right key through to validation', async () => {
     const res = await (await start(env)).post('/__test/clock').set('X-Test-Key', KEY).send({});
     expect(res.status).toBe(400);
+  });
+});
+
+describe('POST /__test/reset validation', () => {
+  it.each([
+    ['freezeAt without a zone', { freezeAt: '2026-12-01T10:00:00' }, 'freezeAt'],
+    ['freezeAt as a number', { freezeAt: 1_780_000_000_000 }, 'freezeAt'],
+    ['an unknown field', { freeze_at: '2026-12-01T10:00:00Z' }, ''],
+  ])('rejects %s', async (_label, body, path) => {
+    const res = await (await start({ TESTTIX_TEST_MODE: 'true' })).post('/__test/reset').send(body);
+    expect(res.status).toBe(400);
+    const problem = ProblemDetailsSchema.parse(res.body);
+    expect(problem.type).toBe(PROBLEM_TYPES.VALIDATION_ERROR);
+    expect(problem.errors.map((error) => error.path)).toEqual([path]);
+  });
+
+  it('rejects a body that is not an object', async () => {
+    const res = await (
+      await start({ TESTTIX_TEST_MODE: 'true' })
+    )
+      .post('/__test/reset')
+      .set('Content-Type', 'application/json')
+      .send('[]');
+    expect(res.status).toBe(400);
+    expect(ProblemDetailsSchema.parse(res.body).type).toBe(PROBLEM_TYPES.VALIDATION_ERROR);
+  });
+});
+
+describe('POST /__test/reset with TEST_API_KEY configured', () => {
+  const env = { TESTTIX_TEST_MODE: 'true', TEST_API_KEY: KEY };
+
+  it.each([
+    ['no header', undefined],
+    ['a wrong key', 'wrong-key-0123456789'],
+  ])('answers 401 with %s, before touching any data', async (_label, key) => {
+    const req = (await start(env)).post('/__test/reset');
+    if (key !== undefined) void req.set('X-Test-Key', key);
+    const res = await req;
+    expect(res.status).toBe(401);
+    expect(res.headers['www-authenticate']).toBe('TestKey realm="test-api"');
+    expect(ProblemDetailsSchema.parse(res.body).type).toBe(PROBLEM_TYPE_BLANK);
+  });
+});
+
+describe('POST /__test/seed/{scenario}', () => {
+  it('answers 404 for an unknown scenario', async () => {
+    const res = await (await start({ TESTTIX_TEST_MODE: 'true' })).post('/__test/seed/no-such');
+    expect(res.status).toBe(404);
+    expect(ProblemDetailsSchema.parse(res.body).type).toBe(PROBLEM_TYPE_BLANK);
   });
 });
