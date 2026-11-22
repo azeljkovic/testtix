@@ -290,6 +290,7 @@ Claude's workspace has no Docker daemon, so Testcontainers can't run there. Beca
 - `POST /webhooks/payments`: signature and timestamp check (400 on failure), idempotent on the provider event ID (`PaymentEvent` unique), enqueues a job.
 - Job: `PROCESSING` → `CONFIRMED` (seats become SOLD) or `FAILED` (seats released). `JOB_PROCESSING_DELAY_MS` is configurable.
 - A late success webhook for an `EXPIRED` order is recorded and flagged for refund, never sold. This rule is documented.
+- From C4.2: an order owns its hold until it is paid, and `deleteHold()` expires only `PENDING_PAYMENT` orders. Moving an order to `PROCESSING` must keep its tickets safe from hold release, replacement and the sweeper (e.g. move the units off the hold, or make those paths skip it). Free orders (total 0, no payment session) are confirmed without a webhook.
 - Verify: integration tests where a duplicate webhook causes one transition, a bad signature returns 400, out-of-order webhooks are handled, and an end-to-end run with the real fake-payments container works.
 
 **C4.4 Tickets + e-ticket email**

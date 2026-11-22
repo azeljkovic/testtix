@@ -1,3 +1,4 @@
+import { DEV_PAYMENTS_API_KEY } from '@testtix/shared';
 import { describe, expect, it } from 'vitest';
 
 import {
@@ -12,6 +13,9 @@ const PRODUCTION_URLS = {
   REDIS_URL: 'redis://r',
   SMTP_URL: 'smtp://mail:25',
   WEB_BASE_URL: 'https://shop.example.com',
+  PAYMENTS_BASE_URL: 'https://payments.example.com',
+  PAYMENTS_API_KEY: 'sk_live_long_enough',
+  PAYMENTS_WEBHOOK_URL: 'https://api.example.com/webhooks/payments',
 };
 
 function parseError(env: Record<string, string>): ConfigValidationError {
@@ -44,6 +48,13 @@ describe('parseConfig', () => {
       emailVerificationTtlMs: 24 * 60 * 60 * 1000,
       workerInProcess: true,
       holdSweeper: { enabled: true, intervalMs: 60_000 },
+      payments: {
+        baseUrl: 'http://localhost:4000',
+        apiKey: DEV_PAYMENTS_API_KEY,
+        webhookUrl: 'http://host.docker.internal:3000/webhooks/payments',
+        timeoutMs: 5000,
+      },
+      orderPollIntervalMs: 2000,
     });
   });
 
@@ -67,6 +78,11 @@ describe('parseConfig', () => {
       WORKER_IN_PROCESS: 'false',
       HOLD_SWEEPER_ENABLED: 'false',
       HOLD_SWEEPER_INTERVAL_MS: '5000',
+      PAYMENTS_BASE_URL: 'https://payments.example.com/',
+      PAYMENTS_API_KEY: 'sk_live_long_enough',
+      PAYMENTS_WEBHOOK_URL: 'https://api.example.com/webhooks/payments',
+      PAYMENTS_TIMEOUT_MS: '1500',
+      ORDER_POLL_INTERVAL_MS: '500',
     });
     expect(config).toEqual({
       nodeEnv: 'production',
@@ -86,7 +102,30 @@ describe('parseConfig', () => {
       emailVerificationTtlMs: 48 * 60 * 60 * 1000,
       workerInProcess: false,
       holdSweeper: { enabled: false, intervalMs: 5000 },
+      payments: {
+        baseUrl: 'https://payments.example.com',
+        apiKey: 'sk_live_long_enough',
+        webhookUrl: 'https://api.example.com/webhooks/payments',
+        timeoutMs: 1500,
+      },
+      orderPollIntervalMs: 500,
     });
+  });
+
+  it('points the default webhook URL at PORT', () => {
+    expect(parseConfig({ PORT: '3100' }).payments.webhookUrl).toBe(
+      'http://host.docker.internal:3100/webhooks/payments',
+    );
+  });
+
+  it.each([
+    ['PAYMENTS_BASE_URL', 'ftp://x'],
+    ['PAYMENTS_WEBHOOK_URL', 'not a url'],
+    ['PAYMENTS_API_KEY', 'short'],
+    ['PAYMENTS_TIMEOUT_MS', '99'],
+    ['ORDER_POLL_INTERVAL_MS', '60001'],
+  ])('rejects %s=%s', (key, value) => {
+    expect(parseError({ [key]: value }).issues[0]?.path).toEqual([key]);
   });
 
   it.each([
@@ -188,13 +227,16 @@ describe('parseConfig', () => {
     expect(error.issues[0]?.path).toEqual([key]);
   });
 
-  it('requires the connection URLs and WEB_BASE_URL in production', () => {
+  it('requires the connection URLs, WEB_BASE_URL and the payment provider in production', () => {
     const error = parseError({ NODE_ENV: 'production' });
     expect(error.issues.map((issue) => issue.path.join('.'))).toEqual([
       'DATABASE_URL',
       'REDIS_URL',
       'SMTP_URL',
       'WEB_BASE_URL',
+      'PAYMENTS_BASE_URL',
+      'PAYMENTS_API_KEY',
+      'PAYMENTS_WEBHOOK_URL',
     ]);
     expect(error.issues[0]?.message).toBe('Required when NODE_ENV is production');
   });

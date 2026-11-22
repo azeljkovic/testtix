@@ -256,6 +256,18 @@ Notes:
 
 Order lifecycle: `PENDING_PAYMENT → PROCESSING → CONFIRMED | FAILED | EXPIRED`. Job processing delay is configurable so the "data appears eventually" scenario can be tuned.
 
+**Orders API (C4.2)**
+
+- `OrdersModule` (`src/orders/`): `POST /orders { holdId }`, `GET /orders/{orderId}`, `GET /orders` (newest first, `id` tiebreaker, `PageQuerySchema`). Owner only: other users' orders and holds are 404. A verified email is required to check out (403 `email-not-verified`).
+- **One order per hold:** `orders.hold_id` is unique (FK, `ON DELETE SET NULL`). Checking out a hold that already has an order returns it with 200 instead of 201, so double clicks and retries are idempotent without an idempotency key.
+- **The order owns the hold.** The tickets stay `HELD` in the hold (no new inventory status), and `orders.expires_at` is the hold's. `deleteHold()` (`src/holds/hold-locks.ts`), which every release, replacement and sweep goes through, first sets the hold's `PENDING_PAYMENT` order to `EXPIRED`. So the hold sweeper is also the orders' sweep, and reads are lazy like holds: an unpaid order past `expiresAt` is shown `EXPIRED` before any sweep (`effectiveStatus()` in `src/orders/order-views.ts`).
+- **Locking:** order creation re-validates the hold in one transaction with the holds locking order (event `FOR SHARE` → the user's advisory lock → the hold's units by ID), then re-reads the hold. Concurrent checkouts of one hold serialize on the advisory lock; the second finds the first's order.
+- **The provider is called after the commit**, never inside the transaction (no locks or pooled connection held across HTTP). `PaymentsClient` (`src/payments/`) uses `fetch` with `PAYMENTS_TIMEOUT_MS` and the shared contract (`PaymentSessionSchema`), and turns any failure into `PaymentProviderError`; checkout then answers 503 `payment-provider-unavailable` and keeps the order without a session (a CHECK keeps `payment_session_id` and `payment_url` together). Checking out the hold again retries. Two concurrent retries may both create a session; a conditional update keeps the first, and the other is never shown.
+- Session request: `returnUrl` is `<WEB_BASE_URL>/orders/<id>` (the C4.5 return page), `webhookUrl` is `PAYMENTS_WEBHOOK_URL` (default `http://host.docker.internal:<PORT>/webhooks/payments`, for the compose provider calling `pnpm dev` on the host), `metadata.orderId` links webhooks to the order. The dev API key default lives in `packages/shared` (`DEV_PAYMENTS_API_KEY`), shared with `apps/fake-payments`.
+- **Free orders** (total 0) get no session: the provider's minimum is 1 cent. C4.3 confirms them without a webhook.
+- `retryAfterMs`: `ORDER_POLL_INTERVAL_MS` (default 2000) while `PENDING_PAYMENT` or `PROCESSING`, capped at the time left before `expiresAt` while unpaid; null for final statuses (`FINAL_ORDER_STATUSES` in `packages/shared`).
+- Tests: `src/testing/payment-provider-stub.ts` is a small `node:http` stand-in for `POST /sessions` (records requests; answers ok, 503, a bad body or never), used by the client unit test and the orders integration tests via `PAYMENTS_BASE_URL`. The end-to-end run against the real fake-payments container comes with C4.3.
+
 ### 3.4 Waiting room (ticket drops)
 
 - Redis sorted set per drop. Users get a queue token and are admitted at a configurable rate (N per second).

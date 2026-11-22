@@ -22,7 +22,8 @@ interface ExpiredHold {
 }
 
 /**
- * Deletes expired holds and frees the units they still have (C3.2). Cleanup only: everything that
+ * Deletes expired holds and frees the units they still have (C3.2), expiring their unpaid orders
+ * (C4.2, through `deleteHold()`): this is the orders' sweep too. Cleanup only: everything that
  * reads or claims inventory already treats `heldUntil <= now` as available, so whether and when
  * this runs never changes what customers see or can buy. It keeps the tables small and the
  * `HELD` status honest for people looking at the data.
@@ -62,7 +63,7 @@ export class HoldSweeperService {
         select: { id: true, eventId: true, userId: true, expiresAt: true },
       });
       for (const hold of page) {
-        const released = await this.releaseExpired(hold);
+        const released = await this.releaseExpired(hold, now);
         result.holds += released.holds;
         result.units += released.units;
       }
@@ -71,7 +72,7 @@ export class HoldSweeperService {
     }
   }
 
-  private async releaseExpired(hold: ExpiredHold): Promise<SweepResult> {
+  private async releaseExpired(hold: ExpiredHold, now: Date): Promise<SweepResult> {
     return this.prisma.$transaction(async (tx) => {
       // Any status: a cancelled or unpublished event's expired holds are cleaned up too.
       await tx.$queryRaw`SELECT id FROM events WHERE id = ${hold.eventId}::uuid FOR SHARE`;
@@ -80,7 +81,7 @@ export class HoldSweeperService {
       // No expiry re-check: a hold's `expiresAt` never changes (a new hold gets a new ID), so the
       // hold is either still expired or already gone. Units another customer has claimed since it
       // expired already point at their hold, so only the units still on this hold are released.
-      return deleteHold(tx, hold.id);
+      return deleteHold(tx, hold.id, now);
     });
   }
 }

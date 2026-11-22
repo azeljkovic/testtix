@@ -299,6 +299,7 @@ model Hold {
   event          Event           @relation(fields: [eventId], references: [id], onDelete: Cascade)
   user           User            @relation(fields: [userId], references: [id], onDelete: Cascade)
   inventoryUnits InventoryUnit[]
+  order          Order?
 
   @@unique([eventId, userId])
   @@index([userId])
@@ -317,13 +318,19 @@ model Order {
   totalCents       Int         @map("total_cents")
   /// An unpaid order expires with its hold.
   expiresAt        DateTime    @map("expires_at") @db.Timestamptz(3)
-  /// The fake payment provider's session (C4.1).
+  /// The hold this order checks out (C4.2): one order per hold. Null once the hold is gone
+  /// (paid, released, replaced or swept); deleting a hold expires its unpaid order first.
+  holdId           String?     @unique @map("hold_id") @db.Uuid
+  /// The fake payment provider's session (C4.1). Null until the provider has answered.
   paymentSessionId String?     @unique @map("payment_session_id")
+  /// The provider's payment page for `paymentSessionId`.
+  paymentUrl       String?     @map("payment_url")
   createdAt        DateTime    @map("created_at") @db.Timestamptz(3)
   updatedAt        DateTime    @map("updated_at") @db.Timestamptz(3)
 
   user          User           @relation(fields: [userId], references: [id], onDelete: Restrict)
   event         Event          @relation(fields: [eventId], references: [id], onDelete: Restrict)
+  hold          Hold?          @relation(fields: [holdId], references: [id], onDelete: SetNull)
   items         OrderItem[]
   paymentEvents PaymentEvent[]
 
