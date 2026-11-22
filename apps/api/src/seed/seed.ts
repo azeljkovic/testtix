@@ -1,8 +1,6 @@
 import type { Prisma, PrismaClient } from '../generated/prisma/client.js';
+import { chunks } from '../infra/chunks.js';
 import { buildSeedData, type SeedData } from './seed-data.js';
-
-/** Rows per INSERT: well below Postgres' 65,535 bind parameters for the widest table. */
-const CHUNK_SIZE = 2_000;
 
 /** Serializes everything that seeds or wipes the database (seed, reset). */
 const SEED_LOCK_KEY = 'testtix:seed';
@@ -123,10 +121,4 @@ function summarize(data: SeedData): SeedSummary {
     ticketBatches: data.ticketBatches.length,
     inventoryUnits: data.inventoryUnits.length,
   };
-}
-
-function* chunks<T>(rows: readonly T[]): Generator<T[]> {
-  for (let start = 0; start < rows.length; start += CHUNK_SIZE) {
-    yield rows.slice(start, start + CHUNK_SIZE);
-  }
 }
