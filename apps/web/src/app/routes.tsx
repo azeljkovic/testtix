@@ -4,6 +4,8 @@ import { RequireAuth } from '../auth/RequireAuth.js';
 import { RootLayout } from '../layout/RootLayout.js';
 import { AccountPage } from '../pages/AccountPage.js';
 import { AdminPage } from '../pages/AdminPage.js';
+import { ChooseSeatsPage } from '../pages/ChooseSeatsPage.js';
+import { EventDetailPage } from '../pages/EventDetailPage.js';
 import { EventsPage } from '../pages/EventsPage.js';
 import { HomePage } from '../pages/HomePage.js';
 import { LoginPage } from '../pages/LoginPage.js';
@@ -18,6 +20,9 @@ export const routes: RouteObject[] = [
     children: [
       { index: true, element: <HomePage /> },
       { path: 'events', element: <EventsPage /> },
+      { path: 'events/:slug', element: <EventDetailPage /> },
+      // Placeholder until the seat map (C3.3).
+      { path: 'events/:slug/seats', element: <ChooseSeatsPage /> },
       { path: 'login', element: <LoginPage /> },
       { path: 'register', element: <RegisterPage /> },
       // The API's verification emails link here (`VERIFY_EMAIL_PATH` in apps/api).
