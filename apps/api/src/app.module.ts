@@ -12,6 +12,7 @@ import { HealthModule } from './health/health.module.js';
 import { HoldsModule } from './holds/holds.module.js';
 import { DatabaseModule } from './infra/database.module.js';
 import { RedisModule } from './infra/redis.module.js';
+import { WorkerModule } from './jobs/worker.module.js';
 import { LoggingModule } from './logging/logging.module.js';
 import { MetricsModule } from './metrics/metrics.module.js';
 import { TestApiModule } from './test-api/test-api.module.js';
@@ -24,7 +25,7 @@ export class AppModule {
       module: AppModule,
       imports: [
         AppConfigModule.forRoot(config),
-        LoggingModule,
+        LoggingModule.forRoot('api'),
         DatabaseModule,
         RedisModule,
         ClockModule,
@@ -35,6 +36,8 @@ export class AppModule {
         VenuesModule,
         EventsModule,
         HoldsModule,
+        // Background jobs in this process, unless the worker runs on its own (`src/worker.ts`).
+        ...(config.workerInProcess ? [WorkerModule] : []),
         // Not even loaded outside test mode, so `/__test/*` is a plain 404 there.
         ...(config.testMode ? [TestApiModule] : []),
       ],

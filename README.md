@@ -56,6 +56,15 @@ curl -i http://localhost:3000/health/ready
 
 Configuration comes from environment variables (see the API section of `.env.example`). They are validated on startup, and the API exits with a list of problems if one is invalid. Logs are JSON lines on stdout; pipe them through `npx pino-pretty` for a readable view. Error responses, request IDs, accounts and sessions (with the seeded logins), test mode and the controllable clock are described in the [testing guide](docs/testing-guide.md).
 
+### Background jobs
+
+Background jobs (BullMQ on Redis) run inside the API process by default, so `pnpm dev` needs nothing extra. Today that is the hold sweeper, which deletes expired holds every `HOLD_SWEEPER_INTERVAL_MS`. To run the worker as its own process, so it can scale apart from the API, set `WORKER_IN_PROCESS=false` for the API and start the worker with the same environment:
+
+```sh
+pnpm --filter @testtix/api build
+pnpm --filter @testtix/api start:worker   # node dist/worker.js; reads the root .env if present
+```
+
 ## Web app
 
 The React single-page app lives in `apps/web` (Vite, React Router, TanStack Query, Tailwind CSS, React Aria Components).

@@ -196,7 +196,7 @@ Notes:
 ### 3.2 Seat holds and time
 
 - Holds live in Postgres (a `holds` row, plus `held_until` on each held inventory unit). A hold counts as expired when `held_until < clock.now()`, evaluated lazily on every read and write.
-- A BullMQ repeatable job sweeps expired holds for cleanup only. Correctness never depends on the sweeper.
+- A BullMQ job scheduler (repeatable job) sweeps expired holds for cleanup only. Correctness never depends on the sweeper (C3.2, see §3.3).
 - **Injectable `ClockService`:** all server-side "now" goes through it. In test mode the clock can be frozen, set or advanced through the test API, so hold expiry is testable server-side and not just in the browser (Playwright's clock only covers the browser).
 - Default hold duration is 10 minutes, configurable per event.
 
@@ -225,6 +225,14 @@ Notes:
 | ----- | ---------------------------------------------------------------------------------------------- | -------- |
 | Queue | BullMQ on Redis (`@nestjs/bullmq`)                                                             | Proposed |
 | Jobs  | payment confirmation handling, ticket generation + email, hold sweeper, waiting-room admission | Proposed |
+
+**Worker and hold sweeper (C3.2)**
+
+- `@nestjs/bullmq` 12 (its peer range includes Nest 11) with BullMQ 6. `JobsModule` (`src/jobs/`) sets the shared connection (`REDIS_URL`) and the key prefix `testtix:bull`. Queues and workers open their own Redis connections; the app's `REDIS` client stays separate.
+- `WorkerModule` holds every processor and job schedule. The API imports it when `WORKER_IN_PROCESS=true` (the default). With `false`, run the worker as its own process: `node dist/worker.js` (`pnpm --filter @testtix/api start:worker`), an application context (`WorkerAppModule`: config, logs with `service: "worker"`, Postgres, Redis, clock, `WorkerModule`) with no HTTP. It ignores `WORKER_IN_PROCESS`.
+- **Hold sweeper:** queue `hold-sweeper`, fed by a BullMQ job scheduler (`upsertJobScheduler`, the successor of repeatable jobs) with ID `sweep-expired-holds`, every `HOLD_SWEEPER_INTERVAL_MS` (default 60 s). Every worker process upserts it on startup, in the background with retries, so a process still starts while Redis is down. `HOLD_SWEEPER_ENABLED=false` removes the scheduler instead, so turning it off also stops a schedule an earlier deployment left in Redis.
+- `HoldSweeperService.sweep()` reads expired holds (`expires_at <= now`, server clock) by keyset pagination and releases each one in its own transaction with the holds locking order (event `FOR SHARE` → the user's advisory lock → the hold's units by ID), then frees only the units still pointing at that hold and deletes it. It runs safely next to customers holding, replacing and releasing. The lock helpers live in `src/holds/hold-locks.ts`, shared with `HoldsService`.
+- The test harnesses (`createTestApp()`, `createIntegrationApp()`) default to `WORKER_IN_PROCESS=false`, so no sweep runs at a moment a test doesn't expect; the sweeper tests turn it on. `POST /__test/reset` leaves the schedule alone: it holds no shop data, and the next sweep simply finds nothing to do.
 
 Order lifecycle: `PENDING_PAYMENT → PROCESSING → CONFIRMED | FAILED | EXPIRED`. Job processing delay is configurable so the "data appears eventually" scenario can be tuned.
 

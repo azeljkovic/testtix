@@ -267,12 +267,12 @@ The routes take the event's **ID**, not its slug (`GET /events/{slug}` returns t
 - **Seated sections** (`type: "SEATED"`) have `rows` (front first, each with its `label` and `index`) of `seats` (by number), each with its `id`, `number`, `priceCents` and `status`, and `available`, the number of `AVAILABLE` seats.
 - **GA sections** (`type: "GA"`) have their `capacity`, `available` (the most a hold can ask for there) and `prices`: available places by price, cheapest first. A hold takes the cheapest places, so the running total of _n_ places is the sum of the first _n_ from `prices`.
 
-| Seat `status` | Meaning                                                                                                              |
-| ------------- | -------------------------------------------------------------------------------------------------------------------- |
-| `AVAILABLE`   | On sale and free. A seat whose hold has expired is `AVAILABLE` again at once, even before the cleanup job removes it |
-| `HELD`        | In someone's unexpired hold                                                                                          |
-| `SOLD`        | Bought                                                                                                               |
-| `NOT_ON_SALE` | No released batch includes it: the event doesn't sell it, or its batch releases later. `priceCents` is null or set   |
+| Seat `status` | Meaning                                                                                                               |
+| ------------- | --------------------------------------------------------------------------------------------------------------------- |
+| `AVAILABLE`   | On sale and free. A seat whose hold has expired is `AVAILABLE` again at once, even before the hold sweeper removes it |
+| `HELD`        | In someone's unexpired hold                                                                                           |
+| `SOLD`        | Bought                                                                                                                |
+| `NOT_ON_SALE` | No released batch includes it: the event doesn't sell it, or its batch releases later. `priceCents` is null or set    |
 
 Statuses don't depend on who asks: your own held seats show as `HELD` too (use `GET /holds/current` to see which are yours).
 
@@ -319,6 +319,8 @@ curl -s -X POST http://localhost:3000/__test/clock -H 'Content-Type: application
 ```
 
 `DELETE /holds/{holdId}` works on an expired hold too (204); it never takes back tickets someone else has held since.
+
+**Cleanup.** A background job, the hold sweeper, deletes expired holds and frees the tickets they still have, every `HOLD_SWEEPER_INTERVAL_MS` (default 60 seconds) by the server clock: after `advanceBy`, the next sweep picks them up. It is cleanup only, so no response above changes because of it, with one exception: once a hold has been swept, `DELETE /holds/{holdId}` answers 404 instead of 204. `HOLD_SWEEPER_ENABLED=false` turns it off (expired holds then stay in the database, with their tickets still available). The job runs inside the API by default; see [background jobs](../README.md#background-jobs) to run it as a separate worker.
 
 ## Admin API
 
@@ -441,7 +443,7 @@ Each released seat or GA place becomes one ticket (inventory unit), `AVAILABLE`,
 
 ### Ticket counts
 
-Events (`tickets`), batches and batch sections report `{ total, available, held, sold }` at the server clock. `held` counts tickets in an unexpired hold; once a hold's time passes its tickets count as `available` again, even before the background sweeper releases them.
+Events (`tickets`), batches and batch sections report `{ total, available, held, sold }` at the server clock. `held` counts tickets in an unexpired hold; once a hold's time passes its tickets count as `available` again, even before the [hold sweeper](#holding-tickets) releases them.
 
 ### Pagination
 

@@ -13,7 +13,10 @@ import { startTestingApp } from '../test-app.js';
 import './targets-context.js';
 
 export interface IntegrationAppOptions {
-  /** Extra or overriding env vars, e.g. `{ DATABASE_URL: ... }` to simulate an outage. */
+  /**
+   * Extra or overriding env vars, e.g. `{ DATABASE_URL: ... }` to simulate an outage, or
+   * `{ WORKER_IN_PROCESS: 'true' }` to run the background worker (off by default).
+   */
   env?: Record<string, string>;
   /**
    * Wait until the app's Redis client is connected (default `true`). The client has no offline
@@ -41,6 +44,9 @@ export async function createIntegrationApp(
     DATABASE_URL: databaseUrl,
     REDIS_URL: redisUrl,
     SMTP_URL: smtpUrl,
+    // No background jobs unless a test turns them on: a sweep running at an unexpected moment
+    // would change rows other tests assert on.
+    WORKER_IN_PROCESS: 'false',
     ...options.env,
   });
   const moduleRef = await Test.createTestingModule({
