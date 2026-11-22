@@ -90,3 +90,10 @@ export const EventCatalogueQuerySchema = PageQuerySchema.extend({
 });
 
 export type EventCatalogueQuery = z.infer<typeof EventCatalogueQuerySchema>;
+
+/**
+ * How long the web event list waits after the last keystroke in its search box before it searches
+ * (C2.3), in milliseconds. Fixed on purpose: the debounced search is something to test against.
+ * Pressing Enter searches straight away.
+ */
+export const SEARCH_DEBOUNCE_MS = 300;
