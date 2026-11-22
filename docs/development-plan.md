@@ -251,7 +251,7 @@ Claude's workspace has no Docker daemon, so Testcontainers can't run there. Beca
 **C3.4 Web: hold flow + countdown**
 
 - "Hold seats" button. A 409 shows which seats were taken and refreshes the map.
-- Countdown is derived from server `heldUntil` and the browser clock (`Date.now()` only, no extra timers), so Playwright's clock control works.
+- Countdown is derived from the hold's server `expiresAt` and the browser clock (`Date.now()` only, no extra timers), so Playwright's clock control works.
 - On expiry: a banner, the selection clears, and the map refreshes. Release-hold button.
 - Verify: component tests with fake timers cover the countdown and expiry, and the conflict path is tested with MSW.
 
