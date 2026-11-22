@@ -862,6 +862,64 @@
         ]
       }
     },
+    "/venues": {
+      "get": {
+        "description": "The choices for the `venue` filter of `GET /events` (by slug). Sorted by name, then ID.",
+        "operationId": "VenuesController_list",
+        "parameters": [
+          {
+            "name": "page",
+            "required": false,
+            "in": "query",
+            "description": "Page number, from 1. A page past the last one returns no items.",
+            "schema": {
+              "minimum": 1,
+              "maximum": 9007199254740991,
+              "default": 1,
+              "type": "integer"
+            }
+          },
+          {
+            "name": "pageSize",
+            "required": false,
+            "in": "query",
+            "description": "Items per page, 1–100",
+            "schema": {
+              "minimum": 1,
+              "maximum": 100,
+              "default": 20,
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "One page of venues.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CatalogueVenuePage_Output"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error. The body is an RFC 9457 problem details object.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "summary": "List venues with published events",
+        "tags": [
+          "catalogue"
+        ]
+      }
+    },
     "/admin/events": {
       "get": {
         "description": "Every status, drafts included. Sorted by start time, then ID.",
@@ -1583,6 +1641,205 @@
           {
             "session": []
           }
+        ]
+      }
+    },
+    "/events": {
+      "get": {
+        "description": "Published events starting at or after `from` (default: now, server clock), filtered, searched and sorted. Drafts and cancelled events never appear. 400 `validation-error` for an invalid filter, or a `to` that is not after `from`.",
+        "operationId": "CatalogueController_list",
+        "parameters": [
+          {
+            "name": "page",
+            "required": false,
+            "in": "query",
+            "description": "Page number, from 1. A page past the last one returns no items.",
+            "schema": {
+              "minimum": 1,
+              "maximum": 9007199254740991,
+              "default": 1,
+              "type": "integer"
+            }
+          },
+          {
+            "name": "pageSize",
+            "required": false,
+            "in": "query",
+            "description": "Items per page, 1–100",
+            "schema": {
+              "minimum": 1,
+              "maximum": 100,
+              "default": 20,
+              "type": "integer"
+            }
+          },
+          {
+            "name": "q",
+            "required": false,
+            "in": "query",
+            "description": "Search text: events whose title or performer contains it, ignoring case. Blank means no search.",
+            "schema": {
+              "maxLength": 100,
+              "type": "string"
+            }
+          },
+          {
+            "name": "category",
+            "required": false,
+            "in": "query",
+            "description": "Only events of this category",
+            "schema": {
+              "$ref": "#/components/schemas/EventCategory"
+            }
+          },
+          {
+            "name": "venue",
+            "required": false,
+            "in": "query",
+            "description": "Only events at the venue with this slug",
+            "schema": {
+              "maxLength": 100,
+              "type": "string"
+            }
+          },
+          {
+            "name": "from",
+            "required": false,
+            "in": "query",
+            "description": "Only events starting at or after this time (ISO 8601). Defaults to now (server clock), so past events are left out unless you ask for them.",
+            "schema": {
+              "format": "date-time",
+              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$",
+              "type": "string"
+            }
+          },
+          {
+            "name": "to",
+            "required": false,
+            "in": "query",
+            "description": "Only events starting before this time (ISO 8601)",
+            "schema": {
+              "format": "date-time",
+              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$",
+              "type": "string"
+            }
+          },
+          {
+            "name": "seating",
+            "required": false,
+            "in": "query",
+            "description": "Only events selling only seats (`SEATED`), only general admission (`GA`), or both (`MIXED`)",
+            "schema": {
+              "$ref": "#/components/schemas/EventSeating"
+            }
+          },
+          {
+            "name": "availability",
+            "required": false,
+            "in": "query",
+            "description": "Only events in this sales state (server clock)",
+            "schema": {
+              "$ref": "#/components/schemas/EventAvailability"
+            }
+          },
+          {
+            "name": "sort",
+            "required": false,
+            "in": "query",
+            "description": "`date`: start time. `price`: lowest ticket price, then start time. `name`: title (ignoring case), then start time. The event ID breaks remaining ties.",
+            "schema": {
+              "default": "date",
+              "type": "string",
+              "enum": [
+                "date",
+                "price",
+                "name"
+              ]
+            }
+          },
+          {
+            "name": "order",
+            "required": false,
+            "in": "query",
+            "description": "Direction of the sort key; the tiebreakers stay ascending",
+            "schema": {
+              "default": "asc",
+              "type": "string",
+              "enum": [
+                "asc",
+                "desc"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "One page of events.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CatalogueEventPage_Output"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error. The body is an RFC 9457 problem details object.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "summary": "List published events",
+        "tags": [
+          "catalogue"
+        ]
+      }
+    },
+    "/events/{slug}": {
+      "get": {
+        "description": "Any published event, past ones included, with ticket counts and prices per section. 404 for drafts, cancelled events and unknown slugs.",
+        "operationId": "CatalogueController_get",
+        "parameters": [
+          {
+            "name": "slug",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "maxLength": 200,
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The event.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CatalogueEvent_Output"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error. The body is an RFC 9457 problem details object.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Get a published event with its availability",
+        "tags": [
+          "catalogue"
         ]
       }
     },
@@ -2611,6 +2868,80 @@
         "description": "Only the fields sent change. `sections` replaces the whole layout (new section and seat IDs), and only while no tickets have been released for any event at the venue (else 409 `layout-locked`).",
         "additionalProperties": false
       },
+      "CatalogueVenue_Output": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          },
+          "slug": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "city": {
+            "type": "string"
+          },
+          "timezone": {
+            "type": "string",
+            "description": "IANA time zone; show event times in it"
+          }
+        },
+        "required": [
+          "id",
+          "slug",
+          "name",
+          "city",
+          "timezone"
+        ],
+        "additionalProperties": false
+      },
+      "CatalogueVenuePage_Output": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CatalogueVenue_Output"
+            }
+          },
+          "page": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991,
+            "description": "The requested page"
+          },
+          "pageSize": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991,
+            "description": "The requested page size"
+          },
+          "total": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991,
+            "description": "Items in the whole list, across all pages"
+          },
+          "totalPages": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991,
+            "description": "Number of pages; 0 when the list is empty"
+          }
+        },
+        "required": [
+          "items",
+          "page",
+          "pageSize",
+          "total",
+          "totalPages"
+        ],
+        "additionalProperties": false
+      },
       "AdminEventSummary_Output": {
         "type": "object",
         "properties": {
@@ -3210,6 +3541,329 @@
         ],
         "additionalProperties": false
       },
+      "CatalogueEventSummary_Output": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          },
+          "slug": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "performer": {
+            "type": "string"
+          },
+          "category": {
+            "$ref": "#/components/schemas/EventCategory_Output"
+          },
+          "venue": {
+            "$ref": "#/components/schemas/CatalogueVenue_Output"
+          },
+          "startsAt": {
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+          },
+          "endsAt": {
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+          },
+          "salesOpenAt": {
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+          },
+          "seating": {
+            "$ref": "#/components/schemas/EventSeating_Output"
+          },
+          "availability": {
+            "$ref": "#/components/schemas/EventAvailability_Output"
+          },
+          "availableTickets": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991,
+            "description": "Released tickets that are neither sold nor held (tickets whose hold expired count). Buyable while the event is `ON_SALE`."
+          },
+          "priceRange": {
+            "$ref": "#/components/schemas/PriceRange_Output"
+          }
+        },
+        "required": [
+          "id",
+          "slug",
+          "title",
+          "performer",
+          "category",
+          "venue",
+          "startsAt",
+          "endsAt",
+          "salesOpenAt",
+          "seating",
+          "availability",
+          "availableTickets",
+          "priceRange"
+        ],
+        "additionalProperties": false
+      },
+      "EventSeating_Output": {
+        "type": "string",
+        "enum": [
+          "SEATED",
+          "GA",
+          "MIXED"
+        ]
+      },
+      "EventAvailability_Output": {
+        "type": "string",
+        "enum": [
+          "SALES_NOT_OPEN",
+          "ON_SALE",
+          "SOLD_OUT",
+          "SALES_ENDED"
+        ]
+      },
+      "PriceRange_Output": {
+        "type": "object",
+        "properties": {
+          "minCents": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991,
+            "description": "Cheapest ticket, in US cents"
+          },
+          "maxCents": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991,
+            "description": "Most expensive ticket, in US cents"
+          }
+        },
+        "required": [
+          "minCents",
+          "maxCents"
+        ],
+        "additionalProperties": false,
+        "description": "Prices of all the event’s tickets (sold, held and not yet released included)"
+      },
+      "CatalogueEventPage_Output": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CatalogueEventSummary_Output"
+            }
+          },
+          "page": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991,
+            "description": "The requested page"
+          },
+          "pageSize": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991,
+            "description": "The requested page size"
+          },
+          "total": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991,
+            "description": "Items in the whole list, across all pages"
+          },
+          "totalPages": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991,
+            "description": "Number of pages; 0 when the list is empty"
+          }
+        },
+        "required": [
+          "items",
+          "page",
+          "pageSize",
+          "total",
+          "totalPages"
+        ],
+        "additionalProperties": false
+      },
+      "CatalogueEventVenue_Output": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          },
+          "slug": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "city": {
+            "type": "string"
+          },
+          "timezone": {
+            "type": "string",
+            "description": "IANA time zone; show event times in it"
+          },
+          "address": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "slug",
+          "name",
+          "city",
+          "timezone",
+          "address"
+        ],
+        "additionalProperties": false
+      },
+      "CatalogueSection_Output": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          },
+          "name": {
+            "type": "string"
+          },
+          "type": {
+            "$ref": "#/components/schemas/SectionType_Output"
+          },
+          "tickets": {
+            "description": "Released tickets in this section, by state",
+            "$ref": "#/components/schemas/TicketCounts_Output"
+          },
+          "priceRange": {
+            "$ref": "#/components/schemas/PriceRange_Output"
+          },
+          "nextReleaseAt": {
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+            "description": "When the next scheduled batch releases more tickets here; null if none is due",
+            "nullable": true
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "type",
+          "tickets",
+          "priceRange",
+          "nextReleaseAt"
+        ],
+        "additionalProperties": false
+      },
+      "CatalogueEvent_Output": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          },
+          "slug": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "performer": {
+            "type": "string"
+          },
+          "category": {
+            "$ref": "#/components/schemas/EventCategory_Output"
+          },
+          "venue": {
+            "$ref": "#/components/schemas/CatalogueEventVenue_Output"
+          },
+          "startsAt": {
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+          },
+          "endsAt": {
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+          },
+          "salesOpenAt": {
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+          },
+          "seating": {
+            "$ref": "#/components/schemas/EventSeating_Output"
+          },
+          "availability": {
+            "$ref": "#/components/schemas/EventAvailability_Output"
+          },
+          "availableTickets": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991,
+            "description": "Released tickets that are neither sold nor held (tickets whose hold expired count). Buyable while the event is `ON_SALE`."
+          },
+          "priceRange": {
+            "$ref": "#/components/schemas/PriceRange_Output"
+          },
+          "description": {
+            "type": "string"
+          },
+          "maxTicketsPerOrder": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991,
+            "description": "Most tickets in one hold or order"
+          },
+          "tickets": {
+            "description": "Released tickets by state, across all sections",
+            "$ref": "#/components/schemas/TicketCounts_Output"
+          },
+          "sections": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CatalogueSection_Output"
+            },
+            "description": "Sections with tickets for this event, in the venue’s order"
+          }
+        },
+        "required": [
+          "id",
+          "slug",
+          "title",
+          "performer",
+          "category",
+          "venue",
+          "startsAt",
+          "endsAt",
+          "salesOpenAt",
+          "seating",
+          "availability",
+          "availableTickets",
+          "priceRange",
+          "description",
+          "maxTicketsPerOrder",
+          "tickets",
+          "sections"
+        ],
+        "additionalProperties": false
+      },
       "ClockStateDto_Output": {
         "type": "object",
         "properties": {
@@ -3767,6 +4421,23 @@
           "DRAFT",
           "PUBLISHED",
           "CANCELLED"
+        ]
+      },
+      "EventSeating": {
+        "type": "string",
+        "enum": [
+          "SEATED",
+          "GA",
+          "MIXED"
+        ]
+      },
+      "EventAvailability": {
+        "type": "string",
+        "enum": [
+          "SALES_NOT_OPEN",
+          "ON_SALE",
+          "SOLD_OUT",
+          "SALES_ENDED"
         ]
       },
       "ProblemDetails": {
