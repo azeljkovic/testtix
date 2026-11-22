@@ -1,6 +1,8 @@
 import { APP_NAME } from '@testtix/shared';
 import { Link, NavLink } from 'react-router';
 
+import { AccountMenu } from './AccountMenu.js';
+
 const NAV_ITEMS = [{ to: '/events', label: 'Events' }] as const;
 
 export function SiteHeader() {
@@ -11,7 +13,7 @@ export function SiteHeader() {
           {APP_NAME}
           <span className="sr-only"> home</span>
         </Link>
-        <nav aria-label="Main">
+        <nav aria-label="Main" className="mr-auto">
           <ul className="flex gap-6">
             {NAV_ITEMS.map(({ to, label }) => (
               <li key={to}>
@@ -26,6 +28,7 @@ export function SiteHeader() {
             ))}
           </ul>
         </nav>
+        <AccountMenu />
       </div>
     </header>
   );

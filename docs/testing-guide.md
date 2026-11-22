@@ -10,6 +10,22 @@ How to test TestTix from the outside: what the API promises, and the hooks it gi
 - Each route sets the document title to `<page> · TestTix` (just `TestTix` on the home page). Unknown paths render a "Page not found" page with that title; the server still answers 200, since routing happens in the browser.
 - Locate elements by role and accessible name. `data-testid` is only added where no good accessible locator exists.
 
+### Account pages
+
+| Path                    | Who       | What it shows                                                                                               |
+| ----------------------- | --------- | ----------------------------------------------------------------------------------------------------------- |
+| `/register`             | anyone    | Name, Email, Password. Creates a customer, logs it in and goes to `/account`                                |
+| `/login`                | anyone    | Email, Password. Goes to `redirectTo` (or `/`) afterwards                                                   |
+| `/verify-email?token=…` | anyone    | The landing page of the [verification email](#email-verification): verifies the token and shows the outcome |
+| `/account`              | logged in | Name, email, verification status and account type; unverified users get "Send a new verification email"     |
+| `/admin`                | admins    | The admin area (empty until M2)                                                                             |
+
+- **Header.** Visitors see "Log in" and "Register" links, which return to the current page. A logged-in user gets a menu button named `<name>, account menu` with "Account", "Admin" (admins only) and "Log out". Logging out goes to the home page.
+- **Guards.** A visitor opening `/account` or `/admin` is sent to `/login?redirectTo=<path>`. A customer opening `/admin` stays on the URL and sees "Access denied". `redirectTo` must be a path on the same site; anything else (`https://…`, `//host`) is ignored and the login goes to `/`.
+- **Validation.** The forms check the same rules as the API before sending anything (see [Accounts and sessions](#accounts-and-sessions)) and show the API's own messages, such as "Password must be at least 8 characters", under the field. The field gets `aria-invalid="true"`, the message is its accessible description, and the first invalid field gets focus. Errors the API reports for a field (a taken email) go to that field; others (wrong password, server or network errors) appear in an alert above the form.
+- **Verification page outcomes:** "Email verified", "Verification link expired", "Verification link not valid" (unknown or replaced token), "Verification link incomplete" (no token) and an error with "Try again". The expired and invalid pages offer "Send a new verification email" to the logged-in owner, or a "Log in" link to anyone else.
+- The page checks the session with `GET /api/auth/me` on load. For visitors that is a 401, which the browser console lists as a failed request; it isn't an app error.
+
 ## API basics
 
 - Base URL locally: `http://localhost:3000` (`pnpm --filter @testtix/api dev`).

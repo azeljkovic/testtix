@@ -13,34 +13,43 @@ export const SESSION_COOKIE = 'testtix_session';
 /** Cookie holding the CSRF token. Readable by scripts, which copy it into `X-CSRF-Token`. */
 export const CSRF_COOKIE = 'testtix_csrf';
 
+// Validation messages are written for people: the web forms show them next to the field, and the API
+// returns them in the `errors` of a validation problem.
+const PASSWORD_TOO_LONG = `Password must be at most ${PASSWORD_MAX_LENGTH} characters`;
+
 /** An email address, trimmed and lower-cased (accounts are matched case-insensitively). */
 export const EmailSchema = z
   .string()
   .trim()
   .toLowerCase()
-  .max(EMAIL_MAX_LENGTH)
-  .check(z.email())
+  .max(EMAIL_MAX_LENGTH, { error: `Email must be at most ${EMAIL_MAX_LENGTH} characters` })
+  .check(z.email({ error: 'Enter a valid email address' }))
   .describe('Email address. Surrounding spaces are removed and it is matched case-insensitively.');
 
 export const RegisterRequestSchema = z.strictObject({
   email: EmailSchema,
   password: z
     .string()
-    .min(PASSWORD_MIN_LENGTH)
-    .max(PASSWORD_MAX_LENGTH)
+    .min(PASSWORD_MIN_LENGTH, {
+      error: `Password must be at least ${PASSWORD_MIN_LENGTH} characters`,
+    })
+    .max(PASSWORD_MAX_LENGTH, { error: PASSWORD_TOO_LONG })
     .describe(`${PASSWORD_MIN_LENGTH}–${PASSWORD_MAX_LENGTH} characters, used exactly as typed`),
   name: z
     .string()
     .trim()
-    .min(1)
-    .max(NAME_MAX_LENGTH)
+    .min(1, { error: 'Enter your name' })
+    .max(NAME_MAX_LENGTH, { error: `Name must be at most ${NAME_MAX_LENGTH} characters` })
     .describe('Display name. Surrounding spaces are removed.'),
 });
 
 export const LoginRequestSchema = z.strictObject({
   email: EmailSchema,
   // No minimum length beyond 1: login only checks the password, it never enforces the rules.
-  password: z.string().min(1).max(PASSWORD_MAX_LENGTH),
+  password: z
+    .string()
+    .min(1, { error: 'Enter your password' })
+    .max(PASSWORD_MAX_LENGTH, { error: PASSWORD_TOO_LONG }),
 });
 
 /** Longest token `POST /auth/verify-email` accepts. Real tokens are 43 characters. */

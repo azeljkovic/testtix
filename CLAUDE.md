@@ -24,7 +24,8 @@ When a decision changes, update the docs in the same PR so they stay accurate.
 - ✅ C1.3 Test API: reset, seed scenarios
 - ✅ C1.4 Auth API (sessions, roles, CSRF)
 - ✅ C1.5 Mailer + account verification email
-- ⏭️ Next: **C1.6 Web auth pages** (see plan)
+- ✅ C1.6 Web auth pages
+- ⏭️ Next: **C2.1 Admin events + ticket batches API** (see plan)
 
 Update this list when a chunk is merged.
 
@@ -73,6 +74,9 @@ Run one package: `pnpm --filter @testtix/api <script>`.
 - Root `package.json` `pnpm.ignoredBuiltDependencies` records that skipping install scripts is deliberate (`@scarf/scarf` is telemetry, `@swc/core`'s only re-checks its binary). pnpm still prints its "Ignored build scripts" reminder; that's expected.
 - Web (`apps/web`): routes live in `src/app/routes.tsx`, shared by the browser router and tests. Component tests render the whole app with `renderApp(path)` (`src/testing/render.tsx`) and mock the API with MSW (`src/testing/msw-server.ts`; an unmocked request fails the test). Call the API through the typed client `api` (`src/api/client.ts`) and `unwrap()` the result (non-2xx → `ApiError` with `problem` and `code`). Type MSW mock bodies with `Schemas[...]` from `src/testing/msw-server.ts`. Set page titles with `<PageTitle title="…" />`. Axe checks use `axe` from `src/testing/axe.ts`.
 - React hooks lint rules come from `config({ react: true })` in `@testtix/config/eslint`.
+- Web auth: read the session with `useSession()` (`src/auth/session.ts`; `null` when logged out). Guard routes with layout routes `<RequireAuth />` / `<RequireAuth role="ADMIN" />` in `routes.tsx`. Every state-changing API call passes `params: { header: await csrfHeader() }` (the spec makes the header required). In tests, `logInAs(user)` with `customer` / `admin` from `src/testing/auth.ts`, and `problemResponse()` from `src/testing/problems.ts` for API errors.
+- Web forms: React Hook Form + `zodResolver(<shared request schema>)`, fields via `TextField` (`src/forms/`), and `showSubmitError()` for API errors. User-facing validation messages live in the shared schemas. Don't use React Aria's `isPending` on buttons (its live-region announcement dangles after navigation and fails axe); use `SubmitButton`.
+- Run Prettier from the repo root (`pnpm format`): run inside a package, it misses the root `.prettierignore` and reformats generated files.
 - Money is stored as integer cents, currency USD, locale `en-US` (`packages/shared`).
 - `packages/shared` is compiled to `dist/`; turbo runs `^build` before dependants' typecheck, lint, test and dev.
 - Pin exact dependency versions (no `^`), matching the existing `package.json` files.
