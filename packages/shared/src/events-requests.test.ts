@@ -75,6 +75,18 @@ describe('CreateEventRequestSchema', () => {
       field,
     );
   });
+
+  it('asks for a missing time and explains a malformed one', () => {
+    const { startsAt: _startsAt, ...withoutStart } = event;
+    expect(
+      CreateEventRequestSchema.safeParse(withoutStart).error?.issues.map((issue) => issue.message),
+    ).toEqual(['Enter the start time']);
+    expect(
+      CreateEventRequestSchema.safeParse({ ...event, endsAt: 'soon' }).error?.issues.map(
+        (issue) => issue.message,
+      ),
+    ).toEqual(['End time must be an ISO 8601 date-time']);
+  });
 });
 
 describe('UpdateEventRequestSchema', () => {
