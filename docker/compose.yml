@@ -7,8 +7,11 @@
 #
 # Ports bind to 127.0.0.1 only, so the default credentials are never exposed on your network.
 #
+# fake-payments is built from apps/fake-payments/Dockerfile. After changing its code, rebuild with
+#   pnpm infra:up --build
+#
 # Profiles (placeholders, filled in by later chunks):
-#   full           api, worker, web and fake-payments as containers (C6.1)
+#   full           api, worker and web as containers (C6.1)
 #   observability  Prometheus + Grafana for k6 runs (C6.2)
 # Services without a profile, the ones below, always start.
 
@@ -64,6 +67,41 @@ services:
       - mailpit-data:/data
     healthcheck:
       test: ['CMD', '/mailpit', 'readyz']
+      interval: 2s
+      timeout: 5s
+      retries: 30
+      start_period: 5s
+    restart: unless-stopped
+
+  # Fake hosted payment provider (C4.1): payment page at http://localhost:4000/pay/<session id>.
+  fake-payments:
+    build:
+      context: .
+      dockerfile: apps/fake-payments/Dockerfile
+    image: testtix/fake-payments:dev
+    environment:
+      PUBLIC_BASE_URL: http://localhost:${FAKE_PAYMENTS_PORT:-4000}
+      # The API must use the same two values (PAYMENTS_API_KEY / PAYMENTS_WEBHOOK_SECRET in `.env`).
+      PAYMENTS_API_KEY: ${PAYMENTS_API_KEY:-sk_test_testtix_local_only}
+      PAYMENTS_WEBHOOK_SECRET: ${PAYMENTS_WEBHOOK_SECRET:-whsec_testtix_local_only}
+      LOG_LEVEL: ${FAKE_PAYMENTS_LOG_LEVEL:-info}
+      SESSION_TTL_MINUTES: ${FAKE_PAYMENTS_SESSION_TTL_MINUTES:-30}
+      DELAYED_WEBHOOK_MS: ${FAKE_PAYMENTS_DELAYED_WEBHOOK_MS:-10000}
+      WEBHOOK_MAX_ATTEMPTS: ${FAKE_PAYMENTS_WEBHOOK_MAX_ATTEMPTS:-6}
+      WEBHOOK_RETRY_BASE_MS: ${FAKE_PAYMENTS_WEBHOOK_RETRY_BASE_MS:-1000}
+      WEBHOOK_TIMEOUT_MS: ${FAKE_PAYMENTS_WEBHOOK_TIMEOUT_MS:-5000}
+    ports:
+      - 127.0.0.1:${FAKE_PAYMENTS_PORT:-4000}:4000
+    # Webhooks go to the API on the host (`pnpm dev`): http://host.docker.internal:3000/...
+    # Docker Desktop provides the name; on Linux this line maps it to the host.
+    extra_hosts:
+      - host.docker.internal:host-gateway
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - "fetch('http://127.0.0.1:4000/health').then((r) => process.exit(r.ok ? 0 : 1), () => process.exit(1))"
       interval: 2s
       timeout: 5s
       retries: 30

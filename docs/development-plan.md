@@ -275,7 +275,7 @@ Claude's workspace has no Docker daemon, so Testcontainers can't run there. Beca
 - `POST /sessions` (amount, currency, `returnUrl`, `webhookUrl`, metadata) → payment page URL. The server-rendered payment page has a card form and an accessible layout.
 - Test cards (documented): success, decline, insufficient funds, no webhook, delayed webhook (configurable), duplicate webhook.
 - Webhooks are signed with HMAC-SHA256 plus a timestamp header (replay window) and retried on non-2xx with backoff.
-- Added to compose. Its own unit and integration tests use a webhook receiver stub.
+- Added to compose (its Dockerfile comes forward from C6.1). Its own unit and integration tests use a webhook receiver stub.
 - Verify: tests cover each card's behaviour and that signatures verify with the shared secret.
 
 **C4.2 Orders API**
@@ -366,7 +366,7 @@ Claude's workspace has no Docker daemon, so Testcontainers can't run there. Beca
 
 **C6.1 Images**
 
-- Multi-stage Dockerfiles for api (with a separate worker command), web (static build served by Caddy) and fake-payments. Non-root users and health checks.
+- Multi-stage Dockerfiles for api (with a separate worker command) and web (static build served by Caddy); fake-payments already has one (C4.1, run by the default compose services). Non-root users and health checks.
 - Compose `full` profile runs everything. API replicas sit behind Caddy.
 - CI builds the images and pushes to GHCR on `main` (SHA tag) and on tags (semver tag).
 - Verify: from a clean machine, `docker compose --profile full up` passes a smoke script (health checks, a test purchase through the API).

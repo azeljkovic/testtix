@@ -18,6 +18,8 @@ POSTGRES_DB="${POSTGRES_DB:-testtix}"
 MAILPIT_SMTP_PORT="${MAILPIT_SMTP_PORT:-1025}"
 MAILPIT_UI_PORT="${MAILPIT_UI_PORT:-8025}"
 MAILPIT_URL="http://127.0.0.1:${MAILPIT_UI_PORT}"
+FAKE_PAYMENTS_URL="http://127.0.0.1:${FAKE_PAYMENTS_PORT:-4000}"
+PAYMENTS_API_KEY="${PAYMENTS_API_KEY:-sk_test_testtix_local_only}"
 
 compose() {
   docker compose --project-directory . -f docker/compose.yml "$@"
@@ -66,5 +68,13 @@ fi
 curl -fsS -o /dev/null -X DELETE "${MAILPIT_URL}/api/v1/messages" \
   -H 'Content-Type: application/json' -d "{\"IDs\":${ids}}"
 echo ok
+
+step "Fake payments creates a session"
+page_url="$(curl -fsS "${FAKE_PAYMENTS_URL}/sessions" \
+  -H "Authorization: Bearer ${PAYMENTS_API_KEY}" -H 'Content-Type: application/json' \
+  -d '{"amountCents":100,"currency":"USD","description":"Infra smoke test","returnUrl":"http://localhost:5173/","webhookUrl":"http://host.docker.internal:3000/webhooks/payments"}' |
+  jq -r .url)"
+curl -fsS -o /dev/null "${page_url/localhost/127.0.0.1}"
+echo "ok (${FAKE_PAYMENTS_URL})"
 
 echo "Local infra is ready."
