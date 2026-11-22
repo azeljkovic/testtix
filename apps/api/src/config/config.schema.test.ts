@@ -7,6 +7,13 @@ import {
   parseConfig,
 } from './config.schema.js';
 
+const PRODUCTION_URLS = {
+  DATABASE_URL: 'postgres://db/app',
+  REDIS_URL: 'redis://r',
+  SMTP_URL: 'smtp://mail:25',
+  WEB_BASE_URL: 'https://shop.example.com',
+};
+
 function parseError(env: Record<string, string>): ConfigValidationError {
   try {
     parseConfig(env);
@@ -31,6 +38,10 @@ describe('parseConfig', () => {
       testApiKey: undefined,
       sessionTtlMs: 7 * 24 * 60 * 60 * 1000,
       cookieSecure: false,
+      smtpUrl: 'smtp://localhost:1025',
+      mailFrom: 'TestTix <no-reply@testtix.test>',
+      webBaseUrl: 'http://localhost:5173',
+      emailVerificationTtlMs: 24 * 60 * 60 * 1000,
     });
   });
 
@@ -47,6 +58,10 @@ describe('parseConfig', () => {
       TEST_API_KEY: 'a-long-enough-test-key',
       SESSION_TTL_HOURS: '2',
       COOKIE_SECURE: 'false',
+      SMTP_URL: 'smtps://user:pass@mail.example.com:465',
+      MAIL_FROM: 'Shop <shop@example.com>',
+      WEB_BASE_URL: 'https://shop.example.com/',
+      EMAIL_VERIFICATION_TTL_HOURS: '48',
     });
     expect(config).toEqual({
       nodeEnv: 'production',
@@ -60,6 +75,10 @@ describe('parseConfig', () => {
       testApiKey: 'a-long-enough-test-key',
       sessionTtlMs: 2 * 60 * 60 * 1000,
       cookieSecure: false,
+      smtpUrl: 'smtps://user:pass@mail.example.com:465',
+      mailFrom: 'Shop <shop@example.com>',
+      webBaseUrl: 'https://shop.example.com',
+      emailVerificationTtlMs: 48 * 60 * 60 * 1000,
     });
   });
 
@@ -87,10 +106,16 @@ describe('parseConfig', () => {
   it.each([
     [{ NODE_ENV: 'development' }, false],
     [{ NODE_ENV: 'test' }, false],
-    [{ NODE_ENV: 'production', DATABASE_URL: 'postgres://db/app', REDIS_URL: 'redis://r' }, true],
+    [{ NODE_ENV: 'production', ...PRODUCTION_URLS }, true],
     [{ NODE_ENV: 'development', COOKIE_SECURE: 'true' }, true],
   ])('derives cookieSecure from %j', (env, expected) => {
     expect(parseConfig(env).cookieSecure).toBe(expected);
+  });
+
+  it.each(['0', '721', '1.5'])('rejects EMAIL_VERIFICATION_TTL_HOURS=%s', (value) => {
+    expect(parseError({ EMAIL_VERIFICATION_TTL_HOURS: value }).issues[0]?.path).toEqual([
+      'EMAIL_VERIFICATION_TTL_HOURS',
+    ]);
   });
 
   it.each(['0', '8761', '1.5'])('rejects SESSION_TTL_HOURS=%s', (value) => {
@@ -138,17 +163,21 @@ describe('parseConfig', () => {
     ['DATABASE_URL', 'mysql://localhost:3306/app'],
     ['DATABASE_URL', 'not a url'],
     ['REDIS_URL', 'http://localhost:6379'],
+    ['SMTP_URL', 'http://localhost:1025'],
+    ['WEB_BASE_URL', 'ftp://shop.example.com'],
   ])('rejects %s=%s', (key, value) => {
     const error = parseError({ [key]: value });
     expect(error.issues).toHaveLength(1);
     expect(error.issues[0]?.path).toEqual([key]);
   });
 
-  it('requires DATABASE_URL and REDIS_URL in production', () => {
+  it('requires the connection URLs and WEB_BASE_URL in production', () => {
     const error = parseError({ NODE_ENV: 'production' });
     expect(error.issues.map((issue) => issue.path.join('.'))).toEqual([
       'DATABASE_URL',
       'REDIS_URL',
+      'SMTP_URL',
+      'WEB_BASE_URL',
     ]);
     expect(error.issues[0]?.message).toBe('Required when NODE_ENV is production');
   });

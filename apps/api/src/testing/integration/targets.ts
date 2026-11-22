@@ -29,6 +29,17 @@ export function checkTestRedisUrl(value: string): string {
   return value;
 }
 
+/** Mailpit only needs a well-formed URL: tests never delete its messages, they search by recipient. */
+export function checkTestSmtpUrl(value: string): string {
+  parseUrl('TEST_SMTP_URL', value, ['smtp:', 'smtps:']);
+  return value;
+}
+
+export function checkTestMailpitUrl(value: string): string {
+  parseUrl('TEST_MAILPIT_URL', value, ['http:', 'https:']);
+  return value.replace(/\/+$/, '');
+}
+
 function parseUrl(name: string, value: string, protocols: readonly string[]): URL {
   let url: URL;
   try {

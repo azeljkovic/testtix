@@ -3,6 +3,7 @@ import {
   LoginRequestSchema,
   RegisterRequestSchema,
   RoleSchema,
+  VerifyEmailRequestSchema,
 } from '@testtix/shared';
 import { createZodDto } from 'nestjs-zod';
 import { z } from 'zod';
@@ -59,5 +60,6 @@ export function toAuthSession(user: User, expiresAt: Date): AuthSession {
 
 export class RegisterRequestDto extends createZodDto(RegisterRequestSchema) {}
 export class LoginRequestDto extends createZodDto(LoginRequestSchema) {}
+export class VerifyEmailRequestDto extends createZodDto(VerifyEmailRequestSchema) {}
 export class AuthSessionDto extends createZodDto(AuthSessionSchema) {}
 export class CsrfTokenDto extends createZodDto(CsrfTokenSchema) {}

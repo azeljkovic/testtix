@@ -22,7 +22,14 @@
     "test:integration": {
       "dependsOn": ["^build", "generate"],
       "cache": false,
-      "passThroughEnv": ["TEST_DATABASE_URL", "TEST_REDIS_URL", "DOCKER_*", "TESTCONTAINERS_*"]
+      "passThroughEnv": [
+        "TEST_DATABASE_URL",
+        "TEST_REDIS_URL",
+        "TEST_SMTP_URL",
+        "TEST_MAILPIT_URL",
+        "DOCKER_*",
+        "TESTCONTAINERS_*"
+      ]
     },
     "openapi": {
       "dependsOn": ["build"],

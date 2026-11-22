@@ -16,6 +16,9 @@ export const PROBLEM_TYPES = {
   INVALID_CREDENTIALS: 'urn:testtix:problem:invalid-credentials',
   EMAIL_ALREADY_REGISTERED: 'urn:testtix:problem:email-already-registered',
   CSRF_TOKEN_INVALID: 'urn:testtix:problem:csrf-token-invalid',
+  VERIFICATION_TOKEN_INVALID: 'urn:testtix:problem:verification-token-invalid',
+  VERIFICATION_TOKEN_EXPIRED: 'urn:testtix:problem:verification-token-expired',
+  EMAIL_ALREADY_VERIFIED: 'urn:testtix:problem:email-already-verified',
 } as const satisfies Record<string, `urn:testtix:problem:${string}`>;
 
 export type ErrorCode = keyof typeof PROBLEM_TYPES;

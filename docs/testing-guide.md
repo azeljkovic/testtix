@@ -55,25 +55,30 @@ Branch on `type`, never on `title` or `detail`. App-specific types end in an err
 
 Problem types so far:
 
-| `type`                                         | Status | When                                                                                                                                                                   |
-| ---------------------------------------------- | ------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `about:blank`                                  | any    | Unknown route (404), malformed JSON (400), not logged in or session expired (401), missing or wrong `X-Test-Key` (401), logged in without the required role (403), 5xx |
-| `urn:testtix:problem:validation-error`         | 400    | Body, query or path parameters fail validation                                                                                                                         |
-| `urn:testtix:problem:invalid-credentials`      | 401    | Login with a wrong email or password                                                                                                                                   |
-| `urn:testtix:problem:csrf-token-invalid`       | 403    | A POST, PUT, PATCH or DELETE without a valid `X-CSRF-Token` header (see [CSRF](#csrf-tokens))                                                                          |
-| `urn:testtix:problem:email-already-registered` | 409    | Registering an email that already has an account (`errors[0].path` is `email`)                                                                                         |
+| `type`                                           | Status | When                                                                                                                                                                   |
+| ------------------------------------------------ | ------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `about:blank`                                    | any    | Unknown route (404), malformed JSON (400), not logged in or session expired (401), missing or wrong `X-Test-Key` (401), logged in without the required role (403), 5xx |
+| `urn:testtix:problem:validation-error`           | 400    | Body, query or path parameters fail validation                                                                                                                         |
+| `urn:testtix:problem:invalid-credentials`        | 401    | Login with a wrong email or password                                                                                                                                   |
+| `urn:testtix:problem:csrf-token-invalid`         | 403    | A POST, PUT, PATCH or DELETE without a valid `X-CSRF-Token` header (see [CSRF](#csrf-tokens))                                                                          |
+| `urn:testtix:problem:email-already-registered`   | 409    | Registering an email that already has an account (`errors[0].path` is `email`)                                                                                         |
+| `urn:testtix:problem:verification-token-invalid` | 400    | [Verifying an email](#email-verification) with an unknown or malformed token, or one replaced by a newer email                                                         |
+| `urn:testtix:problem:verification-token-expired` | 400    | Verifying an email with an unused link past its expiry                                                                                                                 |
+| `urn:testtix:problem:email-already-verified`     | 409    | Asking for a new verification email when the address is already verified                                                                                               |
 
 ## Accounts and sessions
 
 Accounts log in with email and password. A login session is a cookie; there are no bearer tokens.
 
-| Endpoint              | Auth    | What it does                                                                                     |
-| --------------------- | ------- | ------------------------------------------------------------------------------------------------ |
-| `GET /auth/csrf`      | none    | Sets the CSRF cookie and returns its token: `{ "csrfToken": "…" }`                               |
-| `POST /auth/register` | CSRF    | `{ email, password, name }` → 201, creates a customer (email unverified) and logs it in          |
-| `POST /auth/login`    | CSRF    | `{ email, password }` → 200, logs in                                                             |
-| `POST /auth/logout`   | CSRF    | 204. Ends the session and clears the cookie. Also 204 without a session, so it is safe to repeat |
-| `GET /auth/me`        | session | 200 with the user and session, 401 without a valid session                                       |
+| Endpoint                         | Auth           | What it does                                                                                                                                  |
+| -------------------------------- | -------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
+| `GET /auth/csrf`                 | none           | Sets the CSRF cookie and returns its token: `{ "csrfToken": "…" }`                                                                            |
+| `POST /auth/register`            | CSRF           | `{ email, password, name }` → 201, creates a customer (email unverified), sends it a [verification email](#email-verification) and logs it in |
+| `POST /auth/login`               | CSRF           | `{ email, password }` → 200, logs in                                                                                                          |
+| `POST /auth/logout`              | CSRF           | 204. Ends the session and clears the cookie. Also 204 without a session, so it is safe to repeat                                              |
+| `GET /auth/me`                   | session        | 200 with the user and session, 401 without a valid session                                                                                    |
+| `POST /auth/verify-email`        | CSRF           | `{ token }` → 204, verifies the email address of the token's account (see [Email verification](#email-verification))                          |
+| `POST /auth/verify-email/resend` | session + CSRF | 204, emails the logged-in user a new verification link                                                                                        |
 
 Register, login and `me` answer with the user and the session expiry:
 
@@ -125,6 +130,46 @@ curl -s -b "$jar" -c "$jar" -X POST http://localhost:3000/auth/logout -H "X-CSRF
 ```
 
 For API-based test setup, [`POST /__test/sessions`](#logging-in-through-the-test-api) skips all of this and returns a ready session.
+
+## Email
+
+The API sends email over SMTP (`SMTP_URL`). Locally that is [Mailpit](https://mailpit.axllent.org), which catches every message: read them in the inbox at <http://localhost:8025>, or through Mailpit's API from tests.
+
+- Every email has an HTML and a plain-text part, `From` is `MAIL_FROM` (default `TestTix <no-reply@testtix.test>`), and links point at the web app (`WEB_BASE_URL`, default `http://localhost:5173`).
+- The `Date` header follows the [server clock](#the-server-clock), so an email sent while the clock is frozen carries the frozen time.
+- Email is sent while the request is handled: when the request returns, Mailpit has the message. Still poll instead of reading once, since email that comes from background jobs (order confirmation, tickets, from M4) arrives later.
+
+```sh
+# The newest verification email to an address (needs jq)
+curl -s 'http://localhost:8025/api/v1/search?query=to:"ada@example.com" subject:"Verify your email address"' \
+  | jq -r '.messages[0].ID' \
+  | xargs -I{} curl -s http://localhost:8025/api/v1/message/{} | jq -r .Text
+```
+
+Mailpit's search matches substrings and returns the newest message first. Use a unique recipient per test (Mailpit is shared, and old messages stay until it drops them at 1000), and check the exact address and subject in the result.
+
+### Email verification
+
+Registering sends **Verify your email address** with a link to `<WEB_BASE_URL>/verify-email?token=<token>`. The token is 43 URL-safe characters; the server stores only its SHA-256 hash. Unverified users can log in, but can't check out (from M4).
+
+1. Read the email and take the `token` query parameter from the link.
+2. `POST /auth/verify-email` with `{ "token": "…" }` → 204. It needs a CSRF token but no session, so the link works in any browser. `GET /auth/me` now shows `"emailVerified": true`.
+
+Rules worth testing:
+
+| Situation                                                        | Result                                                                                                                                           |
+| ---------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
+| The same link used again                                         | 204, no change: the first verification time stays                                                                                                |
+| An unused link after `EMAIL_VERIFICATION_TTL_HOURS` (default 24) | 400 `verification-token-expired`. To test it, freeze the clock, register, then `advanceBy` 86 400 000 ms. One millisecond earlier it still works |
+| A link from an older email, after a resend                       | 400 `verification-token-invalid`: only the newest link works                                                                                     |
+| An unknown or malformed token                                    | 400 `verification-token-invalid`; an empty token is a 400 `validation-error`                                                                     |
+| `POST /auth/verify-email/resend` without a session               | 401                                                                                                                                              |
+| Resend for an already verified user                              | 409 `email-already-verified`, nothing is sent                                                                                                    |
+| The SMTP server is down                                          | Registration still succeeds (the account exists, unverified, and the failure is logged); resend answers 503                                      |
+
+A resend issues a new link with a fresh expiry and emails it. There is no resend limit yet (rate limits come in M5).
+
+Users from [`POST /__test/sessions`](#logging-in-through-the-test-api) with `"emailVerified": false` get no email; call the resend endpoint with their session to get one. [Seeded](#seeded-accounts) `unverified@testtix.test` has no link either until it asks for one.
 
 ## Health and readiness
 

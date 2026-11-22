@@ -5,6 +5,11 @@ export const LOG_LEVELS = ['fatal', 'error', 'warn', 'info', 'debug', 'trace', '
 /** Defaults match `docker/compose.yml`, so `pnpm infra:up && pnpm dev` works without a `.env`. */
 export const DEV_DATABASE_URL = 'postgresql://testtix:testtix@localhost:5432/testtix';
 export const DEV_REDIS_URL = 'redis://localhost:6379';
+/** Mailpit's SMTP port from `docker/compose.yml`. */
+export const DEV_SMTP_URL = 'smtp://localhost:1025';
+/** The web dev server (`WEB_PORT` in `.env.example`). */
+export const DEV_WEB_BASE_URL = 'http://localhost:5173';
+export const DEFAULT_MAIL_FROM = 'TestTix <no-reply@testtix.test>';
 
 /**
  * Environment variables read by the API.
@@ -36,11 +41,24 @@ export const envSchema = z
     COOKIE_SECURE: z
       .stringbool({ truthy: ['true'], falsy: ['false'], error: 'Must be true or false' })
       .optional(),
+    // Where outgoing email goes: smtp://[user:password@]host:port, or smtps:// for implicit TLS.
+    SMTP_URL: z
+      .url({ protocol: /^smtps?$/, error: 'Must be an smtp:// or smtps:// URL' })
+      .optional(),
+    // `From` header of every email: an address, optionally with a display name.
+    MAIL_FROM: z.string().min(3).max(200).default(DEFAULT_MAIL_FROM),
+    // Public URL of the web app. Links in emails (verification, tickets) point here.
+    WEB_BASE_URL: z
+      .url({ protocol: /^https?$/, error: 'Must be an http:// or https:// URL' })
+      .optional(),
+    // How long an email verification link works.
+    EMAIL_VERIFICATION_TTL_HOURS: z.coerce.number().int().min(1).max(720).default(24),
   })
   .superRefine((env, ctx) => {
-    // Dev defaults carry well-known credentials, so production must set connection URLs explicitly.
+    // Dev defaults carry well-known credentials or point at localhost, so production must set
+    // connection URLs and the public web URL explicitly.
     if (env.NODE_ENV !== 'production') return;
-    for (const key of ['DATABASE_URL', 'REDIS_URL'] as const) {
+    for (const key of ['DATABASE_URL', 'REDIS_URL', 'SMTP_URL', 'WEB_BASE_URL'] as const) {
       if (env[key] === undefined) {
         ctx.addIssue({
           code: 'custom',
@@ -62,6 +80,10 @@ export const envSchema = z
     testApiKey: env.TEST_API_KEY,
     sessionTtlMs: env.SESSION_TTL_HOURS * 60 * 60 * 1000,
     cookieSecure: env.COOKIE_SECURE ?? env.NODE_ENV === 'production',
+    smtpUrl: env.SMTP_URL ?? DEV_SMTP_URL,
+    mailFrom: env.MAIL_FROM,
+    webBaseUrl: (env.WEB_BASE_URL ?? DEV_WEB_BASE_URL).replace(/\/+$/, ''),
+    emailVerificationTtlMs: env.EMAIL_VERIFICATION_TTL_HOURS * 60 * 60 * 1000,
   }));
 
 export type AppConfig = Readonly<z.output<typeof envSchema>>;

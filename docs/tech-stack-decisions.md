@@ -186,6 +186,17 @@ Order lifecycle: `PENDING_PAYMENT → PROCESSING → CONFIRMED | FAILED | EXPIRE
 - **E-ticket [Decided]:** QR code in the email body **and** a PDF ticket attachment (one page per ticket, with QR, event, seat and order ID). QR via `qrcode`, PDF via `pdfkit`.
 - Templates use Handlebars, with plain-text and HTML parts.
 
+**Implementation notes (C1.5)**
+
+- `MailModule` (`apps/api/src/mail/`): `MailService.send({ to, template, data })` renders and sends over SMTP with Nodemailer (`SMTP_URL`, a new connection per message, 10 s timeouts). Templates are typed: `MailTemplateData` lists each email and its variables.
+- Templates live in `apps/api/templates/mail/` (`<name>.html.hbs`, `<name>.text.hbs`, plus a `layout.*.hbs` for each part), outside `src` so `src/` and `dist/` find them at the same relative path. They compile at startup in strict mode (a missing variable throws), HTML parts escape values and text parts don't. Prettier ignores `*.hbs`: its Handlebars formatter reflows the text parts.
+- Sending is synchronous for now: the request waits for SMTP to accept the message. Order and ticket emails move to BullMQ jobs in M4. The `Date` header comes from `ClockService`.
+- Verification links: one `email_verification_tokens` row per user (upserted, so a resend replaces the link and concurrent resends can't collide). Like sessions, the link carries 32 random bytes and the table stores their SHA-256. A used link stays valid as a no-op (people click twice) until replaced. Expiry is `EMAIL_VERIFICATION_TTL_HOURS` (default 24) on the server clock.
+- Registration writes the user and the token in one transaction, then sends the email. A send failure is logged and doesn't fail the registration (the user can resend); a failed resend answers 503.
+- `POST /auth/verify-email` is public (the link may open in another browser) but needs CSRF. `POST /auth/verify-email/resend` needs a session, so it can't be used to send email to arbitrary addresses. Per-user resend limits come with C5.3.
+- New problem codes: `VERIFICATION_TOKEN_INVALID`, `VERIFICATION_TOKEN_EXPIRED` (both 400, so the web app can offer a resend for the second), `EMAIL_ALREADY_VERIFIED` (409).
+- Integration tests: the harness starts Mailpit with Testcontainers (or uses `TEST_SMTP_URL` + `TEST_MAILPIT_URL`), and `waitForEmail(to, subject)` polls Mailpit's API. Mailpit is never emptied, so tests use unique recipients.
+
 ### 3.8 Auth and roles
 
 | Area          | Decision                                                                                                           | Status   |

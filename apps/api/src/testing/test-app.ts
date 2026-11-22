@@ -1,12 +1,14 @@
 import type { Type } from '@nestjs/common';
 import type { NestFastifyApplication } from '@nestjs/platform-fastify';
 import { Test, type TestingModule } from '@nestjs/testing';
+import { createTransport } from 'nodemailer';
 
 import { AppModule } from '../app.module.js';
 import { configureApp, createHttpAdapter } from '../app.setup.js';
 import { type AppConfig, parseConfig } from '../config/config.schema.js';
 import { PrismaService } from '../infra/prisma.service.js';
 import { REDIS } from '../infra/redis.module.js';
+import { MAIL_TRANSPORT } from '../mail/mail.service.js';
 
 /** Simulates a dependency: resolve for "up", reject or never settle for "down". */
 export type FakeProbe = () => Promise<unknown>;
@@ -24,7 +26,7 @@ export interface TestAppOptions {
 }
 
 /**
- * Boots the real app (same modules and `configureApp` as `main.ts`) with Postgres and Redis
+ * Boots the real app (same modules and `configureApp` as `main.ts`) with Postgres, Redis and SMTP
  * replaced by fakes, for tests that don't need real infrastructure. Tests against real services
  * use `createIntegrationApp()` (`src/testing/integration/`).
  */
@@ -41,6 +43,9 @@ export async function createTestApp(options: TestAppOptions = {}): Promise<NestF
     .useValue({ $queryRaw: database })
     .overrideProvider(REDIS)
     .useValue({ ping: redis, status: 'end', disconnect: () => undefined })
+    // Renders messages to JSON instead of connecting to an SMTP server.
+    .overrideProvider(MAIL_TRANSPORT)
+    .useValue(createTransport({ jsonTransport: true }))
     .compile();
   return startTestingApp(moduleRef);
 }

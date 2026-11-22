@@ -4,16 +4,19 @@ import { CSRF_COOKIE, CSRF_HEADER, SESSION_COOKIE } from '@testtix/shared';
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import { ZodResponse } from 'nestjs-zod';
 
+import type { User } from '../generated/prisma/client.js';
 import { AuthCookies } from './auth-cookies.js';
-import { CurrentSession, Public } from './auth.decorators.js';
+import { CurrentSession, CurrentUser, Public } from './auth.decorators.js';
 import {
   AuthSessionDto,
   CsrfTokenDto,
   LoginRequestDto,
   RegisterRequestDto,
   toAuthSession,
+  VerifyEmailRequestDto,
 } from './auth.schemas.js';
 import { AuthService, type LoggedIn } from './auth.service.js';
+import { EmailVerificationService, VERIFY_EMAIL_PATH } from './email-verification.service.js';
 import { type AuthenticatedSession, SessionService } from './session.service.js';
 
 // Every response carries per-user data or fresh tokens, so each one is `Cache-Control: no-store`.
@@ -26,6 +29,7 @@ export class AuthController {
     private readonly auth: AuthService,
     private readonly cookies: AuthCookies,
     private readonly sessions: SessionService,
+    private readonly verification: EmailVerificationService,
   ) {}
 
   @Get('csrf')
@@ -46,7 +50,7 @@ export class AuthController {
   @Header('Cache-Control', 'no-store')
   @ApiOperation({
     summary: 'Create a customer account and log in',
-    description: `The new account has the CUSTOMER role and an unverified email address. ${SETS_SESSION} 409 \`email-already-registered\` when the email is taken.`,
+    description: `The new account has the CUSTOMER role and an unverified email address, and is sent a verification email (if sending fails, the account is still created; ask for a new email with \`POST /auth/verify-email/resend\`). ${SETS_SESSION} 409 \`email-already-registered\` when the email is taken.`,
   })
   @ZodResponse({ status: 201, type: AuthSessionDto, description: 'Registered and logged in.' })
   async register(
@@ -86,6 +90,30 @@ export class AuthController {
   async logout(@Req() request: FastifyRequest, @Res({ passthrough: true }) reply: FastifyReply) {
     await this.auth.logout(this.cookies.sessionToken(request));
     this.cookies.clearSession(reply);
+  }
+
+  @Post('verify-email')
+  @Public()
+  @HttpCode(204)
+  @ApiOperation({
+    summary: 'Verify an email address',
+    description: `Takes the token from the link in the verification email (\`${VERIFY_EMAIL_PATH}?token=…\` on the web app) and marks its account verified. Needs no session: the link may be opened in another browser. Using a link again succeeds without changes. 400 \`verification-token-invalid\` for an unknown token or one replaced by a newer email; 400 \`verification-token-expired\` for an unused link past its expiry.`,
+  })
+  @ApiNoContentResponse({ description: 'The email address is verified.' })
+  async verifyEmail(@Body() body: VerifyEmailRequestDto): Promise<void> {
+    await this.verification.verify(body.token);
+  }
+
+  @Post('verify-email/resend')
+  @HttpCode(204)
+  @ApiOperation({
+    summary: 'Send a new verification email',
+    description:
+      "Emails the logged-in user a new verification link. Links from earlier emails stop working. 409 `email-already-verified` when the user's address is already verified; 503 when the email can't be sent.",
+  })
+  @ApiNoContentResponse({ description: 'The email has been sent.' })
+  async resendVerification(@CurrentUser() user: User): Promise<void> {
+    await this.verification.resend(user);
   }
 
   @Get('me')

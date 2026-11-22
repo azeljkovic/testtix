@@ -6,6 +6,8 @@ import {
   PASSWORD_MAX_LENGTH,
   PASSWORD_MIN_LENGTH,
   RegisterRequestSchema,
+  VERIFICATION_TOKEN_MAX_LENGTH,
+  VerifyEmailRequestSchema,
 } from './auth.js';
 
 describe('EmailSchema', () => {
@@ -70,5 +72,20 @@ describe('LoginRequestSchema', () => {
     expect(LoginRequestSchema.safeParse({ email: 'a@example.com', password: '' }).success).toBe(
       false,
     );
+  });
+});
+
+describe('VerifyEmailRequestSchema', () => {
+  it('accepts a token', () => {
+    expect(VerifyEmailRequestSchema.parse({ token: 'abc' })).toEqual({ token: 'abc' });
+  });
+
+  it.each([
+    ['an empty token', { token: '' }],
+    ['an over-long token', { token: 'x'.repeat(VERIFICATION_TOKEN_MAX_LENGTH + 1) }],
+    ['a missing token', {}],
+    ['unknown fields', { token: 'abc', userId: 'x' }],
+  ])('rejects %s', (_label, body) => {
+    expect(VerifyEmailRequestSchema.safeParse(body).success).toBe(false);
   });
 });
