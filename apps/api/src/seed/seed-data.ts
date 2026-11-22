@@ -12,6 +12,7 @@ import {
   type VenueSpec,
 } from './fixtures.js';
 import { generateEventSpecs } from './generated-events.js';
+import { rowLabel } from '../venues/venue-layout.js';
 import { seedId } from './seed-id.js';
 
 /** Every row the baseline seed inserts, table by table, in insertion order. */
@@ -207,13 +208,4 @@ export function dayAt(now: Date, [days, time]: DayTime): Date {
   const dayStart = now.getTime() - (((now.getTime() % DAY_MS) + DAY_MS) % DAY_MS);
   const [hours = 0, minutes = 0] = time.split(':').map(Number);
   return new Date(dayStart + days * DAY_MS + (hours * 60 + minutes) * MINUTE_MS);
-}
-
-/** 0 → "A", 25 → "Z", 26 → "AA", 27 → "AB". */
-export function rowLabel(index: number): string {
-  let label = '';
-  for (let n = index; n >= 0; n = Math.floor(n / 26) - 1) {
-    label = String.fromCharCode(65 + (n % 26)) + label;
-  }
-  return label;
 }

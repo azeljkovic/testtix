@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 
 import { EVENT_SPECS, SEED_FIXTURES, USER_SPECS, VENUE_SPECS } from './fixtures.js';
 import { GENERATED_EVENT_COUNT } from './generated-events.js';
-import { buildSeedData, rowLabel } from './seed-data.js';
+import { buildSeedData } from './seed-data.js';
 
 const NOW = new Date('2026-11-21T10:15:00.000Z');
 const data = buildSeedData(NOW);
@@ -141,22 +141,6 @@ describe('buildSeedData', () => {
     for (const event of data.events) {
       expect(new Date(event.endsAt).getTime()).toBeGreaterThan(new Date(event.startsAt).getTime());
     }
-  });
-});
-
-describe('rowLabel', () => {
-  it.each([
-    [0, 'A'],
-    [9, 'J'],
-    [25, 'Z'],
-    [26, 'AA'],
-    [27, 'AB'],
-    [51, 'AZ'],
-    [52, 'BA'],
-    [701, 'ZZ'],
-    [702, 'AAA'],
-  ])('labels row %i as %s', (index, label) => {
-    expect(rowLabel(index)).toBe(label);
   });
 });
 

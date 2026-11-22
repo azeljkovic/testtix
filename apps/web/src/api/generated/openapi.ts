@@ -204,6 +204,184 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/admin/venues": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List venues
+         * @description Sorted by name, then ID.
+         */
+        get: operations["AdminVenuesController_list"];
+        put?: never;
+        /**
+         * Create a venue and its layout
+         * @description Seated sections are generated as a grid (`rows` × `seatsPerRow`); GA sections get a capacity. The response lists every seat with its ID, for releasing individual seats. 409 `slug-taken` when a given `slug` is taken.
+         */
+        post: operations["AdminVenuesController_create"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/venues/{venueId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get a venue with every seat */
+        get: operations["AdminVenuesController_get"];
+        put?: never;
+        post?: never;
+        /**
+         * Delete a venue
+         * @description 409 `venue-in-use` while any event (of any status) uses the venue.
+         */
+        delete: operations["AdminVenuesController_delete"];
+        options?: never;
+        head?: never;
+        /**
+         * Update a venue
+         * @description Changes only the fields sent. `sections` replaces the whole layout with new section and seat IDs: 409 `layout-locked` once tickets have been released for any event at the venue. 409 `slug-taken` when the new `slug` is taken.
+         */
+        patch: operations["AdminVenuesController_update"];
+        trace?: never;
+    };
+    "/admin/events": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List events
+         * @description Every status, drafts included. Sorted by start time, then ID.
+         */
+        get: operations["AdminEventsController_list"];
+        put?: never;
+        /**
+         * Create an event
+         * @description Creates a DRAFT event, not yet in the catalogue. Release a batch, then publish it. `startsAt` must be in the future (server clock), `endsAt` after it and `salesOpenAt` before it. 409 `slug-taken` when a given `slug` is taken.
+         */
+        post: operations["AdminEventsController_create"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/events/{eventId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get an event with its batches and ticket counts */
+        get: operations["AdminEventsController_get"];
+        put?: never;
+        post?: never;
+        /**
+         * Delete a draft event
+         * @description Deletes the event with its batches and tickets. 409 `event-status-conflict` unless it is a DRAFT; 409 `event-has-sales` when it has orders, or tickets sold or held.
+         */
+        delete: operations["AdminEventsController_delete"];
+        options?: never;
+        head?: never;
+        /**
+         * Update an event
+         * @description Changes only the fields sent; the time rules apply to the result, and a new `startsAt` must be in the future. 409 `layout-locked` when changing `venueId` after a batch was released, `event-status-conflict` for a cancelled event, `slug-taken` when the new `slug` is taken.
+         */
+        patch: operations["AdminEventsController_update"];
+        trace?: never;
+    };
+    "/admin/events/{eventId}/publish": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Publish an event
+         * @description DRAFT → PUBLISHED: the event appears in the catalogue. 409 `event-has-no-batches` without a released batch, `event-already-started` once `startsAt` has passed, `event-status-conflict` unless it is a DRAFT.
+         */
+        post: operations["AdminEventsController_publish"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/events/{eventId}/unpublish": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Unpublish an event
+         * @description PUBLISHED → DRAFT: the event leaves the catalogue. 409 `event-has-sales` while tickets are sold or held (cancel it instead), `event-status-conflict` unless it is PUBLISHED.
+         */
+        post: operations["AdminEventsController_unpublish"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/events/{eventId}/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Cancel an event
+         * @description DRAFT or PUBLISHED → CANCELLED. Final: a cancelled event cannot be changed, published or get new batches. 409 `event-status-conflict` when it is already cancelled.
+         */
+        post: operations["AdminEventsController_cancel"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/events/{eventId}/batches": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Release a ticket batch
+         * @description Puts seats and GA places on sale at one price, now or at `releasesAt`. Seated inventory is released by section (`seatedSectionIds`: the seats no earlier batch released) or by seat (`seatIds`); GA inventory by quantity per section (`gaSections`). Unreleased inventory is not sellable. 400 `validation-error` for sections or seats not at the event’s venue; 409 `inventory-already-released`, `ga-capacity-exceeded`, or `event-status-conflict` for a cancelled event.
+         */
+        post: operations["AdminEventsController_releaseBatch"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/__test/clock": {
         parameters: {
             query?: never;
@@ -410,6 +588,319 @@ export interface components {
                 };
             };
         };
+        AdminVenueSummary_Output: {
+            /** Format: uuid */
+            id: string;
+            slug: string;
+            name: string;
+            address: string;
+            city: string;
+            /** @description IANA time zone */
+            timezone: string;
+            /** @description Tickets across all sections */
+            capacity: number;
+            /** @description True once tickets have been released for an event at the venue: the layout (`sections`) can no longer change */
+            layoutLocked: boolean;
+            /** Format: date-time */
+            createdAt: string;
+            sections: components["schemas"]["AdminSection_Output"][];
+        };
+        AdminSection_Output: {
+            /** Format: uuid */
+            id: string;
+            name: string;
+            type: components["schemas"]["SectionType_Output"];
+            /** @description Tickets the section holds: its number of seats (SEATED) or its capacity (GA) */
+            capacity: number;
+        };
+        /** @enum {string} */
+        SectionType_Output: "SEATED" | "GA";
+        AdminVenuePage_Output: {
+            items: components["schemas"]["AdminVenueSummary_Output"][];
+            /** @description The requested page */
+            page: number;
+            /** @description The requested page size */
+            pageSize: number;
+            /** @description Items in the whole list, across all pages */
+            total: number;
+            /** @description Number of pages; 0 when the list is empty */
+            totalPages: number;
+        };
+        CreateVenueRequestDto: {
+            name: string;
+            /** @description Defaults to one made from the name (with `-2`, `-3`, … added if taken). 409 `slug-taken` when a given slug is taken. */
+            slug?: string;
+            address: string;
+            city: string;
+            /** @description IANA time zone, e.g. `America/New_York`. Stored in its canonical spelling. Event times are shown in this zone. */
+            timezone: string;
+            /** @description The layout, in display order. Section names are unique within the venue (ignoring case). */
+            sections: ({
+                /** @enum {string} */
+                type: "SEATED";
+                name: string;
+                /** @description Rows are lettered from the front: A, B, …, Z, AA, AB, … */
+                rows: number;
+                /** @description Seats are numbered from 1 in each row */
+                seatsPerRow: number;
+            } | {
+                /** @enum {string} */
+                type: "GA";
+                name: string;
+                /** @description How many people the section holds */
+                capacity: number;
+            })[];
+        };
+        AdminVenueSection_Output: {
+            /** Format: uuid */
+            id: string;
+            name: string;
+            type: components["schemas"]["SectionType_Output"];
+            /** @description Tickets the section holds: its number of seats (SEATED) or its capacity (GA) */
+            capacity: number;
+            /** @description SEATED: every seat, front row first, then by number. GA: empty. */
+            seats: components["schemas"]["AdminSeat_Output"][];
+        };
+        AdminSeat_Output: {
+            /** Format: uuid */
+            id: string;
+            /** @description Row label, lettered from the front: A, B, …, Z, AA, … */
+            row: string;
+            /** @description Seat number in the row, from 1 */
+            number: number;
+        };
+        AdminVenue_Output: {
+            /** Format: uuid */
+            id: string;
+            slug: string;
+            name: string;
+            address: string;
+            city: string;
+            /** @description IANA time zone */
+            timezone: string;
+            /** @description Tickets across all sections */
+            capacity: number;
+            /** @description True once tickets have been released for an event at the venue: the layout (`sections`) can no longer change */
+            layoutLocked: boolean;
+            /** Format: date-time */
+            createdAt: string;
+            sections: components["schemas"]["AdminVenueSection_Output"][];
+        };
+        /** @description Only the fields sent change. `sections` replaces the whole layout (new section and seat IDs), and only while no tickets have been released for any event at the venue (else 409 `layout-locked`). */
+        UpdateVenueRequestDto: {
+            name?: string;
+            /** @description Defaults to one made from the name (with `-2`, `-3`, … added if taken). 409 `slug-taken` when a given slug is taken. */
+            slug?: string;
+            address?: string;
+            city?: string;
+            /** @description IANA time zone, e.g. `America/New_York`. Stored in its canonical spelling. Event times are shown in this zone. */
+            timezone?: string;
+            /** @description The layout, in display order. Section names are unique within the venue (ignoring case). */
+            sections?: ({
+                /** @enum {string} */
+                type: "SEATED";
+                name: string;
+                /** @description Rows are lettered from the front: A, B, …, Z, AA, AB, … */
+                rows: number;
+                /** @description Seats are numbered from 1 in each row */
+                seatsPerRow: number;
+            } | {
+                /** @enum {string} */
+                type: "GA";
+                name: string;
+                /** @description How many people the section holds */
+                capacity: number;
+            })[];
+        };
+        AdminEventSummary_Output: {
+            /** Format: uuid */
+            id: string;
+            slug: string;
+            title: string;
+            performer: string;
+            category: components["schemas"]["EventCategory_Output"];
+            status: components["schemas"]["EventStatus_Output"];
+            venue: components["schemas"]["AdminEventVenue_Output"];
+            /** Format: date-time */
+            startsAt: string;
+            /** Format: date-time */
+            endsAt: string;
+            /** Format: date-time */
+            salesOpenAt: string;
+            /** @description Across all batches */
+            tickets: components["schemas"]["TicketCounts_Output"];
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            updatedAt: string;
+        };
+        /** @enum {string} */
+        EventCategory_Output: "CONCERT" | "TALK" | "MEETUP";
+        /** @enum {string} */
+        EventStatus_Output: "DRAFT" | "PUBLISHED" | "CANCELLED";
+        AdminEventVenue_Output: {
+            /** Format: uuid */
+            id: string;
+            slug: string;
+            name: string;
+            city: string;
+            timezone: string;
+        };
+        /** @description Released tickets by state, at the server clock */
+        TicketCounts_Output: {
+            /** @description Released tickets (inventory units) */
+            total: number;
+            /** @description Neither sold nor held. Units whose hold has expired count here. */
+            available: number;
+            /** @description In an unexpired hold */
+            held: number;
+            sold: number;
+        };
+        AdminEventPage_Output: {
+            items: components["schemas"]["AdminEventSummary_Output"][];
+            /** @description The requested page */
+            page: number;
+            /** @description The requested page size */
+            pageSize: number;
+            /** @description Items in the whole list, across all pages */
+            total: number;
+            /** @description Number of pages; 0 when the list is empty */
+            totalPages: number;
+        };
+        /** @enum {string} */
+        EventCategory: "CONCERT" | "TALK" | "MEETUP";
+        CreateEventRequestDto: {
+            title: string;
+            /** @description Defaults to one made from the title (with `-2`, `-3`, … added if taken). 409 `slug-taken` when a given slug is taken. */
+            slug?: string;
+            /** @description Artist, speaker or host. Searched together with the title. */
+            performer: string;
+            description: string;
+            category: components["schemas"]["EventCategory"];
+            /** Format: uuid */
+            venueId: string;
+            /**
+             * Format: date-time
+             * @description ISO 8601 with `Z` or an offset. Must be in the future (server clock) when set.
+             */
+            startsAt: string;
+            /**
+             * Format: date-time
+             * @description After `startsAt`
+             */
+            endsAt: string;
+            /**
+             * Format: date-time
+             * @description When tickets go on sale. Before `startsAt`. Each batch can also release later.
+             */
+            salesOpenAt: string;
+            /** @description How long a seat hold lasts, in seconds (60–3600, default 600) */
+            holdDurationSec?: number;
+            /** @description Most tickets in one hold or order (1–20, default 6) */
+            maxTicketsPerOrder?: number;
+        };
+        AdminBatch_Output: {
+            /** Format: uuid */
+            id: string;
+            name: string;
+            /** @description Price of each ticket, in US cents */
+            priceCents: number;
+            /** Format: date-time */
+            releasesAt: string;
+            /** @description `releasesAt` has passed (server clock). Unreleased tickets cannot be sold. */
+            released: boolean;
+            /** Format: date-time */
+            createdAt: string;
+            tickets: components["schemas"]["TicketCounts_Output"];
+            /** @description Where the tickets are, in the venue’s section order */
+            sections: {
+                /** Format: uuid */
+                sectionId: string;
+                name: string;
+                type: components["schemas"]["SectionType_Output"];
+                tickets: components["schemas"]["TicketCounts_Output"];
+            }[];
+        };
+        AdminEvent_Output: {
+            /** Format: uuid */
+            id: string;
+            slug: string;
+            title: string;
+            performer: string;
+            category: components["schemas"]["EventCategory_Output"];
+            status: components["schemas"]["EventStatus_Output"];
+            venue: components["schemas"]["AdminEventVenue_Output"];
+            /** Format: date-time */
+            startsAt: string;
+            /** Format: date-time */
+            endsAt: string;
+            /** Format: date-time */
+            salesOpenAt: string;
+            /** @description Across all batches */
+            tickets: components["schemas"]["TicketCounts_Output"];
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            updatedAt: string;
+            description: string;
+            holdDurationSec: number;
+            maxTicketsPerOrder: number;
+            /** @description By release time, then ID */
+            batches: components["schemas"]["AdminBatch_Output"][];
+        };
+        /** @description Only the fields sent change; the time rules apply to the result. `venueId` can only change while the event has no batches (else 409 `layout-locked`). Cancelled events cannot be changed. */
+        UpdateEventRequestDto: {
+            title?: string;
+            /** @description Defaults to one made from the title (with `-2`, `-3`, … added if taken). 409 `slug-taken` when a given slug is taken. */
+            slug?: string;
+            /** @description Artist, speaker or host. Searched together with the title. */
+            performer?: string;
+            description?: string;
+            category?: components["schemas"]["EventCategory"];
+            /** Format: uuid */
+            venueId?: string;
+            /**
+             * Format: date-time
+             * @description ISO 8601 with `Z` or an offset. Must be in the future (server clock) when set.
+             */
+            startsAt?: string;
+            /**
+             * Format: date-time
+             * @description After `startsAt`
+             */
+            endsAt?: string;
+            /**
+             * Format: date-time
+             * @description When tickets go on sale. Before `startsAt`. Each batch can also release later.
+             */
+            salesOpenAt?: string;
+            /** @description How long a seat hold lasts, in seconds (60–3600, default 600) */
+            holdDurationSec?: number;
+            /** @description Most tickets in one hold or order (1–20, default 6) */
+            maxTicketsPerOrder?: number;
+        };
+        ReleaseBatchRequestDto: {
+            /** @description e.g. "Early bird" or "Balcony" */
+            name: string;
+            /** @description Price of every ticket in the batch, in US cents */
+            priceCents: number;
+            /**
+             * Format: date-time
+             * @description When the tickets go on sale (ISO 8601). Defaults to now (server clock). Tickets sell only once both this time and the event’s `salesOpenAt` have passed.
+             */
+            releasesAt?: string;
+            /** @description Seated sections whose seats are all released, except seats an earlier batch of this event already released */
+            seatedSectionIds?: string[];
+            /** @description Individual seats to release. 409 `inventory-already-released` if any was released before. */
+            seatIds?: string[];
+            /** @description General-admission places to release, per GA section */
+            gaSections?: {
+                /** Format: uuid */
+                sectionId: string;
+                /** @description Places to release; at most the capacity not yet released */
+                quantity: number;
+            }[];
+        };
         ClockStateDto_Output: {
             /**
              * Format: date-time
@@ -493,12 +984,6 @@ export interface components {
                 capacity: number | null;
             }[];
         };
-        /** @enum {string} */
-        SectionType_Output: "SEATED" | "GA";
-        /** @enum {string} */
-        EventCategory_Output: "CONCERT" | "TALK" | "MEETUP";
-        /** @enum {string} */
-        EventStatus_Output: "DRAFT" | "PUBLISHED" | "CANCELLED";
         ScenarioEvent_Output: {
             /** Format: uuid */
             id: string;
@@ -596,6 +1081,8 @@ export interface components {
             /** @description A ready-made `Cookie` request header with both cookies, for clients without a cookie jar */
             cookie: string;
         };
+        /** @enum {string} */
+        EventStatus: "DRAFT" | "PUBLISHED" | "CANCELLED";
         ProblemDetails: {
             /** @description URI that identifies the problem type: `about:blank` or `urn:testtix:problem:<error-code>` */
             type: string;
@@ -997,6 +1484,744 @@ export interface operations {
                 };
                 content: {
                     "text/plain; version=0.0.4; charset=utf-8": string;
+                };
+            };
+            /** @description Error. The body is an RFC 9457 problem details object. */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    AdminVenuesController_list: {
+        parameters: {
+            query?: {
+                /** @description Page number, from 1. A page past the last one returns no items. */
+                page?: number;
+                /** @description Items per page, 1–100 */
+                pageSize?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description One page of venues. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminVenuePage_Output"];
+                };
+            };
+            /** @description No session cookie, or the session has expired or was ended. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Logged in, but without the ADMIN role (or the CSRF token is missing or wrong). */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Error. The body is an RFC 9457 problem details object. */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    AdminVenuesController_create: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description The CSRF token from `GET /auth/csrf`. Must equal the `testtix_csrf` cookie, which must be sent too. */
+                "X-CSRF-Token": string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateVenueRequestDto"];
+            };
+        };
+        responses: {
+            /** @description The new venue. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminVenue_Output"];
+                };
+            };
+            /** @description No session cookie, or the session has expired or was ended. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Logged in, but without the ADMIN role (or the CSRF token is missing or wrong). */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Error. The body is an RFC 9457 problem details object. */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    AdminVenuesController_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                venueId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The venue. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminVenue_Output"];
+                };
+            };
+            /** @description No session cookie, or the session has expired or was ended. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Logged in, but without the ADMIN role (or the CSRF token is missing or wrong). */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Error. The body is an RFC 9457 problem details object. */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    AdminVenuesController_delete: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description The CSRF token from `GET /auth/csrf`. Must equal the `testtix_csrf` cookie, which must be sent too. */
+                "X-CSRF-Token": string;
+            };
+            path: {
+                venueId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Deleted, with its sections and seats. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description No session cookie, or the session has expired or was ended. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Logged in, but without the ADMIN role (or the CSRF token is missing or wrong). */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Error. The body is an RFC 9457 problem details object. */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    AdminVenuesController_update: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description The CSRF token from `GET /auth/csrf`. Must equal the `testtix_csrf` cookie, which must be sent too. */
+                "X-CSRF-Token": string;
+            };
+            path: {
+                venueId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateVenueRequestDto"];
+            };
+        };
+        responses: {
+            /** @description The updated venue. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminVenue_Output"];
+                };
+            };
+            /** @description No session cookie, or the session has expired or was ended. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Logged in, but without the ADMIN role (or the CSRF token is missing or wrong). */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Error. The body is an RFC 9457 problem details object. */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    AdminEventsController_list: {
+        parameters: {
+            query?: {
+                /** @description Page number, from 1. A page past the last one returns no items. */
+                page?: number;
+                /** @description Items per page, 1–100 */
+                pageSize?: number;
+                /** @description Only events with this status */
+                status?: components["schemas"]["EventStatus"];
+                /** @description Only events at this venue */
+                venueId?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description One page of events. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminEventPage_Output"];
+                };
+            };
+            /** @description No session cookie, or the session has expired or was ended. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Logged in, but without the ADMIN role (or the CSRF token is missing or wrong). */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Error. The body is an RFC 9457 problem details object. */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    AdminEventsController_create: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description The CSRF token from `GET /auth/csrf`. Must equal the `testtix_csrf` cookie, which must be sent too. */
+                "X-CSRF-Token": string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateEventRequestDto"];
+            };
+        };
+        responses: {
+            /** @description The new event. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminEvent_Output"];
+                };
+            };
+            /** @description No session cookie, or the session has expired or was ended. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Logged in, but without the ADMIN role (or the CSRF token is missing or wrong). */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Error. The body is an RFC 9457 problem details object. */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    AdminEventsController_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                eventId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The event. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminEvent_Output"];
+                };
+            };
+            /** @description No session cookie, or the session has expired or was ended. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Logged in, but without the ADMIN role (or the CSRF token is missing or wrong). */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Error. The body is an RFC 9457 problem details object. */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    AdminEventsController_delete: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description The CSRF token from `GET /auth/csrf`. Must equal the `testtix_csrf` cookie, which must be sent too. */
+                "X-CSRF-Token": string;
+            };
+            path: {
+                eventId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Deleted. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description No session cookie, or the session has expired or was ended. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Logged in, but without the ADMIN role (or the CSRF token is missing or wrong). */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Error. The body is an RFC 9457 problem details object. */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    AdminEventsController_update: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description The CSRF token from `GET /auth/csrf`. Must equal the `testtix_csrf` cookie, which must be sent too. */
+                "X-CSRF-Token": string;
+            };
+            path: {
+                eventId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateEventRequestDto"];
+            };
+        };
+        responses: {
+            /** @description The event after the change. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminEvent_Output"];
+                };
+            };
+            /** @description No session cookie, or the session has expired or was ended. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Logged in, but without the ADMIN role (or the CSRF token is missing or wrong). */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Error. The body is an RFC 9457 problem details object. */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    AdminEventsController_publish: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description The CSRF token from `GET /auth/csrf`. Must equal the `testtix_csrf` cookie, which must be sent too. */
+                "X-CSRF-Token": string;
+            };
+            path: {
+                eventId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The event after the change. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminEvent_Output"];
+                };
+            };
+            /** @description No session cookie, or the session has expired or was ended. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Logged in, but without the ADMIN role (or the CSRF token is missing or wrong). */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Error. The body is an RFC 9457 problem details object. */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    AdminEventsController_unpublish: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description The CSRF token from `GET /auth/csrf`. Must equal the `testtix_csrf` cookie, which must be sent too. */
+                "X-CSRF-Token": string;
+            };
+            path: {
+                eventId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The event after the change. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminEvent_Output"];
+                };
+            };
+            /** @description No session cookie, or the session has expired or was ended. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Logged in, but without the ADMIN role (or the CSRF token is missing or wrong). */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Error. The body is an RFC 9457 problem details object. */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    AdminEventsController_cancel: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description The CSRF token from `GET /auth/csrf`. Must equal the `testtix_csrf` cookie, which must be sent too. */
+                "X-CSRF-Token": string;
+            };
+            path: {
+                eventId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The event after the change. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminEvent_Output"];
+                };
+            };
+            /** @description No session cookie, or the session has expired or was ended. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Logged in, but without the ADMIN role (or the CSRF token is missing or wrong). */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Error. The body is an RFC 9457 problem details object. */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    AdminEventsController_releaseBatch: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description The CSRF token from `GET /auth/csrf`. Must equal the `testtix_csrf` cookie, which must be sent too. */
+                "X-CSRF-Token": string;
+            };
+            path: {
+                eventId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReleaseBatchRequestDto"];
+            };
+        };
+        responses: {
+            /** @description The new batch. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminBatch_Output"];
+                };
+            };
+            /** @description No session cookie, or the session has expired or was ended. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Logged in, but without the ADMIN role (or the CSRF token is missing or wrong). */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
                 };
             };
             /** @description Error. The body is an RFC 9457 problem details object. */

@@ -59,3 +59,25 @@ export function setCookieOf(res: Response, name: string): SetCookie | undefined 
   }
   return { value: decodeURIComponent(pair.slice(name.length + 1)), attributes };
 }
+
+/** Requests as the user of a test session: its cookies on every request, its CSRF token on writes. */
+export interface SessionClient {
+  get: (path: string) => request.Test;
+  post: (path: string, body?: object) => request.Test;
+  patch: (path: string, body: object) => request.Test;
+  delete: (path: string) => request.Test;
+}
+
+export function sessionClient(app: NestFastifyApplication, session: TestSession): SessionClient {
+  const server = app.getHttpServer();
+  const write = (test: request.Test, body?: object) => {
+    const sent = test.set('Cookie', session.cookie).set(CSRF_HEADER, session.csrfToken);
+    return body === undefined ? sent : sent.send(body);
+  };
+  return {
+    get: (path) => request(server).get(path).set('Cookie', session.cookie),
+    post: (path, body) => write(request(server).post(path), body),
+    patch: (path, body) => write(request(server).patch(path), body),
+    delete: (path) => write(request(server).delete(path)),
+  };
+}

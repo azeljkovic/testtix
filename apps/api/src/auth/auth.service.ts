@@ -3,7 +3,8 @@ import type { LoginRequest, RegisterRequest } from '@testtix/shared';
 
 import { ClockService } from '../clock/clock.service.js';
 import { ProblemException } from '../errors/problem.exception.js';
-import { Prisma, type User } from '../generated/prisma/client.js';
+import type { User } from '../generated/prisma/client.js';
+import { isUniqueViolation } from '../infra/prisma-errors.js';
 import { PrismaService } from '../infra/prisma.service.js';
 import { uuidv7 } from '../infra/uuid.js';
 import { EmailVerificationService } from './email-verification.service.js';
@@ -96,8 +97,4 @@ export function emailAlreadyRegistered(): ProblemException {
     'An account with this email address already exists.',
     [{ path: 'email', code: 'email_taken', message: 'An account with this email already exists' }],
   );
-}
-
-export function isUniqueViolation(err: unknown): boolean {
-  return err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002';
 }

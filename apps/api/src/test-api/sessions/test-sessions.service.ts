@@ -5,7 +5,8 @@ import { CSRF_COOKIE, SESSION_COOKIE } from '@testtix/shared';
 
 import { newCsrfToken } from '../../auth/auth-cookies.js';
 import { toAuthUser } from '../../auth/auth.schemas.js';
-import { emailAlreadyRegistered, isUniqueViolation } from '../../auth/auth.service.js';
+import { emailAlreadyRegistered } from '../../auth/auth.service.js';
+import { isUniqueViolation } from '../../infra/prisma-errors.js';
 import { PasswordService } from '../../auth/password.service.js';
 import { SessionService } from '../../auth/session.service.js';
 import { ClockService } from '../../clock/clock.service.js';

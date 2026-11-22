@@ -31,6 +31,7 @@ How to test TestTix from the outside: what the API promises, and the hooks it gi
 - Base URL locally: `http://localhost:3000` (`pnpm --filter @testtix/api dev`).
 - OpenAPI 3 spec: `GET /openapi.json`. Swagger UI: `/docs`. Every operation documents its error response. The same spec is committed as `apps/api/openapi.json` and attached to every CI run as the `openapi-spec` artifact, so you can generate a client or contract checks without running the API.
 - JSON in, JSON out. Money is integer cents, currency USD.
+- Send `Content-Type: application/json` only with a body: a request that has the header but an empty body (e.g. `POST /admin/events/{id}/publish`) is a 400. `curl --json` sets the header only when it sends data.
 - Test-only endpoints live under `/__test/*` and are tagged `test` in the spec; see [Test mode](#test-mode).
 
 ## Request IDs
@@ -81,6 +82,15 @@ Problem types so far:
 | `urn:testtix:problem:verification-token-invalid` | 400    | [Verifying an email](#email-verification) with an unknown or malformed token, or one replaced by a newer email                                                         |
 | `urn:testtix:problem:verification-token-expired` | 400    | Verifying an email with an unused link past its expiry                                                                                                                 |
 | `urn:testtix:problem:email-already-verified`     | 409    | Asking for a new verification email when the address is already verified                                                                                               |
+| `urn:testtix:problem:slug-taken`                 | 409    | Creating or renaming a venue or event with a `slug` that is taken (`errors[0].path` is `slug`)                                                                         |
+| `urn:testtix:problem:venue-in-use`               | 409    | Deleting a venue that an event uses                                                                                                                                    |
+| `urn:testtix:problem:layout-locked`              | 409    | Replacing a venue's `sections`, or changing an event's `venueId`, after tickets were released                                                                          |
+| `urn:testtix:problem:event-status-conflict`      | 409    | An [event action](#event-lifecycle) its status doesn't allow, e.g. publishing a published event or changing a cancelled one                                            |
+| `urn:testtix:problem:event-has-no-batches`       | 409    | Publishing an event without a ticket batch                                                                                                                             |
+| `urn:testtix:problem:event-already-started`      | 409    | Publishing an event whose `startsAt` has passed                                                                                                                        |
+| `urn:testtix:problem:event-has-sales`            | 409    | Unpublishing or deleting an event with tickets sold or held (or, for deleting, with orders)                                                                            |
+| `urn:testtix:problem:inventory-already-released` | 409    | A batch lists a seat, or a whole section, that earlier batches already released (`errors` names each)                                                                  |
+| `urn:testtix:problem:ga-capacity-exceeded`       | 409    | A batch asks for more GA places than the section has left to release                                                                                                   |
 
 ## Accounts and sessions
 
@@ -146,6 +156,133 @@ curl -s -b "$jar" -c "$jar" -X POST http://localhost:3000/auth/logout -H "X-CSRF
 ```
 
 For API-based test setup, [`POST /__test/sessions`](#logging-in-through-the-test-api) skips all of this and returns a ready session.
+
+## Admin API
+
+Admins manage venues, events and ticket batches under `/admin/*`. This is also the **API-based data setup** path: a test creates exactly the venue, event and inventory it needs, with its own IDs, instead of sharing the [seed data](#seed-data). Every route needs a session with the `ADMIN` role (anonymous → 401, customer → 403) and, on writes, the [CSRF header](#csrf-tokens). The quickest admin session is [`POST /__test/sessions`](#logging-in-through-the-test-api) with `{"role":"ADMIN"}`; outside test mode, log in as an admin.
+
+| Endpoint                                 | What it does                                                                             |
+| ---------------------------------------- | ---------------------------------------------------------------------------------------- |
+| `GET /admin/venues`                      | Venues by name, then ID, [paginated](#pagination)                                        |
+| `POST /admin/venues`                     | 201. Creates a venue and generates its layout                                            |
+| `GET /admin/venues/{venueId}`            | The venue with every seat                                                                |
+| `PATCH /admin/venues/{venueId}`          | Changes the fields sent; `sections` replaces the layout                                  |
+| `DELETE /admin/venues/{venueId}`         | 204. Only while no event uses it (409 `venue-in-use`)                                    |
+| `GET /admin/events`                      | Events of every status (drafts too) by start time, then ID. Filters: `status`, `venueId` |
+| `POST /admin/events`                     | 201. Creates a `DRAFT` event                                                             |
+| `GET /admin/events/{eventId}`            | The event with its batches and ticket counts                                             |
+| `PATCH /admin/events/{eventId}`          | Changes the fields sent                                                                  |
+| `DELETE /admin/events/{eventId}`         | 204. Drafts only, without sales or orders                                                |
+| `POST /admin/events/{eventId}/publish`   | `DRAFT` → `PUBLISHED`                                                                    |
+| `POST /admin/events/{eventId}/unpublish` | `PUBLISHED` → `DRAFT`                                                                    |
+| `POST /admin/events/{eventId}/cancel`    | `DRAFT` or `PUBLISHED` → `CANCELLED`                                                     |
+| `POST /admin/events/{eventId}/batches`   | 201. Releases a ticket batch                                                             |
+
+IDs in paths are UUIDs: a malformed one is a 400 `validation-error`, an unknown one a 404. Unknown body fields are a 400 too.
+
+### Data setup walkthrough
+
+```sh
+session=$(curl -s -X POST http://localhost:3000/__test/sessions \
+  -H 'Content-Type: application/json' -d '{"role":"ADMIN"}')
+cookie=$(echo "$session" | jq -r .cookie); csrf=$(echo "$session" | jq -r .csrfToken)
+# --json sends a JSON body with its Content-Type; body-less calls (publish) must not send one
+admin() { curl -s -H "Cookie: $cookie" -H "X-CSRF-Token: $csrf" "$@"; }
+
+# 1. A venue with a seated section (rows A–C × 8) and a standing area
+venue=$(admin http://localhost:3000/admin/venues --json '{
+  "name": "My Test Hall", "address": "1 Test St", "city": "Port Ellis", "timezone": "America/New_York",
+  "sections": [
+    { "type": "SEATED", "name": "Stalls", "rows": 3, "seatsPerRow": 8 },
+    { "type": "GA", "name": "Standing", "capacity": 100 }
+  ]}')
+venueId=$(echo "$venue" | jq -r .id)
+stalls=$(echo "$venue" | jq -r '.sections[0].id'); standing=$(echo "$venue" | jq -r '.sections[1].id')
+
+# 2. A draft event (times must be in the future of the server clock)
+event=$(admin http://localhost:3000/admin/events --json "{
+  \"title\": \"My Test Gig\", \"performer\": \"The Testers\", \"description\": \"Made by a test.\",
+  \"category\": \"CONCERT\", \"venueId\": \"$venueId\",
+  \"startsAt\": \"2027-06-01T20:00:00Z\", \"endsAt\": \"2027-06-01T23:00:00Z\",
+  \"salesOpenAt\": \"2026-12-01T10:00:00Z\"}")
+eventId=$(echo "$event" | jq -r .id)
+
+# 3. Put the stalls on sale at $45.00 and 50 standing places at $25.00, then publish
+admin "http://localhost:3000/admin/events/$eventId/batches" \
+  --json "{\"name\": \"Stalls\", \"priceCents\": 4500, \"seatedSectionIds\": [\"$stalls\"]}"
+admin "http://localhost:3000/admin/events/$eventId/batches" \
+  --json "{\"name\": \"Standing\", \"priceCents\": 2500, \"gaSections\": [{\"sectionId\": \"$standing\", \"quantity\": 50}]}"
+admin -X POST "http://localhost:3000/admin/events/$eventId/publish"
+```
+
+The event is now in the public catalogue. Data created this way stays until the next [reset](#resetting-the-data).
+
+### Venues and layouts
+
+`POST /admin/venues` takes `name`, `address`, `city`, `timezone` (IANA, e.g. `Europe/Paris`; stored in its canonical spelling, so `europe/paris` becomes `Europe/Paris`), an optional `slug` and `sections`, in display order:
+
+- `{ "type": "SEATED", "name": "Stalls", "rows": 10, "seatsPerRow": 20 }` generates a grid of seats: rows lettered from the front (`A`…`Z`, then `AA`, `AB`, …), seats numbered from 1 in each row.
+- `{ "type": "GA", "name": "Floor", "capacity": 250 }` is a general-admission area without seats.
+
+Limits: 1–20 sections, 1–50 rows and 1–100 seats per row per seated section, GA capacity 1–5000, and at most 20 000 places per venue. Section names are unique within a venue, ignoring case. Names are 1–100 characters (sections 1–50), addresses 1–200.
+
+Responses list each section's `capacity` (its seats, or its GA capacity), the venue's total `capacity` and `layoutLocked`. `POST`, `GET` and `PATCH` on one venue also list every seat (`id`, `row`, `number`), which you need to release individual seats; the venue list leaves seats out.
+
+**The layout locks once tickets exist.** `PATCH` with `sections` replaces the whole layout (every section and seat gets a new ID), but only while no event at the venue has a released batch: after that it's a 409 `layout-locked` and nothing in the request is applied. Other fields can still change.
+
+### Events
+
+`POST /admin/events` takes `title` (1–200 characters), `performer` (1–200), `description` (1–5000), `category` (`CONCERT`, `TALK`, `MEETUP`), `venueId`, `startsAt`, `endsAt`, `salesOpenAt` (ISO 8601 date-times with `Z` or an offset), and optionally `slug`, `holdDurationSec` (60–3600, default 600) and `maxTicketsPerOrder` (1–20, default 6). Rules, checked against the [server clock](#the-server-clock):
+
+| Rule                               | Error (400 `validation-error`, `errors[].path`) |
+| ---------------------------------- | ----------------------------------------------- |
+| `startsAt` is in the future        | `startsAt`: "Start time must be in the future"  |
+| `endsAt` is after `startsAt`       | `endsAt`                                        |
+| `salesOpenAt` is before `startsAt` | `salesOpenAt`                                   |
+| The venue exists                   | `venueId`: "No venue with this ID"              |
+
+`PATCH` changes only the fields sent. The time rules apply to the result (sending only `endsAt` is checked against the stored `startsAt`), and the future rule only to a `startsAt` that is sent. `venueId` can change only while the event has no batch (409 `layout-locked`). Cancelled events can't change at all.
+
+**Slugs.** Without a `slug`, venues and events get one made from the name or title (`Midnight Echoes — Live!` → `midnight-echoes-live`); if it's taken, `-2`, `-3`, … is added. A `slug` you send is used as is (lower-case letters and digits separated by single hyphens, at most 100 characters) and is a 409 `slug-taken` if another venue (or event) has it.
+
+### Event lifecycle
+
+`DRAFT` ⇄ `PUBLISHED` (publish, unpublish); either can be cancelled, and `CANCELLED` is final.
+
+| Action      | Allowed from         | Also needs                                                                                         |
+| ----------- | -------------------- | -------------------------------------------------------------------------------------------------- |
+| `publish`   | `DRAFT`              | At least one batch (`event-has-no-batches`) and `startsAt` in the future (`event-already-started`) |
+| `unpublish` | `PUBLISHED`          | No ticket sold or in an unexpired hold (`event-has-sales`); cancel the event instead               |
+| `cancel`    | `DRAFT`, `PUBLISHED` | Nothing. Cancelled is final: no edits, batches, publishing or deleting                             |
+| `DELETE`    | `DRAFT`              | No ticket sold or held and no orders (`event-has-sales`). Removes its batches and tickets          |
+
+Any other combination is a 409 `event-status-conflict`. Each action answers 200 with the updated event. Changes to one event (edits, actions, batches) run one at a time, so concurrent requests can't publish an event while its last change is half applied.
+
+### Ticket batches
+
+A batch puts inventory on sale at one `priceCents` (0–1 000 000, i.e. up to $10 000; 0 is a free ticket). `POST /admin/events/{eventId}/batches` takes a `name` (1–100 characters), the price, an optional `releasesAt` and at least one of:
+
+| Field              | Releases                                                                                                  |
+| ------------------ | --------------------------------------------------------------------------------------------------------- |
+| `seatedSectionIds` | Every seat of these seated sections that no earlier batch of the event released                           |
+| `seatIds`          | These seats. A seat whose section is also in `seatedSectionIds` is a 400                                  |
+| `gaSections`       | `[{ "sectionId", "quantity" }]`: that many places of each GA section, up to the capacity not yet released |
+
+Each released seat or GA place becomes one ticket (inventory unit), `AVAILABLE`, at the batch price. The answer (201) is the batch with its ticket counts per section.
+
+- **Scheduled release.** `releasesAt` defaults to now. A later time keeps the batch's tickets off sale until then (`released: false`); tickets sell only once both `releasesAt` and the event's `salesOpenAt` have passed. Move the [clock](#the-server-clock) to test it.
+- **400 `validation-error`** when a section or seat isn't at the event's venue (`not_found`), or a section has the wrong type (`invalid_section_type`). `errors[].path` points at the item, e.g. `seatIds.3` or `gaSections.0.sectionId`. Duplicates in a list are a 400 too.
+- **409 `inventory-already-released`** when a listed seat was released before, or every seat of a listed section was. **409 `ga-capacity-exceeded`** when a quantity is more than the section has left (`"Only 5 places left to release in Floor"`). Nothing is created when any item fails.
+- Releases for one event run one at a time: concurrent requests never release a seat twice or exceed a GA capacity. One wins, the others get the 409.
+- Batches can't be edited or deleted. Releasing to a cancelled event is a 409 `event-status-conflict`; once a batch exists, the venue layout and the event's venue are locked.
+
+### Ticket counts
+
+Events (`tickets`), batches and batch sections report `{ total, available, held, sold }` at the server clock. `held` counts tickets in an unexpired hold; once a hold's time passes its tickets count as `available` again, even before the background sweeper releases them.
+
+### Pagination
+
+List endpoints take `page` (from 1, default 1) and `pageSize` (1–100, default 20) and answer `{ items, page, pageSize, total, totalPages }`. A page past the last one has no items but the same `total`; an empty list has `totalPages: 0`. Every list has a stable order with `id` as the last tiebreaker, so paging never skips or repeats an item while the data doesn't change.
 
 ## Email
 
