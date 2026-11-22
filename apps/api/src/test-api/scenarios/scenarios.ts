@@ -6,11 +6,16 @@
  *
  * Event dates are relative to the start of the clock's UTC day (`D`), like the baseline seed.
  */
+import { HOLD_DURATION_SEC, MAX_TICKETS_PER_ORDER } from '@testtix/shared';
+
+import type { Prisma } from '../../generated/prisma/client.js';
 import type { DayTime } from '../../seed/fixtures.js';
 import type { CatalogueEventSpec } from '../../seed/seed-data.js';
 import {
   addBuyer,
+  addCustomer,
   buildScenarioCatalogue,
+  holdUnits,
   requireId,
   type ScenarioContext,
   type ScenarioRows,
@@ -19,8 +24,14 @@ import {
 } from './scenario-data.js';
 import type {
   BasicCatalogueResult,
+  GaLastTicketResult,
+  GaMeetupResult,
+  HoldAboutToExpireRequest,
+  HoldAboutToExpireScenario,
   OneSeatLeftResult,
   ScenarioEvent,
+  ScenarioGaSection,
+  ScenarioSeat,
   ScenarioVenue,
   SoldOutEventResult,
 } from './scenario.schemas.js';
@@ -137,7 +148,10 @@ export function soldOutEvent(ctx: ScenarioContext): Scenario<SoldOutEventResult>
   };
 }
 
-/** A published, on-sale seated event with 8 seats, all sold but the last one (row B, seat 4). */
+/**
+ * A published, on-sale seated event with 8 seats, all sold but the last one (row B, seat 4).
+ * Holding `seat` succeeds once; holding any of `soldSeats` is a 409.
+ */
 export function oneSeatLeft(ctx: ScenarioContext): Scenario<OneSeatLeftResult> {
   const rows = buildScenarioCatalogue(
     ctx,
@@ -156,8 +170,141 @@ export function oneSeatLeft(ctx: ScenarioContext): Scenario<OneSeatLeftResult> {
   );
   const eventId = onlyEventId(rows);
   const last = rows.inventoryUnits.at(-1);
-  const seat = rows.seats.find((s) => s.id === last?.seatId);
-  if (last === undefined || seat === undefined) throw new Error('one-seat-left: no last seat');
+  if (last === undefined) throw new Error('one-seat-left: no last seat');
+  const sold = rows.inventoryUnits.slice(0, -1);
+  const buyer = addBuyer(rows, ctx);
+  const orderIds = sellUnits(rows, ctx, sold, buyer.id);
+  return {
+    rows,
+    result: {
+      venue: describeVenue(rows),
+      event: describeEvent(rows, eventId),
+      buyer: { id: buyer.id, email: buyer.email },
+      orderIds,
+      seat: describeSeat(rows, last),
+      soldSeats: sold.map((unit) => describeSeat(rows, unit)),
+    },
+  };
+}
+
+/**
+ * A published, on-sale seated event (8 seats, $45.00) where a new customer holds row A seats 1
+ * and 2 in a hold that expires `expiresInSec` from now. The hold was made as if by
+ * `POST /events/{eventId}/holds`: its `createdAt` is the event's hold duration (600 s) before
+ * `expiresAt`. The service logs the holder in.
+ */
+export function holdAboutToExpire(
+  ctx: ScenarioContext,
+  { expiresInSec }: HoldAboutToExpireRequest,
+): Scenario<HoldAboutToExpireScenario> {
+  const rows = buildScenarioCatalogue(
+    ctx,
+    scenarioVenue(ctx, [{ name: 'Seats', type: 'SEATED', rows: 2, seatsPerRow: 4 }]),
+    [
+      scenarioEvent(ctx, {
+        slug: 'hold-about-to-expire',
+        title: 'Hold About To Expire',
+        description: 'Test scenario hold-about-to-expire: two seats are held, briefly.',
+        category: 'CONCERT',
+        starts: [14, '23:00'],
+        durationMin: 120,
+        batches: [{ name: 'General', priceCents: 4500, sections: ['Seats'], releases: ON_SALE }],
+      }),
+    ],
+  );
+  const eventId = onlyEventId(rows);
+  const units = rows.inventoryUnits.slice(0, 2);
+  const holder = addCustomer(rows, ctx, 'holder');
+  const expiresAt = new Date(ctx.now.getTime() + expiresInSec * 1000);
+  const createdAt = new Date(expiresAt.getTime() - HOLD_DURATION_SEC.default * 1000);
+  const holdId = holdUnits(rows, ctx, units, { userId: holder.id, createdAt, expiresAt });
+  return {
+    rows,
+    result: {
+      venue: describeVenue(rows),
+      event: describeEvent(rows, eventId),
+      holderId: holder.id,
+      hold: {
+        id: holdId,
+        createdAt: createdAt.toISOString(),
+        expiresAt: expiresAt.toISOString(),
+        totalCents: units.reduce((sum, unit) => sum + unit.priceCents, 0),
+        seats: units.map((unit) => describeSeat(rows, unit)),
+      },
+    },
+  };
+}
+
+/**
+ * A published, on-sale general-admission meetup with two GA sections: Floor (40 places: an early
+ * bird batch of 20 at $10.00 and a regular batch of 20 at $15.00) and Balcony (10 at $20.00).
+ */
+export function gaMeetup(ctx: ScenarioContext): Scenario<GaMeetupResult> {
+  const rows = buildScenarioCatalogue(
+    ctx,
+    scenarioVenue(ctx, [
+      { name: 'Floor', type: 'GA', capacity: 40 },
+      { name: 'Balcony', type: 'GA', capacity: 10 },
+    ]),
+    [
+      scenarioEvent(ctx, {
+        slug: 'ga-meetup',
+        title: 'GA Meetup',
+        description: 'Test scenario ga-meetup: general admission only, in two sections.',
+        category: 'MEETUP',
+        starts: [10, '23:00'],
+        durationMin: 180,
+        batches: [
+          { name: 'Early bird', priceCents: 1000, sections: ['Floor'], releases: ON_SALE },
+          { name: 'Balcony', priceCents: 2000, sections: ['Balcony'], releases: ON_SALE },
+        ],
+      }),
+    ],
+  );
+  const eventId = onlyEventId(rows);
+  const floor = requireSection(rows, 'Floor');
+  const balcony = requireSection(rows, 'Balcony');
+  // The seed builder releases a whole section per batch; move the second half of the Floor into
+  // a "Regular" batch, as an admin releasing 20 places, then 20 more at a higher price, would.
+  const earlyBird = rows.ticketBatches.find((batch) => batch.name === 'Early bird');
+  if (earlyBird === undefined) throw new Error('ga-meetup: no early bird batch');
+  const regularId = ctx.newId();
+  rows.ticketBatches.push({ ...earlyBird, id: regularId, name: 'Regular', priceCents: 1500 });
+  for (const unit of rows.inventoryUnits.filter((u) => u.sectionId === floor).slice(20)) {
+    unit.batchId = regularId;
+    unit.priceCents = 1500;
+  }
+  return {
+    rows,
+    result: {
+      venue: describeVenue(rows),
+      event: describeEvent(rows, eventId),
+      sections: {
+        floor: describeGaSection(rows, floor),
+        balcony: describeGaSection(rows, balcony),
+      },
+    },
+  };
+}
+
+/** A published, on-sale GA meetup whose Floor (10 places, $8.00) has one place left. */
+export function gaLastTicket(ctx: ScenarioContext): Scenario<GaLastTicketResult> {
+  const rows = buildScenarioCatalogue(
+    ctx,
+    scenarioVenue(ctx, [{ name: 'Floor', type: 'GA', capacity: 10 }]),
+    [
+      scenarioEvent(ctx, {
+        slug: 'ga-last-ticket',
+        title: 'GA Last Ticket',
+        description: 'Test scenario ga-last-ticket: one general-admission place is left.',
+        category: 'MEETUP',
+        starts: [10, '23:00'],
+        durationMin: 120,
+        batches: [{ name: 'Entry', priceCents: 800, sections: ['Floor'], releases: ON_SALE }],
+      }),
+    ],
+  );
+  const eventId = onlyEventId(rows);
   const buyer = addBuyer(rows, ctx);
   const orderIds = sellUnits(rows, ctx, rows.inventoryUnits.slice(0, -1), buyer.id);
   return {
@@ -167,15 +314,49 @@ export function oneSeatLeft(ctx: ScenarioContext): Scenario<OneSeatLeftResult> {
       event: describeEvent(rows, eventId),
       buyer: { id: buyer.id, email: buyer.email },
       orderIds,
-      seat: {
-        id: requireId(seat),
-        sectionId: seat.sectionId,
-        row: seat.row,
-        number: seat.number,
-        inventoryUnitId: requireId(last),
-        priceCents: last.priceCents,
-      },
+      section: describeGaSection(rows, requireSection(rows, 'Floor')),
     },
+  };
+}
+
+function requireSection(rows: ScenarioRows, name: string): string {
+  const section = rows.sections.find((s) => s.name === name);
+  if (section === undefined) throw new Error(`Scenario without section ${name}`);
+  return requireId(section);
+}
+
+function describeSeat(rows: ScenarioRows, unit: Prisma.InventoryUnitCreateManyInput): ScenarioSeat {
+  const seat = rows.seats.find((s) => s.id === unit.seatId);
+  if (seat === undefined) throw new Error('Scenario unit without a seat');
+  return {
+    id: requireId(seat),
+    sectionId: seat.sectionId,
+    row: seat.row,
+    number: seat.number,
+    inventoryUnitId: requireId(unit),
+    priceCents: unit.priceCents,
+  };
+}
+
+/** A GA section with the places a hold could take (every scenario batch is released). */
+function describeGaSection(rows: ScenarioRows, sectionId: string): ScenarioGaSection {
+  const section = rows.sections.find((s) => s.id === sectionId);
+  if (section?.capacity === undefined || section.capacity === null)
+    throw new Error(`Scenario without GA section ${sectionId}`);
+  const available = rows.inventoryUnits.filter(
+    (unit) => unit.sectionId === sectionId && unit.status === 'AVAILABLE',
+  );
+  const byPrice = new Map<number, number>();
+  for (const unit of available)
+    byPrice.set(unit.priceCents, (byPrice.get(unit.priceCents) ?? 0) + 1);
+  return {
+    id: sectionId,
+    name: section.name,
+    capacity: section.capacity,
+    available: available.length,
+    prices: [...byPrice]
+      .sort(([a], [b]) => a - b)
+      .map(([priceCents, count]) => ({ priceCents, available: count })),
   };
 }
 
@@ -215,6 +396,13 @@ function describeEvent(rows: ScenarioRows, eventId: string | undefined): Scenari
     venueId: event.venueId,
     startsAt: new Date(event.startsAt).toISOString(),
     salesOpenAt: new Date(event.salesOpenAt).toISOString(),
-    tickets: { total: units.length, available: count('AVAILABLE'), sold: count('SOLD') },
+    holdDurationSec: event.holdDurationSec ?? HOLD_DURATION_SEC.default,
+    maxTicketsPerOrder: event.maxTicketsPerOrder ?? MAX_TICKETS_PER_ORDER.default,
+    tickets: {
+      total: units.length,
+      available: count('AVAILABLE'),
+      held: count('HELD'),
+      sold: count('SOLD'),
+    },
   };
 }

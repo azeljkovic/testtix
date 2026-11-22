@@ -9,6 +9,7 @@ import type { AppConfig } from './config/config.schema.js';
 import { ProblemDetailsFilter } from './errors/problem-details.filter.js';
 import { EventsModule } from './events/events.module.js';
 import { HealthModule } from './health/health.module.js';
+import { HoldsModule } from './holds/holds.module.js';
 import { DatabaseModule } from './infra/database.module.js';
 import { RedisModule } from './infra/redis.module.js';
 import { LoggingModule } from './logging/logging.module.js';
@@ -33,6 +34,7 @@ export class AppModule {
         MetricsModule,
         VenuesModule,
         EventsModule,
+        HoldsModule,
         // Not even loaded outside test mode, so `/__test/*` is a plain 404 there.
         ...(config.testMode ? [TestApiModule] : []),
       ],

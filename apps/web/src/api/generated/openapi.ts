@@ -442,6 +442,86 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/events/{eventId}/seats": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get an event’s seat map
+         * @description Every section of the venue in order: seated sections with each seat’s status and price, GA sections with the places a hold could take. Statuses are at the server clock; a seat whose hold expired is `AVAILABLE`. 404 unless the event is published.
+         */
+        get: operations["HoldsController_seatMap"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/events/{eventId}/holds": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Hold seats and GA places
+         * @description All or nothing: either every requested ticket is held until `expiresAt` (now + the event’s hold duration), or nothing is. Replaces your previous hold for this event (a failed request keeps it). 400 `validation-error` for more tickets than the event’s `maxTicketsPerOrder`, or seats and sections that aren’t at the event’s venue. 404 unless the event is published. 409 `event-not-on-sale` before sales open or once the event has started; 409 `tickets-unavailable` when a seat is sold, held or not on sale, or a GA section has fewer places left than requested.
+         */
+        post: operations["HoldsController_create"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/holds/current": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get your active hold
+         * @description Your unexpired hold for `eventId`, or without it your most recent unexpired hold. 404 when there is none.
+         */
+        get: operations["HoldsController_current"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/holds/{holdId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Release a hold
+         * @description Its tickets become available at once. Works on expired holds too. 404 for unknown holds and other users’ holds.
+         */
+        delete: operations["HoldsController_release"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/__test/clock": {
         parameters: {
             query?: never;
@@ -537,9 +617,69 @@ export interface paths {
         put?: never;
         /**
          * Seed scenario: one seat left
-         * @description A published seated event on sale with 8 seats, all sold except row B seat 4. Test mode only. Adds a new venue, events (and orders) with fresh IDs on every call; the slugs and titles end in a random suffix, so calls never collide and existing data is not touched. Open even when the server has a test API key, since it only adds data.
+         * @description A published seated event on sale with 8 seats, all sold except row B seat 4 (`seat`; the others are `soldSeats`). Test mode only. Adds a new venue, events (and orders) with fresh IDs on every call; the slugs and titles end in a random suffix, so calls never collide and existing data is not touched. Open even when the server has a test API key, since it only adds data.
          */
         post: operations["TestScenariosController_oneSeatLeft"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/__test/seed/hold-about-to-expire": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Seed scenario: a hold about to expire
+         * @description A published seated event on sale (8 seats) where a new customer holds row A seats 1 and 2 until `expiresInSec` from now (default 60). The response logs the holder in, like `POST /__test/sessions`. Test mode only. Adds a new venue, events (and orders) with fresh IDs on every call; the slugs and titles end in a random suffix, so calls never collide and existing data is not touched. Open even when the server has a test API key, since it only adds data.
+         */
+        post: operations["TestScenariosController_holdAboutToExpire"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/__test/seed/ga-meetup": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Seed scenario: a general-admission meetup
+         * @description A published GA-only meetup on sale with two sections: Floor (20 places at $10.00, then 20 at $15.00) and Balcony (10 at $20.00). Test mode only. Adds a new venue, events (and orders) with fresh IDs on every call; the slugs and titles end in a random suffix, so calls never collide and existing data is not touched. Open even when the server has a test API key, since it only adds data.
+         */
+        post: operations["TestScenariosController_gaMeetup"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/__test/seed/ga-last-ticket": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Seed scenario: one GA place left
+         * @description A published GA meetup on sale whose Floor (10 places, $8.00) has one place left; the other nine are sold through confirmed orders of a new buyer. Test mode only. Adds a new venue, events (and orders) with fresh IDs on every call; the slugs and titles end in a random suffix, so calls never collide and existing data is not touched. Open even when the server has a test API key, since it only adds data.
+         */
+        post: operations["TestScenariosController_gaLastTicket"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1074,6 +1214,119 @@ export interface components {
             /** @description Sections with tickets for this event, in the venue’s order */
             sections: components["schemas"]["CatalogueSection_Output"][];
         };
+        SeatMapSeatedSection_Output: {
+            /** Format: uuid */
+            id: string;
+            name: string;
+            /** @enum {string} */
+            type: "SEATED";
+            /** @description Seats that are `AVAILABLE` */
+            available: number;
+            /** @description Front row first */
+            rows: components["schemas"]["SeatMapRow_Output"][];
+        };
+        SeatMapRow_Output: {
+            /** @description Row label, lettered from the front: A, B, …, Z, AA, … */
+            label: string;
+            /** @description 0-based position of the row, front first */
+            index: number;
+            /** @description Every seat of the row, by number */
+            seats: components["schemas"]["SeatMapSeat_Output"][];
+        };
+        SeatMapSeat_Output: {
+            /**
+             * Format: uuid
+             * @description Seat ID, as sent in a hold request
+             */
+            id: string;
+            /** @description Seat number in the row, from 1 */
+            number: number;
+            status: components["schemas"]["SeatStatus_Output"];
+            /** @description Price in US cents; null when no batch of the event includes the seat */
+            priceCents: number | null;
+        };
+        /** @enum {string} */
+        SeatStatus_Output: "AVAILABLE" | "HELD" | "SOLD" | "NOT_ON_SALE";
+        SeatMapGaSection_Output: {
+            /** Format: uuid */
+            id: string;
+            name: string;
+            /** @enum {string} */
+            type: "GA";
+            /** @description Places the section holds */
+            capacity: number;
+            /** @description Released places that are neither sold nor in an unexpired hold: the most a hold can ask for here */
+            available: number;
+            /** @description Available places by price, cheapest first. A hold takes the cheapest available places. */
+            prices: {
+                priceCents: number;
+                available: number;
+            }[];
+        };
+        SeatMap_Output: {
+            /** Format: uuid */
+            eventId: string;
+            /** @description Holds are possible while the event is `ON_SALE` (seat statuses are shown in every state) */
+            availability: components["schemas"]["EventAvailability_Output"];
+            /** @description Most tickets (seats plus GA places) in one hold */
+            maxTicketsPerOrder: number;
+            /** @description How long a new hold lasts */
+            holdDurationSec: number;
+            /** @description Every section of the venue, in the venue’s order */
+            sections: (components["schemas"]["SeatMapSeatedSection_Output"] | components["schemas"]["SeatMapGaSection_Output"])[];
+        };
+        HoldRequestDto: {
+            /**
+             * @description Seat IDs (from the seat map) to hold
+             * @default []
+             */
+            seats: string[];
+            /**
+             * @description General-admission places to hold, per GA section
+             * @default []
+             */
+            ga: {
+                /** Format: uuid */
+                sectionId: string;
+                /** @description How many places in this GA section */
+                quantity: number;
+            }[];
+        };
+        HoldItem_Output: {
+            /** Format: uuid */
+            inventoryUnitId: string;
+            section: {
+                /** Format: uuid */
+                id: string;
+                name: string;
+                type: components["schemas"]["SectionType_Output"];
+            };
+            /** @description The seat; null for a GA place */
+            seat: {
+                /** Format: uuid */
+                id: string;
+                row: string;
+                number: number;
+            } | null;
+            priceCents: number;
+        };
+        Hold_Output: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            eventId: string;
+            /**
+             * Format: date-time
+             * @description After this (server clock) the tickets are released
+             */
+            expiresAt: string;
+            /** Format: date-time */
+            createdAt: string;
+            /** @description Sum of the items’ prices, in US cents */
+            totalCents: number;
+            /** @description One per ticket, in the venue’s section order, then by row and seat (GA places by price) */
+            items: components["schemas"]["HoldItem_Output"][];
+        };
         ClockStateDto_Output: {
             /**
              * Format: date-time
@@ -1170,10 +1423,15 @@ export interface components {
             startsAt: string;
             /** Format: date-time */
             salesOpenAt: string;
+            /** @description How long a hold lasts */
+            holdDurationSec: number;
+            /** @description Most tickets in one hold or order */
+            maxTicketsPerOrder: number;
             /** @description Inventory units (seats and GA places) of the event, by status */
             tickets: {
                 total: number;
                 available: number;
+                held: number;
                 sold: number;
             };
         };
@@ -1202,6 +1460,17 @@ export interface components {
             /** @description The confirmed orders that bought every ticket */
             orderIds: string[];
         };
+        ScenarioSeat_Output: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            sectionId: string;
+            row: string;
+            number: number;
+            /** Format: uuid */
+            inventoryUnitId: string;
+            priceCents: number;
+        };
         OneSeatLeftResultDto_Output: {
             venue: components["schemas"]["ScenarioVenue_Output"];
             event: components["schemas"]["ScenarioEvent_Output"];
@@ -1209,17 +1478,78 @@ export interface components {
             /** @description The confirmed orders that bought the other seats */
             orderIds: string[];
             /** @description The one seat that is still available */
-            seat: {
+            seat: components["schemas"]["ScenarioSeat_Output"];
+            /** @description The seven sold seats, row by row */
+            soldSeats: components["schemas"]["ScenarioSeat_Output"][];
+        };
+        /** @description Optional. Send no body (or `{}`) for a hold that expires in 60 seconds. */
+        HoldAboutToExpireRequestDto: {
+            /**
+             * @description Seconds from now (server clock) until the hold expires, 1–600. Default 60.
+             * @default 60
+             */
+            expiresInSec: number;
+        };
+        HoldAboutToExpireResultDto_Output: {
+            venue: components["schemas"]["ScenarioVenue_Output"];
+            event: components["schemas"]["ScenarioEvent_Output"];
+            /** @description The customer who holds the seats, logged in: send `cookie` (and `csrfToken` on writes) to act as them */
+            holder: {
+                user: components["schemas"]["AuthUser_Output"];
+                session: {
+                    /** @description Value of the `testtix_session` cookie */
+                    token: string;
+                    /** Format: date-time */
+                    expiresAt: string;
+                };
+                /** @description Value of the `testtix_csrf` cookie; send it in `X-CSRF-Token` too */
+                csrfToken: string;
+                /** @description A ready-made `Cookie` request header with both cookies, for clients without a cookie jar */
+                cookie: string;
+            };
+            hold: {
                 /** Format: uuid */
                 id: string;
-                /** Format: uuid */
-                sectionId: string;
-                row: string;
-                number: number;
-                /** Format: uuid */
-                inventoryUnitId: string;
-                priceCents: number;
+                /** Format: date-time */
+                createdAt: string;
+                /** Format: date-time */
+                expiresAt: string;
+                totalCents: number;
+                /** @description Row A seats 1 and 2 */
+                seats: components["schemas"]["ScenarioSeat_Output"][];
             };
+        };
+        ScenarioGaSection_Output: {
+            /** Format: uuid */
+            id: string;
+            name: string;
+            capacity: number;
+            /** @description Places that can be held */
+            available: number;
+            /** @description Available places by price, cheapest first */
+            prices: {
+                priceCents: number;
+                available: number;
+            }[];
+        };
+        GaMeetupResultDto_Output: {
+            venue: components["schemas"]["ScenarioVenue_Output"];
+            event: components["schemas"]["ScenarioEvent_Output"];
+            sections: {
+                /** @description 40 places: 20 at $10.00, then 20 at $15.00 */
+                floor: components["schemas"]["ScenarioGaSection_Output"];
+                /** @description 10 places at $20.00 */
+                balcony: components["schemas"]["ScenarioGaSection_Output"];
+            };
+        };
+        GaLastTicketResultDto_Output: {
+            venue: components["schemas"]["ScenarioVenue_Output"];
+            event: components["schemas"]["ScenarioEvent_Output"];
+            buyer: components["schemas"]["ScenarioBuyer_Output"];
+            /** @description The confirmed orders that bought the other places */
+            orderIds: string[];
+            /** @description The GA section with one place left */
+            section: components["schemas"]["ScenarioGaSection_Output"];
         };
         /** @enum {string} */
         Role: "CUSTOMER" | "ADMIN";
@@ -1280,6 +1610,38 @@ export interface components {
                 /** @description Zod issue code, e.g. `invalid_type` or `too_small` */
                 code: string;
                 message: string;
+            }[];
+        };
+        TicketsUnavailableProblem: {
+            /** @description URI that identifies the problem type: `about:blank` or `urn:testtix:problem:<error-code>` */
+            type: string;
+            /** @description Short summary of the problem type */
+            title: string;
+            /** @description HTTP status code */
+            status: number;
+            /** @description Explanation of this occurrence */
+            detail: string;
+            /** @description Request path */
+            instance: string;
+            /** @description Same value as the `X-Request-Id` response header */
+            requestId: string;
+            /** @description Field errors. Empty unless the request failed validation. */
+            errors: {
+                /** @description Dot-separated path of the invalid field, e.g. `items.0.quantity`. Empty for the root. */
+                path: string;
+                /** @description Zod issue code, e.g. `invalid_type` or `too_small` */
+                code: string;
+                message: string;
+            }[];
+            /** @description Requested seats that are sold, in another unexpired hold, or not on sale, in request order */
+            unavailableSeatIds: string[];
+            /** @description Requested GA sections without enough places, in request order */
+            gaShortfalls: {
+                /** Format: uuid */
+                sectionId: string;
+                requested: number;
+                /** @description Places that could be held right now (fewer than requested) */
+                available: number;
             }[];
         };
     };
@@ -2529,6 +2891,193 @@ export interface operations {
             };
         };
     };
+    HoldsController_seatMap: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                eventId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The seat map. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SeatMap_Output"];
+                };
+            };
+            /** @description Error. The body is an RFC 9457 problem details object. */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    HoldsController_create: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description The CSRF token from `GET /auth/csrf`. Must equal the `testtix_csrf` cookie, which must be sent too. */
+                "X-CSRF-Token": string;
+            };
+            path: {
+                eventId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["HoldRequestDto"];
+            };
+        };
+        responses: {
+            /** @description The new hold. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Hold_Output"];
+                };
+            };
+            /** @description No session cookie, or the session has expired or was ended. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description The `X-CSRF-Token` header is missing or doesn't match the `testtix_csrf` cookie (type `csrf-token-invalid`). */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description `tickets-unavailable` (body below, with what could not be held) or `event-not-on-sale` (plain problem details, without the two lists). */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["TicketsUnavailableProblem"];
+                };
+            };
+            /** @description Error. The body is an RFC 9457 problem details object. */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    HoldsController_current: {
+        parameters: {
+            query?: {
+                /** @description The event whose hold to return. Without it: the most recent active hold of any event. */
+                eventId?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The hold. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Hold_Output"];
+                };
+            };
+            /** @description No session cookie, or the session has expired or was ended. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Error. The body is an RFC 9457 problem details object. */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    HoldsController_release: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description The CSRF token from `GET /auth/csrf`. Must equal the `testtix_csrf` cookie, which must be sent too. */
+                "X-CSRF-Token": string;
+            };
+            path: {
+                holdId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Released. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description No session cookie, or the session has expired or was ended. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description The `X-CSRF-Token` header is missing or doesn't match the `testtix_csrf` cookie (type `csrf-token-invalid`). */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Error. The body is an RFC 9457 problem details object. */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
     TestClockController_get: {
         parameters: {
             query?: never;
@@ -2722,6 +3271,97 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["OneSeatLeftResultDto_Output"];
+                };
+            };
+            /** @description Error. The body is an RFC 9457 problem details object. */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    TestScenariosController_holdAboutToExpire: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["HoldAboutToExpireRequestDto"];
+            };
+        };
+        responses: {
+            /** @description What was created. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HoldAboutToExpireResultDto_Output"];
+                };
+            };
+            /** @description Error. The body is an RFC 9457 problem details object. */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    TestScenariosController_gaMeetup: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description What was created. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GaMeetupResultDto_Output"];
+                };
+            };
+            /** @description Error. The body is an RFC 9457 problem details object. */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    TestScenariosController_gaLastTicket: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description What was created. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GaLastTicketResultDto_Output"];
                 };
             };
             /** @description Error. The body is an RFC 9457 problem details object. */

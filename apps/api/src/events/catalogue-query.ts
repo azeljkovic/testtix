@@ -165,6 +165,17 @@ export async function findCatalogueEvent(
   return rows[0];
 }
 
+/** The published event with this ID, or `undefined`. Past events are included. */
+export async function findCatalogueEventById(
+  db: Db,
+  eventId: string,
+  now: Date,
+): Promise<CatalogueRow | undefined> {
+  const rows = await db.$queryRaw<CatalogueRow[]>`
+    SELECT * FROM (${catalogue(now)}) c WHERE c.id = ${eventId}::uuid`;
+  return rows[0];
+}
+
 /**
  * The sections in which `eventId` has tickets, in the venue's order. `total`, `sold` and `held`
  * count released units only (`held`: in an unexpired hold); prices cover all units.

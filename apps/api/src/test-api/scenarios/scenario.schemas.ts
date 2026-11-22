@@ -1,6 +1,13 @@
-import { EventCategorySchema, EventStatusSchema, SectionTypeSchema } from '@testtix/shared';
+import {
+  EventCategorySchema,
+  EventStatusSchema,
+  HOLD_DURATION_SEC,
+  SectionTypeSchema,
+} from '@testtix/shared';
 import { createZodDto } from 'nestjs-zod';
 import { z } from 'zod';
+
+import { TestSessionResponseSchema } from '../sessions/test-sessions.schemas.js';
 
 const id = z.uuid();
 
@@ -30,10 +37,13 @@ export const ScenarioEventSchema = z
     venueId: id,
     startsAt: z.iso.datetime(),
     salesOpenAt: z.iso.datetime(),
+    holdDurationSec: z.number().int().describe('How long a hold lasts'),
+    maxTicketsPerOrder: z.number().int().describe('Most tickets in one hold or order'),
     tickets: z
       .object({
         total: z.number().int(),
         available: z.number().int(),
+        held: z.number().int(),
         sold: z.number().int(),
       })
       .describe('Inventory units (seats and GA places) of the event, by status'),
@@ -47,6 +57,29 @@ export const ScenarioBuyerSchema = z
   })
   .describe('The customer who bought the sold tickets. Has no password: you cannot log in as them.')
   .meta({ id: 'ScenarioBuyer' });
+
+export const ScenarioSeatSchema = z
+  .object({
+    id,
+    sectionId: id,
+    row: z.string(),
+    number: z.number().int(),
+    inventoryUnitId: id,
+    priceCents: z.number().int(),
+  })
+  .meta({ id: 'ScenarioSeat' });
+
+export const ScenarioGaSectionSchema = z
+  .object({
+    id,
+    name: z.string(),
+    capacity: z.number().int(),
+    available: z.number().int().describe('Places that can be held'),
+    prices: z
+      .array(z.object({ priceCents: z.number().int(), available: z.number().int() }))
+      .describe('Available places by price, cheapest first'),
+  })
+  .meta({ id: 'ScenarioGaSection' });
 
 export const BasicCatalogueResultSchema = z.object({
   venue: ScenarioVenueSchema,
@@ -69,16 +102,57 @@ export const OneSeatLeftResultSchema = z.object({
   event: ScenarioEventSchema,
   buyer: ScenarioBuyerSchema,
   orderIds: z.array(id).describe('The confirmed orders that bought the other seats'),
-  seat: z
-    .object({
-      id,
-      sectionId: id,
-      row: z.string(),
-      number: z.number().int(),
-      inventoryUnitId: id,
-      priceCents: z.number().int(),
-    })
-    .describe('The one seat that is still available'),
+  seat: ScenarioSeatSchema.describe('The one seat that is still available'),
+  soldSeats: z.array(ScenarioSeatSchema).describe('The seven sold seats, row by row'),
+});
+
+export const HoldAboutToExpireRequestSchema = z
+  .strictObject({
+    expiresInSec: z
+      .number()
+      .int()
+      .min(1)
+      .max(HOLD_DURATION_SEC.default)
+      .default(60)
+      .describe(
+        `Seconds from now (server clock) until the hold expires, 1–${String(HOLD_DURATION_SEC.default)}. Default 60.`,
+      ),
+  })
+  .describe('Optional. Send no body (or `{}`) for a hold that expires in 60 seconds.');
+
+/** The body may be left out entirely. */
+export const OptionalHoldAboutToExpireRequestSchema = HoldAboutToExpireRequestSchema.optional();
+
+export const HoldAboutToExpireResultSchema = z.object({
+  venue: ScenarioVenueSchema,
+  event: ScenarioEventSchema,
+  holder: TestSessionResponseSchema.describe(
+    'The customer who holds the seats, logged in: send `cookie` (and `csrfToken` on writes) to act as them',
+  ),
+  hold: z.object({
+    id,
+    createdAt: z.iso.datetime(),
+    expiresAt: z.iso.datetime(),
+    totalCents: z.number().int(),
+    seats: z.array(ScenarioSeatSchema).describe('Row A seats 1 and 2'),
+  }),
+});
+
+export const GaMeetupResultSchema = z.object({
+  venue: ScenarioVenueSchema,
+  event: ScenarioEventSchema,
+  sections: z.object({
+    floor: ScenarioGaSectionSchema.describe('40 places: 20 at $10.00, then 20 at $15.00'),
+    balcony: ScenarioGaSectionSchema.describe('10 places at $20.00'),
+  }),
+});
+
+export const GaLastTicketResultSchema = z.object({
+  venue: ScenarioVenueSchema,
+  event: ScenarioEventSchema,
+  buyer: ScenarioBuyerSchema,
+  orderIds: z.array(id).describe('The confirmed orders that bought the other places'),
+  section: ScenarioGaSectionSchema.describe('The GA section with one place left'),
 });
 
 export type ScenarioVenue = z.infer<typeof ScenarioVenueSchema>;
@@ -86,7 +160,24 @@ export type ScenarioEvent = z.infer<typeof ScenarioEventSchema>;
 export type BasicCatalogueResult = z.infer<typeof BasicCatalogueResultSchema>;
 export type SoldOutEventResult = z.infer<typeof SoldOutEventResultSchema>;
 export type OneSeatLeftResult = z.infer<typeof OneSeatLeftResultSchema>;
+export type ScenarioSeat = z.infer<typeof ScenarioSeatSchema>;
+export type ScenarioGaSection = z.infer<typeof ScenarioGaSectionSchema>;
+export type HoldAboutToExpireRequest = z.infer<typeof HoldAboutToExpireRequestSchema>;
+/** The result before the service adds the holder's session. */
+export type HoldAboutToExpireScenario = Omit<
+  z.infer<typeof HoldAboutToExpireResultSchema>,
+  'holder'
+> & {
+  holderId: string;
+};
+export type HoldAboutToExpireResult = z.infer<typeof HoldAboutToExpireResultSchema>;
+export type GaMeetupResult = z.infer<typeof GaMeetupResultSchema>;
+export type GaLastTicketResult = z.infer<typeof GaLastTicketResultSchema>;
 
 export class BasicCatalogueResultDto extends createZodDto(BasicCatalogueResultSchema) {}
 export class SoldOutEventResultDto extends createZodDto(SoldOutEventResultSchema) {}
 export class OneSeatLeftResultDto extends createZodDto(OneSeatLeftResultSchema) {}
+export class HoldAboutToExpireRequestDto extends createZodDto(HoldAboutToExpireRequestSchema) {}
+export class HoldAboutToExpireResultDto extends createZodDto(HoldAboutToExpireResultSchema) {}
+export class GaMeetupResultDto extends createZodDto(GaMeetupResultSchema) {}
+export class GaLastTicketResultDto extends createZodDto(GaLastTicketResultSchema) {}

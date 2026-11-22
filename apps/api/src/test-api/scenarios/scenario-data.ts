@@ -69,16 +69,29 @@ export function buildScenarioCatalogue(
     id,
     createdAt: ctx.now,
   });
-  return { ...catalogue, orders: [], orderItems: [], tickets: [] };
+  return { ...catalogue, holds: [], orders: [], orderItems: [], tickets: [] };
 }
 
 /** A placeholder customer who owns a scenario's orders. Can't log in. */
 export function addBuyer(rows: ScenarioRows, ctx: ScenarioContext): { id: string; email: string } {
+  return addCustomer(rows, ctx, 'buyer');
+}
+
+/**
+ * A verified customer without a usable password, e.g. `holder-<suffix>@scenario.testtix.test`.
+ * Nobody can log in as them, but the test API can start a session for them.
+ */
+export function addCustomer(
+  rows: ScenarioRows,
+  ctx: ScenarioContext,
+  kind: 'buyer' | 'holder',
+): { id: string; email: string } {
+  const label = kind === 'buyer' ? 'Buyer' : 'Holder';
   const buyer = {
     id: ctx.newId(),
-    email: `buyer-${ctx.suffix}@scenario.testtix.test`,
+    email: `${kind}-${ctx.suffix}@scenario.testtix.test`,
     passwordHash: LOCKED_PASSWORD_HASH,
-    name: `Scenario Buyer ${ctx.suffix}`,
+    name: `Scenario ${label} ${ctx.suffix}`,
     role: 'CUSTOMER',
     emailVerifiedAt: ctx.now,
     createdAt: ctx.now,
@@ -136,6 +149,31 @@ export function sellUnits(
     }
   }
   return orderIds;
+}
+
+/**
+ * Puts inventory units in a new hold of `userId` that expires at `expiresAt`, the way
+ * `POST /events/{eventId}/holds` does. Returns the hold ID.
+ */
+export function holdUnits(
+  rows: ScenarioRows,
+  ctx: ScenarioContext,
+  units: readonly Prisma.InventoryUnitCreateManyInput[],
+  hold: { userId: string; createdAt: Date; expiresAt: Date },
+): string {
+  const eventId = units[0]?.eventId;
+  if (eventId === undefined || units.some((unit) => unit.eventId !== eventId)) {
+    throw new Error('holdUnits: a hold needs units of one event');
+  }
+  const holdId = ctx.newId();
+  rows.holds.push({ id: holdId, eventId, ...hold });
+  for (const unit of units) {
+    if (unit.status !== 'AVAILABLE') throw new Error('holdUnits: unit is not available');
+    unit.status = 'HELD';
+    unit.holdId = holdId;
+    unit.heldUntil = hold.expiresAt;
+  }
+  return holdId;
 }
 
 /** A small venue for one scenario run. */
