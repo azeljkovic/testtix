@@ -1,3 +1,4 @@
+import { DEV_PAYMENTS_API_KEY } from '@testtix/shared';
 import { z } from 'zod';
 
 export const LOG_LEVELS = ['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent'] as const;
@@ -10,6 +11,15 @@ export const DEV_SMTP_URL = 'smtp://localhost:1025';
 /** The web dev server (`WEB_PORT` in `.env.example`). */
 export const DEV_WEB_BASE_URL = 'http://localhost:5173';
 export const DEFAULT_MAIL_FROM = 'TestTix <no-reply@testtix.test>';
+/** The fake payment provider from `docker/compose.yml` (`FAKE_PAYMENTS_PORT`). */
+export const DEV_PAYMENTS_BASE_URL = 'http://localhost:4000';
+/**
+ * Where the provider (in its compose container) reaches the API that `pnpm dev` runs on the host.
+ * `{port}` is replaced with `PORT`.
+ */
+export const DEV_PAYMENTS_WEBHOOK_URL = 'http://host.docker.internal:{port}/webhooks/payments';
+
+const httpUrl = z.url({ protocol: /^https?$/, error: 'Must be an http:// or https:// URL' });
 
 /**
  * Environment variables read by the API.
@@ -64,12 +74,32 @@ export const envSchema = z
       .stringbool({ truthy: ['true'], falsy: ['false'], error: 'Must be true or false' })
       .default(true),
     HOLD_SWEEPER_INTERVAL_MS: z.coerce.number().int().min(100).max(86_400_000).default(60_000),
+    // The payment provider's API (`POST /sessions`).
+    PAYMENTS_BASE_URL: httpUrl.optional(),
+    // Bearer key for the provider's API. Same value as the fake provider's `PAYMENTS_API_KEY`.
+    PAYMENTS_API_KEY: z.string().min(16, 'Must be at least 16 characters').optional(),
+    // Where the provider sends payment webhooks: this API's `/webhooks/payments`, as the provider
+    // reaches it.
+    PAYMENTS_WEBHOOK_URL: httpUrl.optional(),
+    // A provider request that takes longer fails, and checkout answers 503.
+    PAYMENTS_TIMEOUT_MS: z.coerce.number().int().min(100).max(60_000).default(5000),
+    // `retryAfterMs` of an order that is still changing: how long clients wait between polls.
+    ORDER_POLL_INTERVAL_MS: z.coerce.number().int().min(100).max(60_000).default(2000),
   })
   .superRefine((env, ctx) => {
     // Dev defaults carry well-known credentials or point at localhost, so production must set
-    // connection URLs and the public web URL explicitly.
+    // connection URLs, the public web URL and the payment provider explicitly.
     if (env.NODE_ENV !== 'production') return;
-    for (const key of ['DATABASE_URL', 'REDIS_URL', 'SMTP_URL', 'WEB_BASE_URL'] as const) {
+    const required = [
+      'DATABASE_URL',
+      'REDIS_URL',
+      'SMTP_URL',
+      'WEB_BASE_URL',
+      'PAYMENTS_BASE_URL',
+      'PAYMENTS_API_KEY',
+      'PAYMENTS_WEBHOOK_URL',
+    ] as const;
+    for (const key of required) {
       if (env[key] === undefined) {
         ctx.addIssue({
           code: 'custom',
@@ -100,6 +130,14 @@ export const envSchema = z
       enabled: env.HOLD_SWEEPER_ENABLED,
       intervalMs: env.HOLD_SWEEPER_INTERVAL_MS,
     },
+    payments: {
+      baseUrl: (env.PAYMENTS_BASE_URL ?? DEV_PAYMENTS_BASE_URL).replace(/\/+$/, ''),
+      apiKey: env.PAYMENTS_API_KEY ?? DEV_PAYMENTS_API_KEY,
+      webhookUrl:
+        env.PAYMENTS_WEBHOOK_URL ?? DEV_PAYMENTS_WEBHOOK_URL.replace('{port}', String(env.PORT)),
+      timeoutMs: env.PAYMENTS_TIMEOUT_MS,
+    },
+    orderPollIntervalMs: env.ORDER_POLL_INTERVAL_MS,
   }));
 
 export type AppConfig = Readonly<z.output<typeof envSchema>>;

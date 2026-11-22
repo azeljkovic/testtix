@@ -522,6 +522,50 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/orders": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List your orders
+         * @description Newest first, every status. Statuses are at the server clock.
+         */
+        get: operations["OrdersController_list"];
+        put?: never;
+        /**
+         * Check out a hold
+         * @description Creates a `PENDING_PAYMENT` order for the tickets of your hold and a payment session: send the customer to `paymentUrl`. The order expires with the hold (`expiresAt`); releasing or replacing the hold expires it too. A hold has at most one order: checking it out again returns that order with 200. Free orders get no `paymentUrl`. 403 `email-not-verified` until you verify your email. 404 for unknown holds and other users’ holds. 409 `hold-expired` once the hold has expired; 409 `event-not-on-sale` when the event was unpublished, cancelled or has started. 503 `payment-provider-unavailable` when the provider fails: the order is kept without a `paymentUrl` and the hold stays, so retry the same request.
+         */
+        post: operations["OrdersController_create"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/orders/{orderId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get one of your orders
+         * @description Poll it after payment: wait `retryAfterMs` between requests and stop once it is null (final status). 404 for unknown orders and other users’ orders.
+         */
+        get: operations["OrdersController_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/__test/clock": {
         parameters: {
             query?: never;
@@ -1326,6 +1370,85 @@ export interface components {
             totalCents: number;
             /** @description One per ticket, in the venue’s section order, then by row and seat (GA places by price) */
             items: components["schemas"]["HoldItem_Output"][];
+        };
+        CreateOrderRequestDto: {
+            /**
+             * Format: uuid
+             * @description Your active hold (`POST /events/{eventId}/holds`)
+             */
+            holdId: string;
+        };
+        /** @enum {string} */
+        OrderStatus_Output: "PENDING_PAYMENT" | "PROCESSING" | "CONFIRMED" | "FAILED" | "EXPIRED";
+        OrderEvent_Output: {
+            /** Format: uuid */
+            id: string;
+            slug: string;
+            title: string;
+            /** Format: date-time */
+            startsAt: string;
+            venue: {
+                name: string;
+                /** @description IANA time zone; show event times in it */
+                timezone: string;
+            };
+        };
+        OrderItem_Output: components["schemas"]["HoldItem_Output"];
+        Order_Output: {
+            /** Format: uuid */
+            id: string;
+            /** @description At the server clock: an unpaid order whose `expiresAt` has passed is `EXPIRED`, even before a sweep stores that. */
+            status: components["schemas"]["OrderStatus_Output"];
+            event: components["schemas"]["OrderEvent_Output"];
+            /** @description Sum of the items’ prices, in US cents */
+            totalCents: number;
+            ticketCount: number;
+            /**
+             * Format: date-time
+             * @description An order not paid by then (server clock) expires
+             */
+            expiresAt: string;
+            /** Format: date-time */
+            createdAt: string;
+            /** @description One per ticket, in the venue’s section order, then by row and seat (GA places by price) */
+            items: components["schemas"]["OrderItem_Output"][];
+            /**
+             * Format: uri
+             * @description The payment page: send the customer here. Null unless the order is `PENDING_PAYMENT`, and until the payment provider has answered.
+             */
+            paymentUrl: string | null;
+            /** Format: date-time */
+            updatedAt: string;
+            /** @description While the order can still change: wait this long before polling it again (never past `expiresAt` while it is unpaid). Null once the status is final (`CONFIRMED`, `FAILED`, `EXPIRED`). */
+            retryAfterMs: number | null;
+        };
+        OrderSummary_Output: {
+            /** Format: uuid */
+            id: string;
+            /** @description At the server clock: an unpaid order whose `expiresAt` has passed is `EXPIRED`, even before a sweep stores that. */
+            status: components["schemas"]["OrderStatus_Output"];
+            event: components["schemas"]["OrderEvent_Output"];
+            /** @description Sum of the items’ prices, in US cents */
+            totalCents: number;
+            ticketCount: number;
+            /**
+             * Format: date-time
+             * @description An order not paid by then (server clock) expires
+             */
+            expiresAt: string;
+            /** Format: date-time */
+            createdAt: string;
+        };
+        OrderPage_Output: {
+            items: components["schemas"]["OrderSummary_Output"][];
+            /** @description The requested page */
+            page: number;
+            /** @description The requested page size */
+            pageSize: number;
+            /** @description Items in the whole list, across all pages */
+            total: number;
+            /** @description Number of pages; 0 when the list is empty */
+            totalPages: number;
         };
         ClockStateDto_Output: {
             /**
@@ -3060,6 +3183,152 @@ export interface operations {
             };
             /** @description The `X-CSRF-Token` header is missing or doesn't match the `testtix_csrf` cookie (type `csrf-token-invalid`). */
             403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Error. The body is an RFC 9457 problem details object. */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    OrdersController_list: {
+        parameters: {
+            query?: {
+                /** @description Page number, from 1. A page past the last one returns no items. */
+                page?: number;
+                /** @description Items per page, 1–100 */
+                pageSize?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description One page of your orders. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OrderPage_Output"];
+                };
+            };
+            /** @description No session cookie, or the session has expired or was ended. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Error. The body is an RFC 9457 problem details object. */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    OrdersController_create: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description The CSRF token from `GET /auth/csrf`. Must equal the `testtix_csrf` cookie, which must be sent too. */
+                "X-CSRF-Token": string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateOrderRequestDto"];
+            };
+        };
+        responses: {
+            /** @description The hold’s existing order. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Order_Output"];
+                };
+            };
+            /** @description The new order. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Order_Output"];
+                };
+            };
+            /** @description No session cookie, or the session has expired or was ended. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description The `X-CSRF-Token` header is missing or doesn't match the `testtix_csrf` cookie (type `csrf-token-invalid`). */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Error. The body is an RFC 9457 problem details object. */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    OrdersController_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                orderId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The order. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Order_Output"];
+                };
+            };
+            /** @description No session cookie, or the session has expired or was ended. */
+            401: {
                 headers: {
                     [name: string]: unknown;
                 };

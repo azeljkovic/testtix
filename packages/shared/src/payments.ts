@@ -11,6 +11,14 @@ import { CURRENCY } from './constants.js';
  * `X-Payments-Timestamp` header (Unix seconds). Every delivery attempt is signed afresh, so a
  * receiver can reject timestamps outside its replay window.
  */
+/**
+ * Local-only defaults of the provider's API key and webhook secret, used by both services when
+ * `PAYMENTS_API_KEY` / `PAYMENTS_WEBHOOK_SECRET` are unset, so they work together without a
+ * `.env`. Production must set its own.
+ */
+export const DEV_PAYMENTS_API_KEY = 'sk_test_testtix_local_only';
+export const DEV_PAYMENTS_WEBHOOK_SECRET = 'whsec_testtix_local_only';
+
 export const PAYMENT_SIGNATURE_HEADER = 'X-Payments-Signature';
 export const PAYMENT_TIMESTAMP_HEADER = 'X-Payments-Timestamp';
 /** 1 for the first delivery of an event, 2 for the first retry, and so on. Not signed. */

@@ -81,7 +81,7 @@ export class HoldsService {
           AND (hold_id = ${previous?.id ?? null}::uuid OR seat_id = ANY(${input.seats}::uuid[]))
         ORDER BY id
         FOR UPDATE`;
-      if (previous !== null) await deleteHold(tx, previous.id);
+      if (previous !== null) await deleteHold(tx, previous.id, now);
 
       const holdId = uuidv7(now);
       const expiresAt = new Date(now.getTime() + event.holdDurationSec * 1000);
@@ -124,10 +124,12 @@ export class HoldsService {
   }
 
   /**
-   * Releases one of the user's holds: its tickets become available at once. Expired holds can be
-   * released too (a no-op for tickets someone else has claimed since). 404 for other users' holds.
+   * Releases one of the user's holds: its tickets become available at once, and its unpaid order
+   * expires. Expired holds can be released too (a no-op for tickets someone else has claimed
+   * since). 404 for other users' holds.
    */
   async release(userId: string, holdId: string): Promise<void> {
+    const now = await this.clock.now();
     await this.prisma.$transaction(async (tx) => {
       const hold = await tx.hold.findFirst({
         where: { id: holdId, userId },
@@ -137,7 +139,7 @@ export class HoldsService {
       await lockUserEvent(tx, userId, hold.eventId);
       await lockHoldUnits(tx, holdId);
       // Gone if a concurrent request of the same user (or the sweeper) deleted it meanwhile.
-      if ((await deleteHold(tx, holdId)).holds === 0) throw holdNotFound();
+      if ((await deleteHold(tx, holdId, now)).holds === 0) throw holdNotFound();
     });
   }
 }

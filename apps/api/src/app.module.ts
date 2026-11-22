@@ -15,6 +15,7 @@ import { RedisModule } from './infra/redis.module.js';
 import { WorkerModule } from './jobs/worker.module.js';
 import { LoggingModule } from './logging/logging.module.js';
 import { MetricsModule } from './metrics/metrics.module.js';
+import { OrdersModule } from './orders/orders.module.js';
 import { TestApiModule } from './test-api/test-api.module.js';
 import { VenuesModule } from './venues/venues.module.js';
 
@@ -36,6 +37,7 @@ export class AppModule {
         VenuesModule,
         EventsModule,
         HoldsModule,
+        OrdersModule,
         // Background jobs in this process, unless the worker runs on its own (`src/worker.ts`).
         ...(config.workerInProcess ? [WorkerModule] : []),
         // Not even loaded outside test mode, so `/__test/*` is a plain 404 there.

@@ -1,14 +1,14 @@
+import { DEV_PAYMENTS_API_KEY, DEV_PAYMENTS_WEBHOOK_SECRET } from '@testtix/shared';
 import { z } from 'zod';
 
 export const LOG_LEVELS = ['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent'] as const;
 
 /**
- * Local-only defaults. The API uses the same values for `PAYMENTS_API_KEY` and
- * `PAYMENTS_WEBHOOK_SECRET` (C4.2), so the two services work together without a `.env`.
- * Production must set its own (see `superRefine` below).
+ * Local-only defaults, shared with the API (`packages/shared`), so the two services work together
+ * without a `.env`. Production must set its own (see `superRefine` below).
  */
-export const DEV_API_KEY = 'sk_test_testtix_local_only';
-export const DEV_WEBHOOK_SECRET = 'whsec_testtix_local_only';
+export const DEV_API_KEY = DEV_PAYMENTS_API_KEY;
+export const DEV_WEBHOOK_SECRET = DEV_PAYMENTS_WEBHOOK_SECRET;
 
 /**
  * Environment variables read by the fake payment provider. Keep in sync with `.env.example` and

@@ -205,6 +205,35 @@ describe('database constraints', () => {
     expect(await prisma.event.count()).toBe(1);
   });
 
+  it('stores a payment session with its URL, and one order per hold that outlives the hold', async () => {
+    const { event, user } = await createWorld();
+    const hold = await prisma.hold.create({
+      data: { eventId: event.id, userId: user.id, expiresAt: LATER, createdAt: AT },
+    });
+    const order = {
+      userId: user.id,
+      eventId: event.id,
+      totalCents: 0,
+      expiresAt: LATER,
+      createdAt: AT,
+      updatedAt: AT,
+    };
+    await expect(
+      prisma.order.create({ data: { ...order, paymentSessionId: 'ps_1' } }),
+    ).rejects.toThrow(/orders_payment_session_check/);
+    await expect(
+      prisma.order.create({ data: { ...order, paymentUrl: 'http://pay.test/ps_1' } }),
+    ).rejects.toThrow(/orders_payment_session_check/);
+
+    const created = await prisma.order.create({ data: { ...order, holdId: hold.id } });
+    await expect(prisma.order.create({ data: { ...order, holdId: hold.id } })).rejects.toThrow();
+
+    await prisma.hold.delete({ where: { id: hold.id } });
+    expect(await prisma.order.findUniqueOrThrow({ where: { id: created.id } })).toMatchObject({
+      holdId: null,
+    });
+  });
+
   it('deletes a venue layout with the venue, but not a venue that has events', async () => {
     const { venue, event } = await createWorld();
     await expect(prisma.venue.delete({ where: { id: venue.id } })).rejects.toThrow();
