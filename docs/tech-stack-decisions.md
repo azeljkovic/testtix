@@ -73,7 +73,17 @@ Notes:
 - **Route guards** are layout routes (`<RequireAuth />`, `<RequireAuth role="ADMIN" />`) rather than loaders, so the route table stays a plain array shared with tests. Anonymous visitors go to `/login?redirectTo=…`; a logged-in user without the role sees "Access denied" at the same URL. `redirectTo` only accepts same-origin paths (no open redirect).
 - **No React Aria `isPending` buttons.** It announces through a body-level live region whose node points at the button by ID; after a successful submit navigates away, that reference dangles for up to 7 s, and an axe scan flags it. Submit buttons are native buttons with `aria-disabled` while pending.
 - The verification landing page runs `POST /auth/verify-email` as a query (not a mutation): it is idempotent, and a query runs once per token even when StrictMode mounts the page twice.
-- The bundle passed Vite's 500 kB warning (about 670 kB, 210 kB gzipped, mostly React DOM, React Aria and Zod). Route-level code splitting can come when the catalogue pages land.
+- The bundle passed Vite's 500 kB warning (about 670 kB, 210 kB gzipped, mostly React DOM, React Aria and Zod). After the catalogue pages (C2.3) it is about 705 kB (218 kB gzipped); route-level code splitting is still open.
+
+**Event pages (C2.3)**
+
+- **List state lives in the URL query** (`useSearchParams`), with the API's parameter names. `parseListParams()` (`src/catalogue/list-params.ts`) checks each value with the shared enum schemas and drops what the API wouldn't accept, so a hand-edited link never turns into a 400. Every change is a pushed history entry; the search box pushes one when its debounce fires, not per keystroke.
+- **Debounce:** `SEARCH_DEBOUNCE_MS` (300) lives in `packages/shared` so tests outside the repo can use the same number. `SearchBox` keeps the typed text in local state and commits it after the pause through `useEffectEvent`, so a re-render (results arriving) doesn't restart the timer. Enter commits at once. When the URL's `q` changes from outside (back button, "Clear filters") the box takes the new value; its own commit doesn't overwrite what was typed since.
+- **Native `<select>` and `<input type="date">`** for the filters rather than React Aria's `Select` / `DatePicker`: they are accessible as they are, behave the same in jsdom and real browsers, and are what most testers expect to drive (`selectOption`, `fill('2026-12-01')`). React Aria stays for menus and links.
+- **Dates:** event times are shown in the venue's time zone (`Intl.DateTimeFormat` with `timeZone`), as printed on a ticket. The "From" / "To" filter days are local to the browser, with "To" included (the API's `to` is exclusive, so it gets the next midnight).
+- **No `keepPreviousData`:** a new query shows the loading state (placeholder cards and "Loading events…") until its results arrive, so every list change has an observable loading → loaded transition; revisiting a list is instant from the cache.
+- The app's query client doesn't retry 4xx responses (a 404 event, an invalid query); network errors and 5xx still get three retries.
+- "Choose seats" links to `/events/:slug/seats`, a placeholder page until the seat map (C3.3).
 
 ---
 
