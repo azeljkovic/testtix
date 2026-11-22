@@ -42,6 +42,27 @@ describe('toProblemDetails', () => {
     });
   });
 
+  it('adds the extension members of a ProblemException, which cannot replace standard ones', () => {
+    const exception = new ProblemException(
+      'TICKETS_UNAVAILABLE',
+      409,
+      'Tickets unavailable',
+      'Some tickets are no longer available.',
+      [],
+      { unavailableSeatIds: ['seat-1'], status: 200, detail: 'overridden?' },
+    );
+    expect(toProblemDetails(exception, request)).toEqual({
+      type: PROBLEM_TYPES.TICKETS_UNAVAILABLE,
+      title: 'Tickets unavailable',
+      status: 409,
+      detail: 'Some tickets are no longer available.',
+      instance: '/events/42',
+      requestId: 'req-1',
+      errors: [],
+      unavailableSeatIds: ['seat-1'],
+    });
+  });
+
   it('uses a string response body as the detail', () => {
     expect(toProblemDetails(new HttpException('Too late', 410), request)).toMatchObject({
       status: 410,

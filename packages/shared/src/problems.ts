@@ -28,6 +28,8 @@ export const PROBLEM_TYPES = {
   EVENT_HAS_SALES: 'urn:testtix:problem:event-has-sales',
   INVENTORY_ALREADY_RELEASED: 'urn:testtix:problem:inventory-already-released',
   GA_CAPACITY_EXCEEDED: 'urn:testtix:problem:ga-capacity-exceeded',
+  EVENT_NOT_ON_SALE: 'urn:testtix:problem:event-not-on-sale',
+  TICKETS_UNAVAILABLE: 'urn:testtix:problem:tickets-unavailable',
 } as const satisfies Record<string, `urn:testtix:problem:${string}`>;
 
 export type ErrorCode = keyof typeof PROBLEM_TYPES;

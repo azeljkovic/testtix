@@ -19,8 +19,11 @@ interface RequestInfo {
 
 const INTERNAL_ERROR_DETAIL = 'An unexpected error occurred.';
 
+/** Problem details plus the extension members of app-specific problem types. */
+export type ProblemBody = ProblemDetails & Record<string, unknown>;
+
 /** Maps anything thrown while handling a request to a problem details body. */
-export function toProblemDetails(exception: unknown, request: RequestInfo): ProblemDetails {
+export function toProblemDetails(exception: unknown, request: RequestInfo): ProblemBody {
   const base = { instance: request.path, requestId: request.requestId, errors: [] };
 
   if (exception instanceof ZodValidationException) {
@@ -41,6 +44,7 @@ export function toProblemDetails(exception: unknown, request: RequestInfo): Prob
 
   if (exception instanceof ProblemException) {
     return {
+      ...exception.extensions,
       ...base,
       type: PROBLEM_TYPES[exception.code],
       title: exception.title,
