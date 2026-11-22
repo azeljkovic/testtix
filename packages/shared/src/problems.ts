@@ -19,6 +19,15 @@ export const PROBLEM_TYPES = {
   VERIFICATION_TOKEN_INVALID: 'urn:testtix:problem:verification-token-invalid',
   VERIFICATION_TOKEN_EXPIRED: 'urn:testtix:problem:verification-token-expired',
   EMAIL_ALREADY_VERIFIED: 'urn:testtix:problem:email-already-verified',
+  SLUG_TAKEN: 'urn:testtix:problem:slug-taken',
+  VENUE_IN_USE: 'urn:testtix:problem:venue-in-use',
+  LAYOUT_LOCKED: 'urn:testtix:problem:layout-locked',
+  EVENT_STATUS_CONFLICT: 'urn:testtix:problem:event-status-conflict',
+  EVENT_HAS_NO_BATCHES: 'urn:testtix:problem:event-has-no-batches',
+  EVENT_ALREADY_STARTED: 'urn:testtix:problem:event-already-started',
+  EVENT_HAS_SALES: 'urn:testtix:problem:event-has-sales',
+  INVENTORY_ALREADY_RELEASED: 'urn:testtix:problem:inventory-already-released',
+  GA_CAPACITY_EXCEEDED: 'urn:testtix:problem:ga-capacity-exceeded',
 } as const satisfies Record<string, `urn:testtix:problem:${string}`>;
 
 export type ErrorCode = keyof typeof PROBLEM_TYPES;

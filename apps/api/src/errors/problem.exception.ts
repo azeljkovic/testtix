@@ -17,3 +17,17 @@ export class ProblemException extends HttpException {
     super(detail, status);
   }
 }
+
+/**
+ * A 400 `validation-error` for rules a schema can't check, such as references to other rows or
+ * the current time. Same shape as a failed request schema.
+ */
+export function validationFailed(errors: readonly ProblemFieldError[]): ProblemException {
+  return new ProblemException(
+    'VALIDATION_ERROR',
+    400,
+    'Validation failed',
+    'The request is invalid. See `errors` for each problem.',
+    errors,
+  );
+}
