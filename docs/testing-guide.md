@@ -157,6 +157,56 @@ curl -s -b "$jar" -c "$jar" -X POST http://localhost:3000/auth/logout -H "X-CSRF
 
 For API-based test setup, [`POST /__test/sessions`](#logging-in-through-the-test-api) skips all of this and returns a ready session.
 
+## Public catalogue
+
+Anyone can browse published events; no session is needed. Drafts and cancelled events never appear (`GET /events/{slug}` answers 404 for them).
+
+| Endpoint             | What it does                                                                              |
+| -------------------- | ----------------------------------------------------------------------------------------- |
+| `GET /events`        | Upcoming published events, filtered, searched, sorted and [paginated](#pagination)        |
+| `GET /events/{slug}` | One published event (past ones too) with its ticket counts and prices per section         |
+| `GET /venues`        | Venues with at least one published event, by name, then ID: the choices for `venue` below |
+
+```sh
+# Concerts that are on sale, cheapest first
+curl -s 'http://localhost:3000/events?category=CONCERT&availability=ON_SALE&sort=price'
+# The fixture talk, with its availability per section
+curl -s http://localhost:3000/events/testing-in-production-safely
+```
+
+### Filters, search and sort
+
+All parameters of `GET /events` are optional and combine with AND. An invalid value is a 400 `validation-error` with the parameter in `errors[].path`.
+
+| Parameter          | Values                                                                                                                                |
+| ------------------ | ------------------------------------------------------------------------------------------------------------------------------------- |
+| `q`                | Text (at most 100 characters) found anywhere in the title or performer, ignoring case. `%` and `_` match themselves. Blank is ignored |
+| `category`         | `CONCERT`, `TALK`, `MEETUP`                                                                                                           |
+| `venue`            | A venue slug, e.g. `riverside-hall`. An unknown slug matches nothing                                                                  |
+| `from`, `to`       | ISO 8601 date-times with `Z` or an offset. Events starting at or after `from` and before `to`. `to` must be after `from`              |
+| `seating`          | `SEATED` (only seats), `GA` (only general admission), `MIXED` (both), judged by the tickets the event has released or scheduled       |
+| `availability`     | `SALES_NOT_OPEN`, `ON_SALE`, `SOLD_OUT`, `SALES_ENDED` (see below)                                                                    |
+| `sort`             | `date` (default: start time), `price` (lowest ticket price, then start time), `name` (title ignoring case, then start time)           |
+| `order`            | `asc` (default) or `desc`. It reverses the sort key only: the start time and ID tiebreakers stay ascending                            |
+| `page`, `pageSize` | See [Pagination](#pagination)                                                                                                         |
+
+- **`from` defaults to now** (server clock), so events that have started are left out. Pass an earlier `from` to see them. Move the [clock](#the-server-clock) and the list moves with it.
+- **Every sort ends with the event ID**, so events with the same start time (the fixtures `testing-in-production-safely` and `flaky-tests-clinic`), price or title always come in the same order, and paging never skips or repeats one.
+- Titles sort by lower-cased code point, the same on every database (accented letters come after `z`).
+
+### Availability
+
+Each event has an `availability`, computed at the server clock:
+
+| Value            | When                                                                                                                     |
+| ---------------- | ------------------------------------------------------------------------------------------------------------------------ |
+| `SALES_NOT_OPEN` | `salesOpenAt` is in the future, or no batch is released yet (e.g. `summer-sounds-preview`)                               |
+| `ON_SALE`        | Sales are open and at least one released ticket is neither sold nor held                                                 |
+| `SOLD_OUT`       | Sales are open, but every released ticket is sold or in an unexpired hold. Expired holds and later batches bring it back |
+| `SALES_ENDED`    | The event has started (e.g. `season-opener-showcase`)                                                                    |
+
+Ticket figures count **released tickets only**: a batch with a later `releasesAt` adds nothing until then. List items have `availableTickets` (released, not sold, not held; tickets whose hold expired count) and `priceRange` (`minCents`, `maxCents` over all the event's tickets, scheduled ones included, so it doesn't change as tickets sell). `GET /events/{slug}` adds the description, the venue's address, `maxTicketsPerOrder`, the event's [ticket counts](#ticket-counts) (`tickets`) and `sections`: each section with tickets for the event, in the venue's order, with its own counts, `priceRange` and `nextReleaseAt` (when a scheduled batch releases more tickets there, or `null`). For `midnight-echoes-live` before D+3 15:00, the Balcony shows `total: 0` and `nextReleaseAt` at D+3 15:00.
+
 ## Admin API
 
 Admins manage venues, events and ticket batches under `/admin/*`. This is also the **API-based data setup** path: a test creates exactly the venue, event and inventory it needs, with its own IDs, instead of sharing the [seed data](#seed-data). Every route needs a session with the `ADMIN` role (anonymous → 401, customer → 403) and, on writes, the [CSRF header](#csrf-tokens). The quickest admin session is [`POST /__test/sessions`](#logging-in-through-the-test-api) with `{"role":"ADMIN"}`; outside test mode, log in as an admin.

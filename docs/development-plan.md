@@ -195,6 +195,7 @@ Claude's workspace has no Docker daemon, so Testcontainers can't run there. Beca
 - Filter `seating=seated|ga|mixed`.
 - Published events only.
 - Verify: integration tests for every filter, pagination boundaries (first, last, beyond last, page size of 1), stable order on equal dates, and an empty result.
+- Also added: `GET /venues` (venues with published events), the choices for the venue filter.
 
 **C2.3 Web: event list + detail**
 

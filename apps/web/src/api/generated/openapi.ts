@@ -253,6 +253,26 @@ export interface paths {
         patch: operations["AdminVenuesController_update"];
         trace?: never;
     };
+    "/venues": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List venues with published events
+         * @description The choices for the `venue` filter of `GET /events` (by slug). Sorted by name, then ID.
+         */
+        get: operations["VenuesController_list"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/admin/events": {
         parameters: {
             query?: never;
@@ -376,6 +396,46 @@ export interface paths {
          * @description Puts seats and GA places on sale at one price, now or at `releasesAt`. Seated inventory is released by section (`seatedSectionIds`: the seats no earlier batch released) or by seat (`seatIds`); GA inventory by quantity per section (`gaSections`). Unreleased inventory is not sellable. 400 `validation-error` for sections or seats not at the event’s venue; 409 `inventory-already-released`, `ga-capacity-exceeded`, or `event-status-conflict` for a cancelled event.
          */
         post: operations["AdminEventsController_releaseBatch"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/events": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List published events
+         * @description Published events starting at or after `from` (default: now, server clock), filtered, searched and sorted. Drafts and cancelled events never appear. 400 `validation-error` for an invalid filter, or a `to` that is not after `from`.
+         */
+        get: operations["CatalogueController_list"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/events/{slug}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get a published event with its availability
+         * @description Any published event, past ones included, with ticket counts and prices per section. 404 for drafts, cancelled events and unknown slugs.
+         */
+        get: operations["CatalogueController_get"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -712,6 +772,26 @@ export interface components {
                 capacity: number;
             })[];
         };
+        CatalogueVenue_Output: {
+            /** Format: uuid */
+            id: string;
+            slug: string;
+            name: string;
+            city: string;
+            /** @description IANA time zone; show event times in it */
+            timezone: string;
+        };
+        CatalogueVenuePage_Output: {
+            items: components["schemas"]["CatalogueVenue_Output"][];
+            /** @description The requested page */
+            page: number;
+            /** @description The requested page size */
+            pageSize: number;
+            /** @description Items in the whole list, across all pages */
+            total: number;
+            /** @description Number of pages; 0 when the list is empty */
+            totalPages: number;
+        };
         AdminEventSummary_Output: {
             /** Format: uuid */
             id: string;
@@ -901,6 +981,99 @@ export interface components {
                 quantity: number;
             }[];
         };
+        CatalogueEventSummary_Output: {
+            /** Format: uuid */
+            id: string;
+            slug: string;
+            title: string;
+            performer: string;
+            category: components["schemas"]["EventCategory_Output"];
+            venue: components["schemas"]["CatalogueVenue_Output"];
+            /** Format: date-time */
+            startsAt: string;
+            /** Format: date-time */
+            endsAt: string;
+            /** Format: date-time */
+            salesOpenAt: string;
+            seating: components["schemas"]["EventSeating_Output"];
+            availability: components["schemas"]["EventAvailability_Output"];
+            /** @description Released tickets that are neither sold nor held (tickets whose hold expired count). Buyable while the event is `ON_SALE`. */
+            availableTickets: number;
+            priceRange: components["schemas"]["PriceRange_Output"];
+        };
+        /** @enum {string} */
+        EventSeating_Output: "SEATED" | "GA" | "MIXED";
+        /** @enum {string} */
+        EventAvailability_Output: "SALES_NOT_OPEN" | "ON_SALE" | "SOLD_OUT" | "SALES_ENDED";
+        /** @description Prices of all the event’s tickets (sold, held and not yet released included) */
+        PriceRange_Output: {
+            /** @description Cheapest ticket, in US cents */
+            minCents: number;
+            /** @description Most expensive ticket, in US cents */
+            maxCents: number;
+        };
+        CatalogueEventPage_Output: {
+            items: components["schemas"]["CatalogueEventSummary_Output"][];
+            /** @description The requested page */
+            page: number;
+            /** @description The requested page size */
+            pageSize: number;
+            /** @description Items in the whole list, across all pages */
+            total: number;
+            /** @description Number of pages; 0 when the list is empty */
+            totalPages: number;
+        };
+        CatalogueEventVenue_Output: {
+            /** Format: uuid */
+            id: string;
+            slug: string;
+            name: string;
+            city: string;
+            /** @description IANA time zone; show event times in it */
+            timezone: string;
+            address: string;
+        };
+        CatalogueSection_Output: {
+            /** Format: uuid */
+            id: string;
+            name: string;
+            type: components["schemas"]["SectionType_Output"];
+            /** @description Released tickets in this section, by state */
+            tickets: components["schemas"]["TicketCounts_Output"];
+            priceRange: components["schemas"]["PriceRange_Output"];
+            /**
+             * Format: date-time
+             * @description When the next scheduled batch releases more tickets here; null if none is due
+             */
+            nextReleaseAt: string | null;
+        };
+        CatalogueEvent_Output: {
+            /** Format: uuid */
+            id: string;
+            slug: string;
+            title: string;
+            performer: string;
+            category: components["schemas"]["EventCategory_Output"];
+            venue: components["schemas"]["CatalogueEventVenue_Output"];
+            /** Format: date-time */
+            startsAt: string;
+            /** Format: date-time */
+            endsAt: string;
+            /** Format: date-time */
+            salesOpenAt: string;
+            seating: components["schemas"]["EventSeating_Output"];
+            availability: components["schemas"]["EventAvailability_Output"];
+            /** @description Released tickets that are neither sold nor held (tickets whose hold expired count). Buyable while the event is `ON_SALE`. */
+            availableTickets: number;
+            priceRange: components["schemas"]["PriceRange_Output"];
+            description: string;
+            /** @description Most tickets in one hold or order */
+            maxTicketsPerOrder: number;
+            /** @description Released tickets by state, across all sections */
+            tickets: components["schemas"]["TicketCounts_Output"];
+            /** @description Sections with tickets for this event, in the venue’s order */
+            sections: components["schemas"]["CatalogueSection_Output"][];
+        };
         ClockStateDto_Output: {
             /**
              * Format: date-time
@@ -1083,6 +1256,10 @@ export interface components {
         };
         /** @enum {string} */
         EventStatus: "DRAFT" | "PUBLISHED" | "CANCELLED";
+        /** @enum {string} */
+        EventSeating: "SEATED" | "GA" | "MIXED";
+        /** @enum {string} */
+        EventAvailability: "SALES_NOT_OPEN" | "ON_SALE" | "SOLD_OUT" | "SALES_ENDED";
         ProblemDetails: {
             /** @description URI that identifies the problem type: `about:blank` or `urn:testtix:problem:<error-code>` */
             type: string;
@@ -1758,6 +1935,40 @@ export interface operations {
             };
         };
     };
+    VenuesController_list: {
+        parameters: {
+            query?: {
+                /** @description Page number, from 1. A page past the last one returns no items. */
+                page?: number;
+                /** @description Items per page, 1–100 */
+                pageSize?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description One page of venues. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CatalogueVenuePage_Output"];
+                };
+            };
+            /** @description Error. The body is an RFC 9457 problem details object. */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
     AdminEventsController_list: {
         parameters: {
             query?: {
@@ -2222,6 +2433,89 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Error. The body is an RFC 9457 problem details object. */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    CatalogueController_list: {
+        parameters: {
+            query?: {
+                /** @description Page number, from 1. A page past the last one returns no items. */
+                page?: number;
+                /** @description Items per page, 1–100 */
+                pageSize?: number;
+                /** @description Search text: events whose title or performer contains it, ignoring case. Blank means no search. */
+                q?: string;
+                /** @description Only events of this category */
+                category?: components["schemas"]["EventCategory"];
+                /** @description Only events at the venue with this slug */
+                venue?: string;
+                /** @description Only events starting at or after this time (ISO 8601). Defaults to now (server clock), so past events are left out unless you ask for them. */
+                from?: string;
+                /** @description Only events starting before this time (ISO 8601) */
+                to?: string;
+                /** @description Only events selling only seats (`SEATED`), only general admission (`GA`), or both (`MIXED`) */
+                seating?: components["schemas"]["EventSeating"];
+                /** @description Only events in this sales state (server clock) */
+                availability?: components["schemas"]["EventAvailability"];
+                /** @description `date`: start time. `price`: lowest ticket price, then start time. `name`: title (ignoring case), then start time. The event ID breaks remaining ties. */
+                sort?: "date" | "price" | "name";
+                /** @description Direction of the sort key; the tiebreakers stay ascending */
+                order?: "asc" | "desc";
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description One page of events. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CatalogueEventPage_Output"];
+                };
+            };
+            /** @description Error. The body is an RFC 9457 problem details object. */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    CatalogueController_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                slug: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The event. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CatalogueEvent_Output"];
                 };
             };
             /** @description Error. The body is an RFC 9457 problem details object. */

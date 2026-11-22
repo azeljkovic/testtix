@@ -33,9 +33,9 @@ export async function countUnits(
 }
 
 /** Adds up count rows (all of them, or the ones `filter` keeps). */
-export function sumCounts(
-  rows: readonly UnitCountRow[],
-  filter: (row: UnitCountRow) => boolean = () => true,
+export function sumCounts<TRow extends Pick<UnitCountRow, 'total' | 'sold' | 'held'>>(
+  rows: readonly TRow[],
+  filter: (row: TRow) => boolean = () => true,
 ): TicketCounts {
   const sums = { total: 0, sold: 0, held: 0 };
   for (const row of rows) {

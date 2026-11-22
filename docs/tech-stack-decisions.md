@@ -154,6 +154,17 @@ Notes:
 - **Pagination** helpers (`PageQuerySchema`, `pageSchema()`, `toPage()`) live in `packages/shared`, so C2.2 reuses the same `page` / `pageSize` / `total` / `totalPages` shape.
 - Not in C2.1: editing or deleting batches, and the drop settings (`waitingRoomEnabled`, admission rate), which arrive with C5.1.
 
+**Public catalogue (C2.2)**
+
+- `GET /events`, `GET /events/{slug}` (`CatalogueController` in `EventsModule`) and `GET /venues` (`VenuesController`) are `@Public()`. The query schema (`EventCatalogueQuerySchema`) and its enums (`EVENT_AVAILABILITIES`, `EVENT_SEATINGS`, `CATALOGUE_SORTS`) live in `packages/shared`, so the web list page (C2.3) can parse its URL query with the same rules.
+- **One SQL derived table** (`src/events/catalogue-query.ts`) computes each published event's figures at the server clock (available released tickets, price range, seating, availability), so filters, sorts and the count all run in Postgres on the computed columns and pagination stays exact. Prisma's query builder can't filter or sort on aggregates; the raw SQL is built from `Prisma.sql` fragments (parameters only; the sort direction comes from a two-value enum).
+- **Availability** is derived, never stored: `SALES_ENDED` once `startsAt` has passed, `SALES_NOT_OPEN` before `salesOpenAt` or the first batch release, then `SOLD_OUT` or `ON_SALE` by released tickets that are neither sold nor in an unexpired hold (lazy hold expiry, as in `countUnits()`). Public figures count released tickets only, unlike the admin counts; the price range covers all tickets so it doesn't move as tickets sell.
+- **Seating** comes from the event's tickets (seats, GA places or both), not the venue layout: an event at a mixed venue that only sells the standing floor is `GA`.
+- **Defaults:** the list starts at now (`from` defaults to the server clock), so past events need an explicit `from`; `GET /events/{slug}` shows past published events too. Date ranges are half-open (`from` ≤ `startsAt` < `to`).
+- **Sorting:** `date`, `price` (lowest ticket price) or `name`, `asc` or `desc`; the start time and `id` tiebreakers stay ascending. Titles compare as `lower(title) COLLATE "C"`, so the order doesn't depend on the database's locale.
+- **Search** is `ILIKE '%q%'` on title and performer with `%`, `_` and `\` escaped. Enough for the catalogue's size; full-text search (`tsvector`) is not needed in v1.
+- `GET /venues` (venues with a published event) is an addition to the plan: the venue filter of C2.3 needs its choices, and the admin venue list needs the `ADMIN` role.
+
 **Concurrency for "buying the last seat"**
 
 - Seat claims use an atomic conditional update inside a Prisma interactive transaction, e.g. `UPDATE inventory_units SET status='HELD', hold_id=…, held_until=… WHERE id=… AND (status='AVAILABLE' OR held_until < now)`. If 0 rows were affected, the seat is already taken and the API returns 409.

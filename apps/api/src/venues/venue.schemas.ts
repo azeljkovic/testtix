@@ -66,6 +66,21 @@ export const AdminVenuePageSchema = pageSchema(AdminVenueSummarySchema).meta({
 
 export const VenueIdParamSchema = z.object({ venueId: id });
 
+export const CatalogueVenueSchema = z
+  .object({
+    id,
+    slug: z.string(),
+    name: z.string(),
+    city: z.string(),
+    timezone: z.string().describe('IANA time zone; show event times in it'),
+  })
+  .meta({ id: 'CatalogueVenue' });
+
+export const CatalogueVenuePageSchema = pageSchema(CatalogueVenueSchema).meta({
+  id: 'CatalogueVenuePage',
+});
+
+export type CatalogueVenue = z.infer<typeof CatalogueVenueSchema>;
 export type AdminSection = z.infer<typeof AdminSectionSchema>;
 export type AdminVenueSummary = z.infer<typeof AdminVenueSummarySchema>;
 export type AdminVenue = z.infer<typeof AdminVenueSchema>;
@@ -76,3 +91,4 @@ export class VenueListQueryDto extends createZodDto(PageQuerySchema) {}
 export class VenueIdParamDto extends createZodDto(VenueIdParamSchema) {}
 export class AdminVenueDto extends createZodDto(AdminVenueSchema) {}
 export class AdminVenuePageDto extends createZodDto(AdminVenuePageSchema) {}
+export class CatalogueVenuePageDto extends createZodDto(CatalogueVenuePageSchema) {}
