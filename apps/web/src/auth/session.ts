@@ -48,8 +48,10 @@ export function useLogout() {
   return useMutation({
     mutationFn: logout,
     onSuccess: async () => {
-      // Leave first: clearing the session on a guarded page would redirect to the login page.
-      await navigate('/');
+      // Leave first: clearing the session while a guarded page is still on screen would redirect to
+      // the login page. React Router renders navigations as transitions, so `navigate` can resolve
+      // before the new page is on screen; `flushSync` commits it before the session is cleared.
+      await navigate('/', { flushSync: true });
       queryClient.setQueryData<AuthSession | null>(SESSION_QUERY_KEY, null);
     },
   });

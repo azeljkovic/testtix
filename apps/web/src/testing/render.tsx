@@ -1,7 +1,8 @@
 import { QueryClient } from '@tanstack/react-query';
 import { render } from '@testing-library/react';
 import { userEvent } from '@testing-library/user-event';
-import { createMemoryRouter, RouterProvider } from 'react-router';
+import { createMemoryRouter } from 'react-router';
+import { RouterProvider } from 'react-router/dom';
 
 import { AppProviders } from '../app/AppProviders.js';
 import { routes } from '../app/routes.js';
