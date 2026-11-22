@@ -64,6 +64,17 @@ Notes:
 - **Lint:** the shared ESLint config gains a `react` option with `eslint-plugin-react-hooks` (recommended rules, including the React Compiler checks). `eslint-plugin-jsx-a11y` is left out because it doesn't support ESLint 10 yet; axe checks in component tests cover accessibility.
 - **Component tests:** Vitest with jsdom, React Testing Library and user-event. MSW 3 answers API calls (`onUnhandledFrame: 'error'`, so an unmocked request fails the test). `vitest-axe` 0.1 still declares its matcher types for an old Vitest, so `src/testing/axe.ts` re-declares `toHaveNoViolations` for Vitest's `Matchers` interface; jsdom can't measure colour contrast, so that axe rule is off in component tests and left to e2e.
 
+**Auth pages (C1.6)**
+
+- **Forms:** React Hook Form 7 with `@hookform/resolvers` 7 (`zodResolver`) and the request schemas from `packages/shared`, so the form and the API validate with the same rules. The shared schemas carry the human-readable messages the forms show (the API returns the same text in `errors`). `zod` is a direct dependency of the web app at the shared package's version. Fields are React Aria `TextField`s bound with RHF's `Controller` (`validationBehavior="aria"`, so no browser validation bubbles); a failed submit focuses the first invalid field.
+- **Server errors:** `showSubmitError()` puts the problem's field `errors` on matching fields (e.g. `email` for `email-already-registered`) and anything else in a form-level `role="alert"`, worded per error code.
+- **CSRF:** every state-changing call passes `params: { header: await csrfHeader() }`. The spec marks `X-CSRF-Token` required, so the typed client refuses a call without it. `csrfHeader()` reads the `testtix_csrf` cookie and calls `GET /auth/csrf` only when there's none.
+- **Session:** one TanStack Query (`sessionQuery`, `GET /auth/me`) that is `null` when logged out (401). Login and register write the session into it; logout navigates home first, then clears it, so a guarded page doesn't bounce to the login page.
+- **Route guards** are layout routes (`<RequireAuth />`, `<RequireAuth role="ADMIN" />`) rather than loaders, so the route table stays a plain array shared with tests. Anonymous visitors go to `/login?redirectTo=…`; a logged-in user without the role sees "Access denied" at the same URL. `redirectTo` only accepts same-origin paths (no open redirect).
+- **No React Aria `isPending` buttons.** It announces through a body-level live region whose node points at the button by ID; after a successful submit navigates away, that reference dangles for up to 7 s, and an axe scan flags it. Submit buttons are native buttons with `aria-disabled` while pending.
+- The verification landing page runs `POST /auth/verify-email` as a query (not a mutation): it is idempotent, and a query runs once per token even when StrictMode mounts the page twice.
+- The bundle passed Vite's 500 kB warning (about 670 kB, 210 kB gzipped, mostly React DOM, React Aria and Zod). Route-level code splitting can come when the catalogue pages land.
+
 ---
 
 ## 3. Backend (`apps/api`)

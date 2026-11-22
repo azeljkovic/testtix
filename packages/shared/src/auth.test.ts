@@ -89,3 +89,23 @@ describe('VerifyEmailRequestSchema', () => {
     expect(VerifyEmailRequestSchema.safeParse(body).success).toBe(false);
   });
 });
+
+describe('validation messages', () => {
+  function messages(result: { success: boolean; error?: { issues: { message: string }[] } }) {
+    return result.error?.issues.map((issue) => issue.message);
+  }
+
+  it('are written for people, since the web forms show them as they are', () => {
+    expect(
+      messages(RegisterRequestSchema.safeParse({ email: 'nope', password: 'short', name: ' ' })),
+    ).toEqual([
+      'Enter a valid email address',
+      `Password must be at least ${PASSWORD_MIN_LENGTH} characters`,
+      'Enter your name',
+    ]);
+    expect(messages(LoginRequestSchema.safeParse({ email: '', password: '' }))).toEqual([
+      'Enter a valid email address',
+      'Enter your password',
+    ]);
+  });
+});
