@@ -34,7 +34,8 @@ When a decision changes, update the docs in the same PR so they stay accurate.
 - ✅ C3.3 Web: accessible seat map
 - ✅ C3.4 Web: hold flow + countdown
 - ✅ C4.1 Fake payments service
-- ⏭️ Next: **C4.2 Orders API** (see plan)
+- ✅ C4.2 Orders API
+- ⏭️ Next: **C4.3 Webhook handling + order processing jobs** (see plan)
 
 Update this list when a chunk is merged.
 
@@ -100,6 +101,7 @@ Run one package: `pnpm --filter @testtix/api <script>`.
 - Event writes (edits, status actions, batch releases) start their transaction with `lockEvent()` (`src/events/admin-events.service.ts`), and venue layout writes with `lockVenue()`; keep that order (event, then venue) in new code. Rules a schema can't check answer 400 via `validationFailed(errors)`; state conflicts get their own 409 problem type.
 - Public catalogue figures (`src/events/catalogue-query.ts`) count **released** tickets only and treat expired holds as available; filters and sorts on computed columns go in that SQL, not in JS, so pagination stays exact.
 - Holds (`src/holds/holds.service.ts`): claim inventory only through its locking order (event `FOR SHARE` → per-user advisory lock → units `ORDER BY id FOR UPDATE` → conditional `UPDATE`; GA with `SKIP LOCKED`). Expired = `held_until <= now`. A 409 that carries data uses `ProblemException`'s `extensions` plus a shared schema registered in `addProblemDetailsResponses()`. Scenario rows can include `holds` (`holdUnits()` in `scenario-data.ts`).
+- Orders (`src/orders/`): one order per hold (`orders.hold_id` unique); the order owns its hold, and `deleteHold()` expires its `PENDING_PAYMENT` order, so every hold change goes through it. Show order status via `effectiveStatus()` (lazy expiry). Call the payment provider only through `PaymentsClient` (`src/payments/`), never inside a transaction. In tests, point `PAYMENTS_BASE_URL` at `startPaymentProviderStub()` (`src/testing/payment-provider-stub.ts`); the sweeper isn't loaded with the worker off, so call `new HoldSweeperService(prisma, clock).sweep()`.
 - Background jobs (`src/jobs/`): register processors and job schedules in `WorkerModule`, which runs in the API (`WORKER_IN_PROCESS=true`, default) or alone via `src/worker.ts` (`WorkerAppModule`); so never rely on API-only providers in a processor. Use job schedulers (`upsertJobScheduler`), not the old repeatable-job API. Hold changes outside `HoldsService` reuse `src/holds/hold-locks.ts`. Test harnesses run with the worker off; pass `env: { WORKER_IN_PROCESS: 'true' }` to `createIntegrationApp()` to turn it on (and empty the queue first).
 - List endpoints paginate with `PageQuerySchema` / `pageSchema()` / `toPage()` from `packages/shared`. Generated slugs use `slugify()` + `insertWithSlug()` (`src/infra/slugs.ts`).
 - Prefer accessible names over `data-testid` in the UI; use `data-testid` only where no good accessible locator exists.

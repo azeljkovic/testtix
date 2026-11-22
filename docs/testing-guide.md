@@ -124,7 +124,7 @@ Every error response, whatever the cause, is `application/problem+json` (based o
 | `type`      | `about:blank` when the HTTP status says it all; a `urn:testtix:problem:*` URI for app-specific problems  |
 | `title`     | Short summary of the type (the HTTP status phrase for `about:blank`)                                     |
 | `status`    | Same as the HTTP status code                                                                             |
-| `detail`    | Explanation of this occurrence. For 5xx it is always the generic `An unexpected error occurred.`         |
+| `detail`    | Explanation of this occurrence. For an unexpected 5xx it is the generic `An unexpected error occurred.`  |
 | `instance`  | Request path, without the query string                                                                   |
 | `requestId` | Same as the `X-Request-Id` header                                                                        |
 | `errors`    | Field errors for validation failures (`path` is dot-separated, e.g. `items.0.quantity`); otherwise empty |
@@ -133,27 +133,30 @@ Branch on `type`, never on `title` or `detail`. App-specific types end in an err
 
 Problem types so far:
 
-| `type`                                           | Status | When                                                                                                                                                                   |
-| ------------------------------------------------ | ------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `about:blank`                                    | any    | Unknown route (404), malformed JSON (400), not logged in or session expired (401), missing or wrong `X-Test-Key` (401), logged in without the required role (403), 5xx |
-| `urn:testtix:problem:validation-error`           | 400    | Body, query or path parameters fail validation                                                                                                                         |
-| `urn:testtix:problem:invalid-credentials`        | 401    | Login with a wrong email or password                                                                                                                                   |
-| `urn:testtix:problem:csrf-token-invalid`         | 403    | A POST, PUT, PATCH or DELETE without a valid `X-CSRF-Token` header (see [CSRF](#csrf-tokens))                                                                          |
-| `urn:testtix:problem:email-already-registered`   | 409    | Registering an email that already has an account (`errors[0].path` is `email`)                                                                                         |
-| `urn:testtix:problem:verification-token-invalid` | 400    | [Verifying an email](#email-verification) with an unknown or malformed token, or one replaced by a newer email                                                         |
-| `urn:testtix:problem:verification-token-expired` | 400    | Verifying an email with an unused link past its expiry                                                                                                                 |
-| `urn:testtix:problem:email-already-verified`     | 409    | Asking for a new verification email when the address is already verified                                                                                               |
-| `urn:testtix:problem:slug-taken`                 | 409    | Creating or renaming a venue or event with a `slug` that is taken (`errors[0].path` is `slug`)                                                                         |
-| `urn:testtix:problem:venue-in-use`               | 409    | Deleting a venue that an event uses                                                                                                                                    |
-| `urn:testtix:problem:layout-locked`              | 409    | Replacing a venue's `sections`, or changing an event's `venueId`, after tickets were released                                                                          |
-| `urn:testtix:problem:event-status-conflict`      | 409    | An [event action](#event-lifecycle) its status doesn't allow, e.g. publishing a published event or changing a cancelled one                                            |
-| `urn:testtix:problem:event-has-no-batches`       | 409    | Publishing an event without a ticket batch                                                                                                                             |
-| `urn:testtix:problem:event-already-started`      | 409    | Publishing an event whose `startsAt` has passed                                                                                                                        |
-| `urn:testtix:problem:event-has-sales`            | 409    | Unpublishing or deleting an event with tickets sold or held (or, for deleting, with orders)                                                                            |
-| `urn:testtix:problem:inventory-already-released` | 409    | A batch lists a seat, or a whole section, that earlier batches already released (`errors` names each)                                                                  |
-| `urn:testtix:problem:ga-capacity-exceeded`       | 409    | A batch asks for more GA places than the section has left to release                                                                                                   |
-| `urn:testtix:problem:event-not-on-sale`          | 409    | [Holding tickets](#seat-maps-and-holds) before `salesOpenAt` or once the event has started                                                                             |
-| `urn:testtix:problem:tickets-unavailable`        | 409    | A hold asks for a seat that is sold, held or not on sale, or for more GA places than are left. Extra members `unavailableSeatIds` and `gaShortfalls` say which         |
+| `type`                                             | Status | When                                                                                                                                                                   |
+| -------------------------------------------------- | ------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `about:blank`                                      | any    | Unknown route (404), malformed JSON (400), not logged in or session expired (401), missing or wrong `X-Test-Key` (401), logged in without the required role (403), 5xx |
+| `urn:testtix:problem:validation-error`             | 400    | Body, query or path parameters fail validation                                                                                                                         |
+| `urn:testtix:problem:invalid-credentials`          | 401    | Login with a wrong email or password                                                                                                                                   |
+| `urn:testtix:problem:csrf-token-invalid`           | 403    | A POST, PUT, PATCH or DELETE without a valid `X-CSRF-Token` header (see [CSRF](#csrf-tokens))                                                                          |
+| `urn:testtix:problem:email-already-registered`     | 409    | Registering an email that already has an account (`errors[0].path` is `email`)                                                                                         |
+| `urn:testtix:problem:verification-token-invalid`   | 400    | [Verifying an email](#email-verification) with an unknown or malformed token, or one replaced by a newer email                                                         |
+| `urn:testtix:problem:verification-token-expired`   | 400    | Verifying an email with an unused link past its expiry                                                                                                                 |
+| `urn:testtix:problem:email-already-verified`       | 409    | Asking for a new verification email when the address is already verified                                                                                               |
+| `urn:testtix:problem:slug-taken`                   | 409    | Creating or renaming a venue or event with a `slug` that is taken (`errors[0].path` is `slug`)                                                                         |
+| `urn:testtix:problem:venue-in-use`                 | 409    | Deleting a venue that an event uses                                                                                                                                    |
+| `urn:testtix:problem:layout-locked`                | 409    | Replacing a venue's `sections`, or changing an event's `venueId`, after tickets were released                                                                          |
+| `urn:testtix:problem:event-status-conflict`        | 409    | An [event action](#event-lifecycle) its status doesn't allow, e.g. publishing a published event or changing a cancelled one                                            |
+| `urn:testtix:problem:event-has-no-batches`         | 409    | Publishing an event without a ticket batch                                                                                                                             |
+| `urn:testtix:problem:event-already-started`        | 409    | Publishing an event whose `startsAt` has passed                                                                                                                        |
+| `urn:testtix:problem:event-has-sales`              | 409    | Unpublishing or deleting an event with tickets sold or held (or, for deleting, with orders)                                                                            |
+| `urn:testtix:problem:inventory-already-released`   | 409    | A batch lists a seat, or a whole section, that earlier batches already released (`errors` names each)                                                                  |
+| `urn:testtix:problem:ga-capacity-exceeded`         | 409    | A batch asks for more GA places than the section has left to release                                                                                                   |
+| `urn:testtix:problem:event-not-on-sale`            | 409    | [Holding tickets](#seat-maps-and-holds) before `salesOpenAt` or once the event has started; checking out once it is unpublished, cancelled or started                  |
+| `urn:testtix:problem:tickets-unavailable`          | 409    | A hold asks for a seat that is sold, held or not on sale, or for more GA places than are left. Extra members `unavailableSeatIds` and `gaShortfalls` say which         |
+| `urn:testtix:problem:email-not-verified`           | 403    | [Checking out](#checkout-and-orders) before verifying your email address                                                                                               |
+| `urn:testtix:problem:hold-expired`                 | 409    | Checking out a hold that has expired (or has no tickets left)                                                                                                          |
+| `urn:testtix:problem:payment-provider-unavailable` | 503    | Checking out while the payment provider is down, slow or answering errors. The order is kept: retry the same request                                                   |
 
 ## Accounts and sessions
 
@@ -281,7 +284,7 @@ Choosing tickets is two steps: read the event's seat map, then **hold** seats an
 | `GET /holds/current?eventId={id}` | yes     | Your unexpired hold for the event; without `eventId`, your most recent one. Else 404 |
 | `DELETE /holds/{holdId}`          | yes     | Releases your hold at once. 204; 404 for unknown holds and other customers' holds    |
 
-The routes take the event's **ID**, not its slug (`GET /events/{slug}` returns the ID). Holds need a session and, on `POST` and `DELETE`, the [CSRF header](#csrf-tokens); any logged-in user can hold tickets (checkout will require a verified email).
+The routes take the event's **ID**, not its slug (`GET /events/{slug}` returns the ID). Holds need a session and, on `POST` and `DELETE`, the [CSRF header](#csrf-tokens); any logged-in user can hold tickets ([checkout](#checkout-and-orders) requires a verified email).
 
 ### Seat map
 
@@ -343,11 +346,11 @@ curl -s -X POST http://localhost:3000/__test/clock -H 'Content-Type: application
 
 `DELETE /holds/{holdId}` works on an expired hold too (204); it never takes back tickets someone else has held since.
 
-**Cleanup.** A background job, the hold sweeper, deletes expired holds and frees the tickets they still have, every `HOLD_SWEEPER_INTERVAL_MS` (default 60 seconds) by the server clock: after `advanceBy`, the next sweep picks them up. It is cleanup only, so no response above changes because of it, with one exception: once a hold has been swept, `DELETE /holds/{holdId}` answers 404 instead of 204. `HOLD_SWEEPER_ENABLED=false` turns it off (expired holds then stay in the database, with their tickets still available). The job runs inside the API by default; see [background jobs](../README.md#background-jobs) to run it as a separate worker.
+**Cleanup.** A background job, the hold sweeper, deletes expired holds and frees the tickets they still have, every `HOLD_SWEEPER_INTERVAL_MS` (default 60 seconds) by the server clock: after `advanceBy`, the next sweep picks them up. It is cleanup only, so no response above changes because of it, with two exceptions: once a hold has been swept, `DELETE /holds/{holdId}` and `POST /orders` with its ID answer 404 instead of 204 and 409 `hold-expired`. `HOLD_SWEEPER_ENABLED=false` turns it off (expired holds then stay in the database, with their tickets still available). The job runs inside the API by default; see [background jobs](../README.md#background-jobs) to run it as a separate worker.
 
 ## Payments
 
-Checkout pays through a **fake hosted payment provider** (`apps/fake-payments`, `http://localhost:4000`, started by `pnpm infra:up`). It behaves like a real one: the shop creates a payment session, sends the customer to the provider's payment page, and later learns the result from a signed **webhook**. What happens is decided by the [test card](#test-cards) the customer types. From C4.2 on, the API creates the sessions; until then (and for testing the provider itself) you can call it directly.
+Checkout pays through a **fake hosted payment provider** (`apps/fake-payments`, `http://localhost:4000`, started by `pnpm infra:up`). It behaves like a real one: the shop creates a payment session, sends the customer to the provider's payment page, and later learns the result from a signed **webhook**. What happens is decided by the [test card](#test-cards) the customer types. The API creates the sessions when you [check out](#checkout-and-orders); to test the provider itself, call it directly.
 
 | Endpoint             | Auth    | What it does                                                                     |
 | -------------------- | ------- | -------------------------------------------------------------------------------- |
@@ -435,6 +438,55 @@ printf '%s' '1795000000.{"id":"evt_1"}' | openssl dgst -sha256 -hmac 'whsec_test
 **Retries.** Any 2xx answer counts as delivered. Any other status, a redirect (not followed), a connection error or no answer within `WEBHOOK_TIMEOUT_MS` (5 s) is retried: after `WEBHOOK_RETRY_BASE_MS` (1 s), then 2 s, 4 s, 8 s and so on (capped at 5 minutes, no jitter), up to `WEBHOOK_MAX_ATTEMPTS` deliveries in all (6). Each attempt is signed again with a fresh timestamp. `GET /sessions/{id}` lists every attempt in `webhookDeliveries`: `eventId`, `attempt`, `sentAt`, `statusCode` (null without an answer) and `error` (e.g. `ECONNREFUSED`, `No response within 5000 ms`).
 
 The container reaches an API on your machine at `host.docker.internal` (e.g. `http://host.docker.internal:3000/webhooks/payments`). The timing variables are set through the root `.env` with a `FAKE_PAYMENTS_` prefix (`FAKE_PAYMENTS_DELAYED_WEBHOOK_MS=2000`, see `.env.example`), then `pnpm infra:up` recreates the container.
+
+## Checkout and orders
+
+Checking out turns your hold into an **order** and a payment page. The order goes `PENDING_PAYMENT` → (payment) → `PROCESSING` → `CONFIRMED` or `FAILED`; an unpaid order becomes `EXPIRED` with its hold. Confirming paid orders arrives with C4.3: for now orders stay `PENDING_PAYMENT` until they expire.
+
+| Endpoint                | Session | What it does                                                                                  |
+| ----------------------- | ------- | --------------------------------------------------------------------------------------------- |
+| `POST /orders`          | yes     | Checks out a hold: `{"holdId":"…"}`. 201 with the new order, 200 with the hold's existing one |
+| `GET /orders/{orderId}` | yes     | One of your orders, with its items. 404 for unknown orders and other customers' orders        |
+| `GET /orders`           | yes     | Your orders, newest first, [paginated](#pagination) (`page`, `pageSize`)                      |
+
+`POST` needs the [CSRF header](#csrf-tokens). Continuing the [hold example](#holding-tickets):
+
+```sh
+curl -s -X POST http://localhost:3000/orders \
+  -H "Cookie: $(echo "$session" | jq -r .cookie)" -H "X-CSRF-Token: $(echo "$session" | jq -r .csrfToken)" \
+  -H 'Content-Type: application/json' -d '{"holdId":"<hold id>"}'
+```
+
+The order has its `id`, `status`, `event` (`id`, `slug`, `title`, `startsAt`, `venue.name`, `venue.timezone`), `totalCents`, `ticketCount`, `items` (the hold's items: `inventoryUnitId`, `section`, `seat`, `priceCents`), `expiresAt`, `createdAt`, `updatedAt`, `paymentUrl` and `retryAfterMs`. Send the customer to `paymentUrl`, the [payment page](#payment-page); afterwards the provider returns them to `<WEB_BASE_URL>/orders/<order id>?session_id=…`. List items (`GET /orders`) have the same fields without `items`, `paymentUrl`, `updatedAt` and `retryAfterMs`.
+
+Rules of `POST /orders`, checked in this order:
+
+1. **400 `validation-error`** unless the body is exactly `{"holdId":"<uuid>"}`.
+2. **403 `email-not-verified`** until your email is [verified](#email-verification) (test sessions are verified unless created with `"emailVerified":false`).
+3. **404** for unknown holds, other customers' holds, and holds already released, replaced or [swept](#holding-tickets).
+4. **409 `hold-expired`** once the hold's `expiresAt` has passed.
+5. If the hold already has an order, **200** with that order: a hold has at most one order, so a double click or a retry is harmless (two requests at the same moment get one 201 and one 200 with the same order).
+6. **409 `event-not-on-sale`** when the event was unpublished or cancelled, or has started, since the hold was made.
+7. **201** with the new order. Then the API asks the provider for a payment session. If that fails (unreachable, an error status, or no answer within `PAYMENTS_TIMEOUT_MS`, 5 s), the answer is **503 `payment-provider-unavailable`**, but the order exists, `PENDING_PAYMENT` with `paymentUrl: null`, and the hold is unchanged: send the same request again (200, now with `paymentUrl`). To try it, stop the provider (`docker compose --project-directory . -f docker/compose.yml stop fake-payments`; `pnpm infra:up` starts it again).
+
+**Free orders** (every ticket priced $0) get no payment page: `paymentUrl` stays null, since the provider can't take a payment of 0.
+
+**The order owns the hold.** Its tickets stay `HELD` in your hold (the seat map shows them as `HELD`), and the order's `expiresAt` is the hold's. The order expires when the hold ends, whichever way:
+
+- **The hold runs out:** at `expiresAt` (server clock) the order is `EXPIRED` in every response at once, like holds ([lazy expiry](#holding-tickets)); the hold sweeper later stores that in the database and frees the tickets. Move the clock to test it.
+- **You release the hold** (`DELETE /holds/{holdId}`) or **replace it** with a new hold for the same event: the unpaid order becomes `EXPIRED` in the same step. The new hold can be checked out as a new order.
+
+Paying an expired order's payment page anyway is possible (the provider doesn't know about the hold); C4.3 records such payments and flags them for refund, never selling the tickets.
+
+**Polling.** `retryAfterMs` says how long to wait before asking for the order again: `ORDER_POLL_INTERVAL_MS` (2 s) while it can still change, never past `expiresAt` while it is unpaid (so a poll lands right at expiry), and `null` once the status is final (`CONFIRMED`, `FAILED`, `EXPIRED`). Stop polling then.
+
+| Order `status`    | Meaning                                                                    | `paymentUrl`  | `retryAfterMs` |
+| ----------------- | -------------------------------------------------------------------------- | ------------- | -------------- |
+| `PENDING_PAYMENT` | Waiting for payment until `expiresAt`                                      | set (or null) | ≤ 2000         |
+| `PROCESSING`      | The provider reported a result; the order is being finished (C4.3)         | null          | 2000           |
+| `CONFIRMED`       | Paid; tickets issued (C4.3, C4.4)                                          | null          | null           |
+| `FAILED`          | The payment was declined; the tickets are released (C4.3)                  | null          | null           |
+| `EXPIRED`         | Not paid while the hold lasted: it ran out, or you released or replaced it | null          | null           |
 
 ## Admin API
 
