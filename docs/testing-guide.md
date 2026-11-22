@@ -26,6 +26,21 @@ How to test TestTix from the outside: what the API promises, and the hooks it gi
 - **Verification page outcomes:** "Email verified", "Verification link expired", "Verification link not valid" (unknown or replaced token), "Verification link incomplete" (no token) and an error with "Try again". The expired and invalid pages offer "Send a new verification email" to the logged-in owner, or a "Log in" link to anyone else.
 - The page checks the session with `GET /api/auth/me` on load. For visitors that is a 401, which the browser console lists as a failed request; it isn't an app error.
 
+### Event pages
+
+| Path                   | What it shows                                                                                        |
+| ---------------------- | ---------------------------------------------------------------------------------------------------- |
+| `/events`              | The [public catalogue](#public-catalogue): search, filters, sort and pages                           |
+| `/events/<slug>`       | One event: when and where, prices, sales details, ticket availability per section and the way to buy |
+| `/events/<slug>/seats` | Where "Choose seats" leads. A placeholder until the seat map (M3)                                    |
+
+- **The URL holds the whole list state**, with the API's parameter names: `q`, `category`, `venue`, `seating`, `availability`, `sort`, `order`, `page`, plus `from` / `to` as calendar days (`2026-12-01`). So `/events?category=TALK&sort=price&order=desc&page=2` opens exactly that list, and every change (a filter, a search, a page) is a history entry the back button undoes. Defaults are left out (the plain list is `/events`). A value the API wouldn't accept (`category=PARTY`, `page=0`, `from=2026-02-30`) is ignored.
+- **Debounced search.** The "Search" box (role `searchbox`, inside a `search` landmark named "Events") searches title and performer **300 ms** after the last keystroke (`SEARCH_DEBOUNCE_MS` in `packages/shared`), with one request for the whole pause. Enter searches at once. The URL gets `q` when the search runs, not while typing.
+- **Filters** are native selects named "Category", "Venue" (choices from `GET /venues`), "Seating", "Availability" and "Sort by" (date, price or name, each both ways), and date inputs "From" and "To". The days are in the browser's time zone and both are included: `from=2026-12-01&to=2026-12-31` asks the API for `from` = midnight on Dec 1 and `to` = midnight on Jan 1. A "To" before "From" marks "To" invalid with a message and sends no request. Changing anything but the page goes back to page 1. "Clear filters" (shown while any search or filter is set) keeps the sort.
+- **Results.** A status line above the list (`role="status"`) reads "Loading events…", "Showing 21–40 of 41 events" or "No events found"; grey placeholder cards show while loading. Each event is an `article` named by its title, whose link opens the event page; the date is in the **venue's** time zone (e.g. "Sun, Dec 13, 2026, 6:30 PM EST"), whatever the browser's is. A failed request shows an alert with "Try again".
+- **Pagination** (20 per page) is a `navigation` named "Pagination" with "Previous page", "Page N" and "Next page" links; the current page has `aria-current="page"`, and "Previous page" / "Next page" have `aria-disabled="true"` and no `href` on the first / last page. Following a page link moves focus to the "Results" heading. A page past the end (`/events?page=9`) says so and links to the last page.
+- **Event page.** "Back to events" returns to the list with the filters the visitor came from. The "Tickets" region shows the availability (On sale, Sold out, Not on sale yet, Sales ended); while the event is on sale it links "Choose seats" ("Choose tickets" for general-admission-only events), otherwise it says why nothing can be bought and when a scheduled batch releases tickets. The "Ticket availability" table lists each section's type, price, available, held and sold counts and next release, with an "All sections" total row. An unknown, draft or cancelled event shows "Event not found".
+
 ## API basics
 
 - Base URL locally: `http://localhost:3000` (`pnpm --filter @testtix/api dev`).

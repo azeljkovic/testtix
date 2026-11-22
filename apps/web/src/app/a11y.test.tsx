@@ -4,6 +4,8 @@ import { describe, expect, it } from 'vitest';
 
 import { admin, customer, logInAs } from '../testing/auth.js';
 import { axe } from '../testing/axe.js';
+import { mockEventList } from '../testing/catalogue.js';
+import { concert, eventPage } from '../testing/catalogue-fixtures.js';
 import { server } from '../testing/msw-server.js';
 import { problemResponse } from '../testing/problems.js';
 import { renderApp } from '../testing/render.js';
@@ -23,7 +25,6 @@ async function settled() {
 describe('accessibility (axe)', () => {
   it.each([
     ['/', /tickets for concerts/i],
-    ['/events', 'Events'],
     ['/no-such-page', 'Page not found'],
     ['/login', 'Log in'],
     ['/register', 'Create an account'],
@@ -105,5 +106,61 @@ describe('accessibility (axe)', () => {
     await screen.findByRole('heading', { level: 1, name: 'Access denied' });
     await settled();
     expect(await axe(document.body)).toHaveNoViolations();
+  });
+
+  describe('catalogue', () => {
+    /** Waits for the list's status to settle on `status`. */
+    async function listSettled(status: RegExp | string) {
+      await screen.findByRole('heading', { level: 1, name: 'Events' });
+      await waitFor(() => {
+        expect(screen.getByRole('status')).toHaveTextContent(status);
+      });
+      // The venue filter's choices.
+      await screen.findByRole('option', { name: 'Riverside Hall, Springfield' });
+      await settled();
+    }
+
+    it('the event list with results and pagination has no axe violations', async () => {
+      mockEventList(() => eventPage([concert], { page: 2, total: 45 }));
+      renderApp('/events?q=echo&page=2');
+      await listSettled('Showing 21–21 of 45 events');
+      await screen.findByRole('navigation', { name: 'Pagination' });
+
+      expect(await axe(document.body)).toHaveNoViolations();
+    });
+
+    it.each([
+      ['loading', '/events', () => new Promise<never>(() => undefined), 'Loading events…'],
+      ['empty', '/events?category=TALK', () => eventPage([]), 'No events found'],
+      ['failed', '/events', () => problemResponse({ status: 503 }), ''],
+      ['past the last page', '/events?page=9', () => eventPage([], { total: 45 }), '45 events'],
+    ] as const)('the %s event list has no axe violations', async (_case, path, respond, status) => {
+      mockEventList(respond);
+      renderApp(path);
+      await listSettled(status);
+      if (_case === 'failed') await screen.findByRole('alert');
+
+      expect(await axe(document.body)).toHaveNoViolations();
+    });
+
+    it('the event list with an invalid date range has no axe violations', async () => {
+      renderApp('/events?from=2026-12-10&to=2026-12-01');
+      await listSettled('Fix the dates to see events.');
+
+      expect(await axe(document.body)).toHaveNoViolations();
+    });
+
+    it.each([
+      ['/events/midnight-echoes-live', 'Midnight Echoes Live'],
+      ['/events/flaky-tests-clinic', 'Flaky Tests Clinic'],
+      ['/events/no-such-event', 'Event not found'],
+      ['/events/midnight-echoes-live/seats', 'Choose seats'],
+    ])('%s has no axe violations', async (path, heading) => {
+      renderApp(path);
+      await screen.findByRole('heading', { level: 1, name: heading });
+      await settled();
+
+      expect(await axe(document.body)).toHaveNoViolations();
+    });
   });
 });
