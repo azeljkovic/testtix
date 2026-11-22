@@ -51,6 +51,11 @@ export class TestSessionsService {
       if (isUniqueViolation(err)) throw emailAlreadyRegistered();
       throw err;
     }
+    return this.logIn(user);
+  }
+
+  /** Starts a session for an existing user: what `POST /__test/sessions` returns. */
+  async logIn(user: User): Promise<TestSessionResponse> {
     const session = await this.sessions.create(user.id);
     const csrfToken = newCsrfToken();
     return {

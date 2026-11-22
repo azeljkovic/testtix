@@ -66,6 +66,7 @@ export async function resetAndSeedDatabase(prisma: PrismaClient, now: Date): Pro
 
 /** Rows of tables the baseline leaves empty, for data sets that add them (test scenarios). */
 export interface ExtraRows {
+  holds: Prisma.HoldCreateManyInput[];
   orders: Prisma.OrderCreateManyInput[];
   orderItems: Prisma.OrderItemCreateManyInput[];
   tickets: Prisma.TicketCreateManyInput[];
@@ -82,6 +83,8 @@ export async function insertRows(
   for (const rows of chunks(data.seats)) await tx.seat.createMany({ data: rows });
   for (const rows of chunks(data.events)) await tx.event.createMany({ data: rows });
   for (const rows of chunks(data.ticketBatches)) await tx.ticketBatch.createMany({ data: rows });
+  // Before the units that point at them.
+  for (const rows of chunks(data.holds ?? [])) await tx.hold.createMany({ data: rows });
   for (const rows of chunks(data.inventoryUnits)) {
     await tx.inventoryUnit.createMany({ data: rows });
   }

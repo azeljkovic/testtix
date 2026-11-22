@@ -1843,6 +1843,279 @@
         ]
       }
     },
+    "/events/{eventId}/seats": {
+      "get": {
+        "description": "Every section of the venue in order: seated sections with each seat’s status and price, GA sections with the places a hold could take. Statuses are at the server clock; a seat whose hold expired is `AVAILABLE`. 404 unless the event is published.",
+        "operationId": "HoldsController_seatMap",
+        "parameters": [
+          {
+            "name": "eventId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The seat map.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SeatMap_Output"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error. The body is an RFC 9457 problem details object.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Get an event’s seat map",
+        "tags": [
+          "holds"
+        ]
+      }
+    },
+    "/events/{eventId}/holds": {
+      "post": {
+        "description": "All or nothing: either every requested ticket is held until `expiresAt` (now + the event’s hold duration), or nothing is. Replaces your previous hold for this event (a failed request keeps it). 400 `validation-error` for more tickets than the event’s `maxTicketsPerOrder`, or seats and sections that aren’t at the event’s venue. 404 unless the event is published. 409 `event-not-on-sale` before sales open or once the event has started; 409 `tickets-unavailable` when a seat is sold, held or not on sale, or a GA section has fewer places left than requested.",
+        "operationId": "HoldsController_create",
+        "parameters": [
+          {
+            "name": "eventId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-CSRF-Token",
+            "in": "header",
+            "required": true,
+            "description": "The CSRF token from `GET /auth/csrf`. Must equal the `testtix_csrf` cookie, which must be sent too.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HoldRequestDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "The new hold.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Hold_Output"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No session cookie, or the session has expired or was ended.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The `X-CSRF-Token` header is missing or doesn't match the `testtix_csrf` cookie (type `csrf-token-invalid`).",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`tickets-unavailable` (body below, with what could not be held) or `event-not-on-sale` (plain problem details, without the two lists).",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TicketsUnavailableProblem"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error. The body is an RFC 9457 problem details object.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Hold seats and GA places",
+        "tags": [
+          "holds"
+        ],
+        "security": [
+          {
+            "session": []
+          }
+        ]
+      }
+    },
+    "/holds/current": {
+      "get": {
+        "description": "Your unexpired hold for `eventId`, or without it your most recent unexpired hold. 404 when there is none.",
+        "operationId": "HoldsController_current",
+        "parameters": [
+          {
+            "name": "eventId",
+            "required": false,
+            "in": "query",
+            "description": "The event whose hold to return. Without it: the most recent active hold of any event.",
+            "schema": {
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The hold.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Hold_Output"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No session cookie, or the session has expired or was ended.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error. The body is an RFC 9457 problem details object.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Get your active hold",
+        "tags": [
+          "holds"
+        ],
+        "security": [
+          {
+            "session": []
+          }
+        ]
+      }
+    },
+    "/holds/{holdId}": {
+      "delete": {
+        "description": "Its tickets become available at once. Works on expired holds too. 404 for unknown holds and other users’ holds.",
+        "operationId": "HoldsController_release",
+        "parameters": [
+          {
+            "name": "holdId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-CSRF-Token",
+            "in": "header",
+            "required": true,
+            "description": "The CSRF token from `GET /auth/csrf`. Must equal the `testtix_csrf` cookie, which must be sent too.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Released."
+          },
+          "401": {
+            "description": "No session cookie, or the session has expired or was ended.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The `X-CSRF-Token` header is missing or doesn't match the `testtix_csrf` cookie (type `csrf-token-invalid`).",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error. The body is an RFC 9457 problem details object.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Release a hold",
+        "tags": [
+          "holds"
+        ],
+        "security": [
+          {
+            "session": []
+          }
+        ]
+      }
+    },
     "/__test/clock": {
       "get": {
         "description": "Test mode only. Returns the time the server uses for holds, sessions and drops.",
@@ -2068,7 +2341,7 @@
     },
     "/__test/seed/one-seat-left": {
       "post": {
-        "description": "A published seated event on sale with 8 seats, all sold except row B seat 4. Test mode only. Adds a new venue, events (and orders) with fresh IDs on every call; the slugs and titles end in a random suffix, so calls never collide and existing data is not touched. Open even when the server has a test API key, since it only adds data.",
+        "description": "A published seated event on sale with 8 seats, all sold except row B seat 4 (`seat`; the others are `soldSeats`). Test mode only. Adds a new venue, events (and orders) with fresh IDs on every call; the slugs and titles end in a random suffix, so calls never collide and existing data is not touched. Open even when the server has a test API key, since it only adds data.",
         "operationId": "TestScenariosController_oneSeatLeft",
         "parameters": [],
         "responses": {
@@ -2094,6 +2367,115 @@
           }
         },
         "summary": "Seed scenario: one seat left",
+        "tags": [
+          "test"
+        ]
+      }
+    },
+    "/__test/seed/hold-about-to-expire": {
+      "post": {
+        "description": "A published seated event on sale (8 seats) where a new customer holds row A seats 1 and 2 until `expiresInSec` from now (default 60). The response logs the holder in, like `POST /__test/sessions`. Test mode only. Adds a new venue, events (and orders) with fresh IDs on every call; the slugs and titles end in a random suffix, so calls never collide and existing data is not touched. Open even when the server has a test API key, since it only adds data.",
+        "operationId": "TestScenariosController_holdAboutToExpire",
+        "parameters": [],
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HoldAboutToExpireRequestDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "What was created.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HoldAboutToExpireResultDto_Output"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error. The body is an RFC 9457 problem details object.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Seed scenario: a hold about to expire",
+        "tags": [
+          "test"
+        ]
+      }
+    },
+    "/__test/seed/ga-meetup": {
+      "post": {
+        "description": "A published GA-only meetup on sale with two sections: Floor (20 places at $10.00, then 20 at $15.00) and Balcony (10 at $20.00). Test mode only. Adds a new venue, events (and orders) with fresh IDs on every call; the slugs and titles end in a random suffix, so calls never collide and existing data is not touched. Open even when the server has a test API key, since it only adds data.",
+        "operationId": "TestScenariosController_gaMeetup",
+        "parameters": [],
+        "responses": {
+          "201": {
+            "description": "What was created.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GaMeetupResultDto_Output"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error. The body is an RFC 9457 problem details object.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Seed scenario: a general-admission meetup",
+        "tags": [
+          "test"
+        ]
+      }
+    },
+    "/__test/seed/ga-last-ticket": {
+      "post": {
+        "description": "A published GA meetup on sale whose Floor (10 places, $8.00) has one place left; the other nine are sold through confirmed orders of a new buyer. Test mode only. Adds a new venue, events (and orders) with fresh IDs on every call; the slugs and titles end in a random suffix, so calls never collide and existing data is not touched. Open even when the server has a test API key, since it only adds data.",
+        "operationId": "TestScenariosController_gaLastTicket",
+        "parameters": [],
+        "responses": {
+          "201": {
+            "description": "What was created.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GaLastTicketResultDto_Output"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error. The body is an RFC 9457 problem details object.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Seed scenario: one GA place left",
         "tags": [
           "test"
         ]
@@ -3864,6 +4246,391 @@
         ],
         "additionalProperties": false
       },
+      "SeatMapSeatedSection_Output": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          },
+          "name": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "SEATED"
+            ]
+          },
+          "available": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991,
+            "description": "Seats that are `AVAILABLE`"
+          },
+          "rows": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SeatMapRow_Output"
+            },
+            "description": "Front row first"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "type",
+          "available",
+          "rows"
+        ],
+        "additionalProperties": false
+      },
+      "SeatMapRow_Output": {
+        "type": "object",
+        "properties": {
+          "label": {
+            "type": "string",
+            "description": "Row label, lettered from the front: A, B, …, Z, AA, …"
+          },
+          "index": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991,
+            "description": "0-based position of the row, front first"
+          },
+          "seats": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SeatMapSeat_Output"
+            },
+            "description": "Every seat of the row, by number"
+          }
+        },
+        "required": [
+          "label",
+          "index",
+          "seats"
+        ],
+        "additionalProperties": false
+      },
+      "SeatMapSeat_Output": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+            "description": "Seat ID, as sent in a hold request"
+          },
+          "number": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991,
+            "description": "Seat number in the row, from 1"
+          },
+          "status": {
+            "$ref": "#/components/schemas/SeatStatus_Output"
+          },
+          "priceCents": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991,
+            "description": "Price in US cents; null when no batch of the event includes the seat",
+            "nullable": true
+          }
+        },
+        "required": [
+          "id",
+          "number",
+          "status",
+          "priceCents"
+        ],
+        "additionalProperties": false
+      },
+      "SeatStatus_Output": {
+        "type": "string",
+        "enum": [
+          "AVAILABLE",
+          "HELD",
+          "SOLD",
+          "NOT_ON_SALE"
+        ]
+      },
+      "SeatMapGaSection_Output": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          },
+          "name": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "GA"
+            ]
+          },
+          "capacity": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991,
+            "description": "Places the section holds"
+          },
+          "available": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991,
+            "description": "Released places that are neither sold nor in an unexpired hold: the most a hold can ask for here"
+          },
+          "prices": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "priceCents": {
+                  "type": "integer",
+                  "minimum": -9007199254740991,
+                  "maximum": 9007199254740991
+                },
+                "available": {
+                  "type": "integer",
+                  "minimum": -9007199254740991,
+                  "maximum": 9007199254740991
+                }
+              },
+              "required": [
+                "priceCents",
+                "available"
+              ],
+              "additionalProperties": false
+            },
+            "description": "Available places by price, cheapest first. A hold takes the cheapest available places."
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "type",
+          "capacity",
+          "available",
+          "prices"
+        ],
+        "additionalProperties": false
+      },
+      "SeatMap_Output": {
+        "type": "object",
+        "properties": {
+          "eventId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          },
+          "availability": {
+            "description": "Holds are possible while the event is `ON_SALE` (seat statuses are shown in every state)",
+            "$ref": "#/components/schemas/EventAvailability_Output"
+          },
+          "maxTicketsPerOrder": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991,
+            "description": "Most tickets (seats plus GA places) in one hold"
+          },
+          "holdDurationSec": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991,
+            "description": "How long a new hold lasts"
+          },
+          "sections": {
+            "type": "array",
+            "items": {
+              "oneOf": [
+                {
+                  "$ref": "#/components/schemas/SeatMapSeatedSection_Output"
+                },
+                {
+                  "$ref": "#/components/schemas/SeatMapGaSection_Output"
+                }
+              ]
+            },
+            "description": "Every section of the venue, in the venue’s order"
+          }
+        },
+        "required": [
+          "eventId",
+          "availability",
+          "maxTicketsPerOrder",
+          "holdDurationSec",
+          "sections"
+        ],
+        "additionalProperties": false
+      },
+      "HoldRequestDto": {
+        "type": "object",
+        "properties": {
+          "seats": {
+            "default": [],
+            "description": "Seat IDs (from the seat map) to hold",
+            "maxItems": 20,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            }
+          },
+          "ga": {
+            "default": [],
+            "description": "General-admission places to hold, per GA section",
+            "maxItems": 20,
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "sectionId": {
+                  "type": "string",
+                  "format": "uuid",
+                  "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                },
+                "quantity": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 20,
+                  "description": "How many places in this GA section"
+                }
+              },
+              "required": [
+                "sectionId",
+                "quantity"
+              ],
+              "additionalProperties": false
+            }
+          }
+        },
+        "additionalProperties": false
+      },
+      "HoldItem_Output": {
+        "type": "object",
+        "properties": {
+          "inventoryUnitId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          },
+          "section": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "format": "uuid",
+                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+              },
+              "name": {
+                "type": "string"
+              },
+              "type": {
+                "$ref": "#/components/schemas/SectionType_Output"
+              }
+            },
+            "required": [
+              "id",
+              "name",
+              "type"
+            ],
+            "additionalProperties": false
+          },
+          "seat": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "format": "uuid",
+                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+              },
+              "row": {
+                "type": "string"
+              },
+              "number": {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              }
+            },
+            "required": [
+              "id",
+              "row",
+              "number"
+            ],
+            "additionalProperties": false,
+            "description": "The seat; null for a GA place",
+            "nullable": true
+          },
+          "priceCents": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          }
+        },
+        "required": [
+          "inventoryUnitId",
+          "section",
+          "seat",
+          "priceCents"
+        ],
+        "additionalProperties": false
+      },
+      "Hold_Output": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          },
+          "eventId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          },
+          "expiresAt": {
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+            "description": "After this (server clock) the tickets are released"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+          },
+          "totalCents": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991,
+            "description": "Sum of the items’ prices, in US cents"
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/HoldItem_Output"
+            },
+            "description": "One per ticket, in the venue’s section order, then by row and seat (GA places by price)"
+          }
+        },
+        "required": [
+          "id",
+          "eventId",
+          "expiresAt",
+          "createdAt",
+          "totalCents",
+          "items"
+        ],
+        "additionalProperties": false
+      },
       "ClockStateDto_Output": {
         "type": "object",
         "properties": {
@@ -4127,6 +4894,18 @@
             "format": "date-time",
             "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
           },
+          "holdDurationSec": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991,
+            "description": "How long a hold lasts"
+          },
+          "maxTicketsPerOrder": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991,
+            "description": "Most tickets in one hold or order"
+          },
           "tickets": {
             "type": "object",
             "properties": {
@@ -4140,6 +4919,11 @@
                 "minimum": -9007199254740991,
                 "maximum": 9007199254740991
               },
+              "held": {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              },
               "sold": {
                 "type": "integer",
                 "minimum": -9007199254740991,
@@ -4149,6 +4933,7 @@
             "required": [
               "total",
               "available",
+              "held",
               "sold"
             ],
             "additionalProperties": false,
@@ -4164,6 +4949,8 @@
           "venueId",
           "startsAt",
           "salesOpenAt",
+          "holdDurationSec",
+          "maxTicketsPerOrder",
           "tickets"
         ],
         "additionalProperties": false
@@ -4255,6 +5042,48 @@
         ],
         "additionalProperties": false
       },
+      "ScenarioSeat_Output": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          },
+          "sectionId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          },
+          "row": {
+            "type": "string"
+          },
+          "number": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "inventoryUnitId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          },
+          "priceCents": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          }
+        },
+        "required": [
+          "id",
+          "sectionId",
+          "row",
+          "number",
+          "inventoryUnitId",
+          "priceCents"
+        ],
+        "additionalProperties": false
+      },
       "OneSeatLeftResultDto_Output": {
         "type": "object",
         "properties": {
@@ -4277,47 +5106,15 @@
             "description": "The confirmed orders that bought the other seats"
           },
           "seat": {
-            "type": "object",
-            "properties": {
-              "id": {
-                "type": "string",
-                "format": "uuid",
-                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-              },
-              "sectionId": {
-                "type": "string",
-                "format": "uuid",
-                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-              },
-              "row": {
-                "type": "string"
-              },
-              "number": {
-                "type": "integer",
-                "minimum": -9007199254740991,
-                "maximum": 9007199254740991
-              },
-              "inventoryUnitId": {
-                "type": "string",
-                "format": "uuid",
-                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-              },
-              "priceCents": {
-                "type": "integer",
-                "minimum": -9007199254740991,
-                "maximum": 9007199254740991
-              }
+            "description": "The one seat that is still available",
+            "$ref": "#/components/schemas/ScenarioSeat_Output"
+          },
+          "soldSeats": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ScenarioSeat_Output"
             },
-            "required": [
-              "id",
-              "sectionId",
-              "row",
-              "number",
-              "inventoryUnitId",
-              "priceCents"
-            ],
-            "additionalProperties": false,
-            "description": "The one seat that is still available"
+            "description": "The seven sold seats, row by row"
           }
         },
         "required": [
@@ -4325,7 +5122,249 @@
           "event",
           "buyer",
           "orderIds",
-          "seat"
+          "seat",
+          "soldSeats"
+        ],
+        "additionalProperties": false
+      },
+      "HoldAboutToExpireRequestDto": {
+        "type": "object",
+        "properties": {
+          "expiresInSec": {
+            "default": 60,
+            "description": "Seconds from now (server clock) until the hold expires, 1–600. Default 60.",
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 600
+          }
+        },
+        "description": "Optional. Send no body (or `{}`) for a hold that expires in 60 seconds.",
+        "additionalProperties": false
+      },
+      "HoldAboutToExpireResultDto_Output": {
+        "type": "object",
+        "properties": {
+          "venue": {
+            "$ref": "#/components/schemas/ScenarioVenue_Output"
+          },
+          "event": {
+            "$ref": "#/components/schemas/ScenarioEvent_Output"
+          },
+          "holder": {
+            "type": "object",
+            "properties": {
+              "user": {
+                "$ref": "#/components/schemas/AuthUser_Output"
+              },
+              "session": {
+                "type": "object",
+                "properties": {
+                  "token": {
+                    "type": "string",
+                    "description": "Value of the `testtix_session` cookie"
+                  },
+                  "expiresAt": {
+                    "type": "string",
+                    "format": "date-time",
+                    "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+                  }
+                },
+                "required": [
+                  "token",
+                  "expiresAt"
+                ],
+                "additionalProperties": false
+              },
+              "csrfToken": {
+                "type": "string",
+                "description": "Value of the `testtix_csrf` cookie; send it in `X-CSRF-Token` too"
+              },
+              "cookie": {
+                "type": "string",
+                "description": "A ready-made `Cookie` request header with both cookies, for clients without a cookie jar"
+              }
+            },
+            "required": [
+              "user",
+              "session",
+              "csrfToken",
+              "cookie"
+            ],
+            "additionalProperties": false,
+            "description": "The customer who holds the seats, logged in: send `cookie` (and `csrfToken` on writes) to act as them"
+          },
+          "hold": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "format": "uuid",
+                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+              },
+              "createdAt": {
+                "type": "string",
+                "format": "date-time",
+                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+              },
+              "expiresAt": {
+                "type": "string",
+                "format": "date-time",
+                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+              },
+              "totalCents": {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              },
+              "seats": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/ScenarioSeat_Output"
+                },
+                "description": "Row A seats 1 and 2"
+              }
+            },
+            "required": [
+              "id",
+              "createdAt",
+              "expiresAt",
+              "totalCents",
+              "seats"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "venue",
+          "event",
+          "holder",
+          "hold"
+        ],
+        "additionalProperties": false
+      },
+      "ScenarioGaSection_Output": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          },
+          "name": {
+            "type": "string"
+          },
+          "capacity": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "available": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991,
+            "description": "Places that can be held"
+          },
+          "prices": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "priceCents": {
+                  "type": "integer",
+                  "minimum": -9007199254740991,
+                  "maximum": 9007199254740991
+                },
+                "available": {
+                  "type": "integer",
+                  "minimum": -9007199254740991,
+                  "maximum": 9007199254740991
+                }
+              },
+              "required": [
+                "priceCents",
+                "available"
+              ],
+              "additionalProperties": false
+            },
+            "description": "Available places by price, cheapest first"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "capacity",
+          "available",
+          "prices"
+        ],
+        "additionalProperties": false
+      },
+      "GaMeetupResultDto_Output": {
+        "type": "object",
+        "properties": {
+          "venue": {
+            "$ref": "#/components/schemas/ScenarioVenue_Output"
+          },
+          "event": {
+            "$ref": "#/components/schemas/ScenarioEvent_Output"
+          },
+          "sections": {
+            "type": "object",
+            "properties": {
+              "floor": {
+                "description": "40 places: 20 at $10.00, then 20 at $15.00",
+                "$ref": "#/components/schemas/ScenarioGaSection_Output"
+              },
+              "balcony": {
+                "description": "10 places at $20.00",
+                "$ref": "#/components/schemas/ScenarioGaSection_Output"
+              }
+            },
+            "required": [
+              "floor",
+              "balcony"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "venue",
+          "event",
+          "sections"
+        ],
+        "additionalProperties": false
+      },
+      "GaLastTicketResultDto_Output": {
+        "type": "object",
+        "properties": {
+          "venue": {
+            "$ref": "#/components/schemas/ScenarioVenue_Output"
+          },
+          "event": {
+            "$ref": "#/components/schemas/ScenarioEvent_Output"
+          },
+          "buyer": {
+            "$ref": "#/components/schemas/ScenarioBuyer_Output"
+          },
+          "orderIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            },
+            "description": "The confirmed orders that bought the other places"
+          },
+          "section": {
+            "description": "The GA section with one place left",
+            "$ref": "#/components/schemas/ScenarioGaSection_Output"
+          }
+        },
+        "required": [
+          "venue",
+          "event",
+          "buyer",
+          "orderIds",
+          "section"
         ],
         "additionalProperties": false
       },
@@ -4504,6 +5543,115 @@
           "instance",
           "requestId",
           "errors"
+        ],
+        "additionalProperties": false
+      },
+      "TicketsUnavailableProblem": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "description": "URI that identifies the problem type: `about:blank` or `urn:testtix:problem:<error-code>`"
+          },
+          "title": {
+            "type": "string",
+            "description": "Short summary of the problem type"
+          },
+          "status": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991,
+            "description": "HTTP status code"
+          },
+          "detail": {
+            "type": "string",
+            "description": "Explanation of this occurrence"
+          },
+          "instance": {
+            "type": "string",
+            "description": "Request path"
+          },
+          "requestId": {
+            "type": "string",
+            "description": "Same value as the `X-Request-Id` response header"
+          },
+          "errors": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "path": {
+                  "type": "string",
+                  "description": "Dot-separated path of the invalid field, e.g. `items.0.quantity`. Empty for the root."
+                },
+                "code": {
+                  "type": "string",
+                  "description": "Zod issue code, e.g. `invalid_type` or `too_small`"
+                },
+                "message": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "path",
+                "code",
+                "message"
+              ],
+              "additionalProperties": false
+            },
+            "description": "Field errors. Empty unless the request failed validation."
+          },
+          "unavailableSeatIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            },
+            "description": "Requested seats that are sold, in another unexpired hold, or not on sale, in request order"
+          },
+          "gaShortfalls": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "sectionId": {
+                  "type": "string",
+                  "format": "uuid",
+                  "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                },
+                "requested": {
+                  "type": "integer",
+                  "minimum": -9007199254740991,
+                  "maximum": 9007199254740991
+                },
+                "available": {
+                  "type": "integer",
+                  "minimum": -9007199254740991,
+                  "maximum": 9007199254740991,
+                  "description": "Places that could be held right now (fewer than requested)"
+                }
+              },
+              "required": [
+                "sectionId",
+                "requested",
+                "available"
+              ],
+              "additionalProperties": false
+            },
+            "description": "Requested GA sections without enough places, in request order"
+          }
+        },
+        "required": [
+          "type",
+          "title",
+          "status",
+          "detail",
+          "instance",
+          "requestId",
+          "errors",
+          "unavailableSeatIds",
+          "gaShortfalls"
         ],
         "additionalProperties": false
       }

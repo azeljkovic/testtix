@@ -2,6 +2,7 @@ export * from './auth.js';
 export * from './catalogue.js';
 export * from './constants.js';
 export * from './events.js';
+export * from './holds.js';
 export * from './inventory.js';
 export * from './money.js';
 export * from './orders.js';

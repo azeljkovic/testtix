@@ -1,13 +1,19 @@
-import { Post } from '@nestjs/common';
-import { ApiOperation } from '@nestjs/swagger';
-import { ZodResponse } from 'nestjs-zod';
+import { Body, Post } from '@nestjs/common';
+import { ApiBody, ApiOperation } from '@nestjs/swagger';
+import { ZodResponse, ZodValidationPipe } from 'nestjs-zod';
 
 import {
   BasicCatalogueResultDto,
+  GaLastTicketResultDto,
+  GaMeetupResultDto,
+  type HoldAboutToExpireRequest,
+  HoldAboutToExpireRequestDto,
+  HoldAboutToExpireResultDto,
   OneSeatLeftResultDto,
+  OptionalHoldAboutToExpireRequestSchema,
   SoldOutEventResultDto,
 } from './scenario.schemas.js';
-import { basicCatalogue, oneSeatLeft, soldOutEvent } from './scenarios.js';
+import { basicCatalogue, gaLastTicket, gaMeetup, oneSeatLeft, soldOutEvent } from './scenarios.js';
 import { TestApiController } from '../test-api.decorator.js';
 import { TestScenariosService } from './test-scenarios.service.js';
 
@@ -45,10 +51,44 @@ export class TestScenariosController {
   @Post('one-seat-left')
   @ApiOperation({
     summary: 'Seed scenario: one seat left',
-    description: `A published seated event on sale with 8 seats, all sold except row B seat 4. ${ADDITIVE}`,
+    description: `A published seated event on sale with 8 seats, all sold except row B seat 4 (\`seat\`; the others are \`soldSeats\`). ${ADDITIVE}`,
   })
   @ZodResponse({ status: 201, type: OneSeatLeftResultDto, description: 'What was created.' })
   async oneSeatLeft() {
     return this.scenarios.create(oneSeatLeft);
+  }
+
+  @Post('hold-about-to-expire')
+  @ApiOperation({
+    summary: 'Seed scenario: a hold about to expire',
+    description: `A published seated event on sale (8 seats) where a new customer holds row A seats 1 and 2 until \`expiresInSec\` from now (default 60). The response logs the holder in, like \`POST /__test/sessions\`. ${ADDITIVE}`,
+  })
+  @ApiBody({ type: HoldAboutToExpireRequestDto, required: false })
+  @ZodResponse({ status: 201, type: HoldAboutToExpireResultDto, description: 'What was created.' })
+  async holdAboutToExpire(
+    @Body(new ZodValidationPipe(OptionalHoldAboutToExpireRequestSchema))
+    body: HoldAboutToExpireRequest | undefined,
+  ) {
+    return this.scenarios.holdAboutToExpire(body ?? { expiresInSec: 60 });
+  }
+
+  @Post('ga-meetup')
+  @ApiOperation({
+    summary: 'Seed scenario: a general-admission meetup',
+    description: `A published GA-only meetup on sale with two sections: Floor (20 places at $10.00, then 20 at $15.00) and Balcony (10 at $20.00). ${ADDITIVE}`,
+  })
+  @ZodResponse({ status: 201, type: GaMeetupResultDto, description: 'What was created.' })
+  async gaMeetup() {
+    return this.scenarios.create(gaMeetup);
+  }
+
+  @Post('ga-last-ticket')
+  @ApiOperation({
+    summary: 'Seed scenario: one GA place left',
+    description: `A published GA meetup on sale whose Floor (10 places, $8.00) has one place left; the other nine are sold through confirmed orders of a new buyer. ${ADDITIVE}`,
+  })
+  @ZodResponse({ status: 201, type: GaLastTicketResultDto, description: 'What was created.' })
+  async gaLastTicket() {
+    return this.scenarios.create(gaLastTicket);
   }
 }

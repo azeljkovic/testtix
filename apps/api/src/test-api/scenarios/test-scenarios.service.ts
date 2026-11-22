@@ -5,7 +5,9 @@ import { PrismaService } from '../../infra/prisma.service.js';
 import { uuidv7 } from '../../infra/uuid.js';
 import { insertRows } from '../../seed/seed.js';
 import { newScenarioSuffix, newTicketCode, type ScenarioContext } from './scenario-data.js';
-import type { Scenario } from './scenarios.js';
+import { TestSessionsService } from '../sessions/test-sessions.service.js';
+import type { HoldAboutToExpireRequest, HoldAboutToExpireResult } from './scenario.schemas.js';
+import { holdAboutToExpire, type Scenario } from './scenarios.js';
 
 /** Inserts seed scenarios (`POST /__test/seed/{scenario}`). */
 @Injectable()
@@ -13,6 +15,7 @@ export class TestScenariosService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly clock: ClockService,
+    private readonly sessions: TestSessionsService,
   ) {}
 
   /**
@@ -31,5 +34,12 @@ export class TestScenariosService {
       await insertRows(tx, rows);
     });
     return result;
+  }
+
+  /** `hold-about-to-expire`, with the holder logged in. */
+  async holdAboutToExpire(input: HoldAboutToExpireRequest): Promise<HoldAboutToExpireResult> {
+    const { holderId, ...result } = await this.create((ctx) => holdAboutToExpire(ctx, input));
+    const holder = await this.prisma.user.findUniqueOrThrow({ where: { id: holderId } });
+    return { ...result, holder: await this.sessions.logIn(holder) };
   }
 }

@@ -10,6 +10,9 @@ import { createIntegrationApp } from '../../testing/integration/integration-app.
 import { resetState } from '../../testing/integration/reset.js';
 import {
   BasicCatalogueResultSchema,
+  GaLastTicketResultSchema,
+  GaMeetupResultSchema,
+  HoldAboutToExpireResultSchema,
   OneSeatLeftResultSchema,
   type ScenarioEvent,
   SoldOutEventResultSchema,
@@ -38,8 +41,8 @@ beforeEach(async () => {
   await app.get(ClockService).freezeAt(new Date(FROZEN));
 });
 
-async function seed(scenario: string) {
-  const res = await http.post(`/__test/seed/${scenario}`);
+async function seed(scenario: string, body?: object) {
+  const res = await http.post(`/__test/seed/${scenario}`).send(body);
   expect(res.status).toBe(201);
   return res.body as unknown;
 }
@@ -53,6 +56,8 @@ async function expectStored(event: ScenarioEvent) {
     status: event.status,
     venueId: event.venueId,
     startsAt: new Date(event.startsAt),
+    holdDurationSec: event.holdDurationSec,
+    maxTicketsPerOrder: event.maxTicketsPerOrder,
     createdAt: new Date(FROZEN),
   });
   const counts = await prisma.inventoryUnit.groupBy({
@@ -64,6 +69,7 @@ async function expectStored(event: ScenarioEvent) {
   expect({
     total: counts.reduce((sum, c) => sum + c._count, 0),
     available: byStatus.AVAILABLE ?? 0,
+    held: byStatus.HELD ?? 0,
     sold: byStatus.SOLD ?? 0,
   }).toEqual(event.tickets);
 }
@@ -80,7 +86,7 @@ describe('POST /__test/seed/basic-catalogue', () => {
     expect(venue.sections.map(({ id, name }) => ({ id, name }))).toEqual(
       body.venue.sections.map(({ id, name }) => ({ id, name })),
     );
-    expect(body.events.concert.tickets).toEqual({ total: 38, available: 38, sold: 0 });
+    expect(body.events.concert.tickets).toEqual({ total: 38, available: 38, held: 0, sold: 0 });
     expect(await prisma.order.count()).toBe(0);
   });
 });
@@ -90,7 +96,7 @@ describe('POST /__test/seed/sold-out-event', () => {
     const body = SoldOutEventResultSchema.parse(await seed('sold-out-event'));
 
     await expectStored(body.event);
-    expect(body.event.tickets).toEqual({ total: 12, available: 0, sold: 12 });
+    expect(body.event.tickets).toEqual({ total: 12, available: 0, held: 0, sold: 12 });
     const orders = await prisma.order.findMany({
       where: { id: { in: body.orderIds } },
       include: { items: { include: { ticket: true } }, event: true },
@@ -127,11 +133,113 @@ describe('POST /__test/seed/one-seat-left', () => {
       priceCents: body.seat.priceCents,
       seat: { row: body.seat.row, number: body.seat.number },
     });
+    const sold = await prisma.inventoryUnit.findMany({
+      where: { id: { in: body.soldSeats.map((seat) => seat.inventoryUnitId) } },
+    });
+    expect(sold).toHaveLength(7);
+    for (const unit of sold) expect(unit.status).toBe('SOLD');
+  });
+});
+
+describe('POST /__test/seed/hold-about-to-expire', () => {
+  it('holds two seats for a logged-in holder until 60 seconds from now by default', async () => {
+    const body = HoldAboutToExpireResultSchema.parse(await seed('hold-about-to-expire'));
+
+    await expectStored(body.event);
+    expect(body.hold.expiresAt).toBe('2026-11-21T10:16:00.000Z');
+    const held = await prisma.inventoryUnit.findMany({ where: { holdId: body.hold.id } });
+    expect(held.map((unit) => unit.id).sort()).toEqual(
+      body.hold.seats.map((seat) => seat.inventoryUnitId).sort(),
+    );
+    for (const unit of held) {
+      expect(unit).toMatchObject({ status: 'HELD', heldUntil: new Date(body.hold.expiresAt) });
+    }
+
+    // The holder's session works, and sees the hold.
+    const current = await http.get('/holds/current').set('Cookie', body.holder.cookie);
+    expect(current.status).toBe(200);
+    expect(current.body).toMatchObject({
+      id: body.hold.id,
+      eventId: body.event.id,
+      expiresAt: body.hold.expiresAt,
+      totalCents: 9000,
+    });
+    expect(body.holder.user).toMatchObject({ role: 'CUSTOMER', emailVerified: true });
+  });
+
+  it('takes the expiry from the body, and the seats are free once it passes', async () => {
+    const body = HoldAboutToExpireResultSchema.parse(
+      await seed('hold-about-to-expire', { expiresInSec: 5 }),
+    );
+    expect(body.hold.expiresAt).toBe('2026-11-21T10:15:05.000Z');
+
+    await app.get(ClockService).advanceBy(5_000);
+    const map = await http.get(`/events/${body.event.id}/seats`);
+    const seats = (
+      map.body as { sections: { rows: { seats: { id: string; status: string }[] }[] }[] }
+    ).sections.flatMap((section) => section.rows.flatMap((row) => row.seats));
+    for (const { id } of body.hold.seats) {
+      expect(seats.find((seat) => seat.id === id)?.status).toBe('AVAILABLE');
+    }
+    const current = await http.get('/holds/current').set('Cookie', body.holder.cookie);
+    expect(current.status).toBe(404);
+  });
+
+  it.each([{ expiresInSec: 0 }, { expiresInSec: 601 }, { other: 1 }])(
+    'refuses %j',
+    async (body) => {
+      const res = await http.post('/__test/seed/hold-about-to-expire').send(body);
+      expect(res.status).toBe(400);
+    },
+  );
+});
+
+describe('POST /__test/seed/ga-meetup', () => {
+  it('creates a GA meetup with two sections and two prices on the Floor', async () => {
+    const body = GaMeetupResultSchema.parse(await seed('ga-meetup'));
+
+    await expectStored(body.event);
+    const prices = await prisma.inventoryUnit.groupBy({
+      by: ['sectionId', 'priceCents'],
+      where: { eventId: body.event.id },
+      _count: true,
+      orderBy: [{ sectionId: 'asc' }, { priceCents: 'asc' }],
+    });
+    expect(
+      prices.map(({ sectionId, priceCents, _count }) => ({ sectionId, priceCents, _count })),
+    ).toEqual(
+      expect.arrayContaining([
+        { sectionId: body.sections.floor.id, priceCents: 1000, _count: 20 },
+        { sectionId: body.sections.floor.id, priceCents: 1500, _count: 20 },
+        { sectionId: body.sections.balcony.id, priceCents: 2000, _count: 10 },
+      ]),
+    );
+  });
+});
+
+describe('POST /__test/seed/ga-last-ticket', () => {
+  it('leaves one GA place available', async () => {
+    const body = GaLastTicketResultSchema.parse(await seed('ga-last-ticket'));
+
+    await expectStored(body.event);
+    expect(body.section.available).toBe(1);
+    expect(
+      await prisma.inventoryUnit.count({
+        where: { sectionId: body.section.id, status: 'AVAILABLE' },
+      }),
+    ).toBe(1);
   });
 });
 
 describe('every scenario', () => {
-  const scenarios = ['basic-catalogue', 'sold-out-event', 'one-seat-left'];
+  const scenarios = [
+    'basic-catalogue',
+    'sold-out-event',
+    'one-seat-left',
+    'hold-about-to-expire',
+    'ga-meetup',
+    'ga-last-ticket',
+  ];
 
   it.each(scenarios)('%s creates new rows on every call', async (scenario) => {
     const first = (await seed(scenario)) as { venue: { id: string; slug: string } };
@@ -150,15 +258,16 @@ describe('every scenario', () => {
 
     // Every baseline row is still there unchanged: deleting the scenario rows restores the hash.
     const venues = await prisma.venue.findMany({ where: { slug: { startsWith: 'scenario-' } } });
-    expect(venues).toHaveLength(3);
+    expect(venues).toHaveLength(scenarios.length);
     const venueIds = venues.map(({ id }) => id);
     await prisma.$transaction(async (tx) => {
       const events = { venueId: { in: venueIds } };
       await tx.ticket.deleteMany({ where: { orderItem: { order: { event: events } } } });
       await tx.orderItem.deleteMany({ where: { order: { event: events } } });
       await tx.order.deleteMany({ where: { event: events } });
-      await tx.user.deleteMany({ where: { email: { endsWith: '@scenario.testtix.test' } } });
+      // Deletes their inventory units and holds too.
       await tx.event.deleteMany({ where: events });
+      await tx.user.deleteMany({ where: { email: { endsWith: '@scenario.testtix.test' } } });
       await tx.venue.deleteMany({ where: { id: { in: venueIds } } });
     });
     expect(await dataHash(prisma)).toEqual(baseline);
@@ -172,7 +281,7 @@ describe('every scenario', () => {
   it('works on an empty database (no baseline needed)', async () => {
     expect(await prisma.venue.count()).toBe(0);
     for (const scenario of scenarios) await seed(scenario);
-    expect(await prisma.event.count()).toBe(5);
+    expect(await prisma.event.count()).toBe(8);
   });
 
   it.each(scenarios)('%s stays open when the server has a test API key', async (scenario) => {

@@ -13,6 +13,11 @@ export class ProblemException extends HttpException {
     readonly title: string,
     detail: string,
     readonly fieldErrors: readonly ProblemFieldError[] = [],
+    /**
+     * Extra members of this problem type's body (RFC 9457 §3.2), documented by its own schema,
+     * e.g. `TicketsUnavailableProblem`. They can't replace the standard members.
+     */
+    readonly extensions: Readonly<Record<string, unknown>> = {},
   ) {
     super(detail, status);
   }

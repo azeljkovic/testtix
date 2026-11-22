@@ -8,10 +8,20 @@ import {
 } from './scenario-data.js';
 import {
   BasicCatalogueResultSchema,
+  GaLastTicketResultSchema,
+  GaMeetupResultSchema,
+  HoldAboutToExpireResultSchema,
   OneSeatLeftResultSchema,
   SoldOutEventResultSchema,
 } from './scenario.schemas.js';
-import { basicCatalogue, oneSeatLeft, soldOutEvent } from './scenarios.js';
+import {
+  basicCatalogue,
+  gaLastTicket,
+  gaMeetup,
+  holdAboutToExpire,
+  oneSeatLeft,
+  soldOutEvent,
+} from './scenarios.js';
 
 const NOW = new Date('2026-11-21T10:15:00.000Z');
 
@@ -51,6 +61,19 @@ function expectConsistent(rows: ScenarioRows) {
     expect(count).toBeLessThanOrEqual(DEFAULT_MAX_TICKETS_PER_ORDER);
     const items = rows.orderItems.filter((item) => item.orderId === order.id);
     expect(order.totalCents).toBe(items.reduce((sum, item) => sum + item.priceCents, 0));
+  }
+  const holdById = new Map(rows.holds.map((hold) => [hold.id, hold]));
+  for (const unit of rows.inventoryUnits) {
+    if (unit.status !== 'HELD') {
+      expect(unit.holdId ?? null).toBeNull();
+      continue;
+    }
+    const hold = holdById.get(unit.holdId ?? '');
+    expect(hold?.eventId).toBe(unit.eventId);
+    expect(unit.heldUntil).toEqual(hold?.expiresAt);
+  }
+  for (const hold of rows.holds) {
+    expect(rows.users.map((user) => user.id)).toContain(hold.userId);
   }
   for (const user of rows.users) {
     expect(user.email).toBe(user.email.toLowerCase());
@@ -132,8 +155,18 @@ describe('one-seat-left', () => {
   it('leaves exactly row B seat 4 available', () => {
     expectConsistent(rows);
     expect(OneSeatLeftResultSchema.parse(result)).toEqual(result);
-    expect(result.event.tickets).toEqual({ total: 8, available: 1, sold: 7 });
+    expect(result.event.tickets).toEqual({ total: 8, available: 1, held: 0, sold: 7 });
+    expect(result.event).toMatchObject({ holdDurationSec: 600, maxTicketsPerOrder: 6 });
     expect(result.seat).toMatchObject({ row: 'B', number: 4, priceCents: 4500 });
+    expect(result.soldSeats.map((seat) => `${seat.row}${String(seat.number)}`)).toEqual([
+      'A1',
+      'A2',
+      'A3',
+      'A4',
+      'B1',
+      'B2',
+      'B3',
+    ]);
 
     const available = rows.inventoryUnits.filter((unit) => unit.status === 'AVAILABLE');
     expect(available).toEqual([
@@ -142,6 +175,90 @@ describe('one-seat-left', () => {
     expect(rows.seats.find((seat) => seat.id === result.seat.id)?.sectionId).toBe(
       result.seat.sectionId,
     );
+    expect(result.orderIds).toHaveLength(2);
+  });
+});
+
+describe('hold-about-to-expire', () => {
+  const { rows, result } = holdAboutToExpire(context(), { expiresInSec: 45 });
+
+  it('holds row A seats 1 and 2 for a new customer until 45 seconds from now', () => {
+    expectConsistent(rows);
+    expect(HoldAboutToExpireResultSchema.omit({ holder: true }).parse(result)).toMatchObject({
+      hold: result.hold,
+    });
+    expect(result.event.tickets).toEqual({ total: 8, available: 6, held: 2, sold: 0 });
+    expect(result.hold).toMatchObject({
+      createdAt: '2026-11-21T10:05:45.000Z',
+      expiresAt: '2026-11-21T10:15:45.000Z',
+      totalCents: 9000,
+    });
+    expect(result.hold.seats.map((seat) => `${seat.row}${String(seat.number)}`)).toEqual([
+      'A1',
+      'A2',
+    ]);
+    expect(rows.holds).toEqual([
+      expect.objectContaining({ id: result.hold.id, userId: result.holderId }),
+    ]);
+    expect(rows.users).toEqual([
+      expect.objectContaining({
+        id: result.holderId,
+        email: 'holder-abc12345@scenario.testtix.test',
+      }),
+    ]);
+    expect(rows.orders).toEqual([]);
+  });
+});
+
+describe('ga-meetup', () => {
+  const { rows, result } = gaMeetup(context());
+
+  it('has two GA sections, the Floor in two price tiers', () => {
+    expectConsistent(rows);
+    expect(GaMeetupResultSchema.parse(result)).toEqual(result);
+    expect(result.event).toMatchObject({
+      category: 'MEETUP',
+      tickets: { total: 50, available: 50, held: 0, sold: 0 },
+    });
+    expect(result.sections.floor).toMatchObject({
+      name: 'Floor',
+      capacity: 40,
+      available: 40,
+      prices: [
+        { priceCents: 1000, available: 20 },
+        { priceCents: 1500, available: 20 },
+      ],
+    });
+    expect(result.sections.balcony).toMatchObject({
+      capacity: 10,
+      prices: [{ priceCents: 2000, available: 10 }],
+    });
+    const batchPrice = new Map(rows.ticketBatches.map((batch) => [batch.id, batch.priceCents]));
+    for (const unit of rows.inventoryUnits) {
+      expect(unit.seatId).toBeNull();
+      expect(unit.priceCents).toBe(batchPrice.get(unit.batchId));
+    }
+    expect(rows.ticketBatches.map((batch) => batch.name).sort()).toEqual([
+      'Balcony',
+      'Early bird',
+      'Regular',
+    ]);
+  });
+});
+
+describe('ga-last-ticket', () => {
+  const { rows, result } = gaLastTicket(context());
+
+  it('sells all but one place of the Floor', () => {
+    expectConsistent(rows);
+    expect(GaLastTicketResultSchema.parse(result)).toEqual(result);
+    expect(result.event.tickets).toEqual({ total: 10, available: 1, held: 0, sold: 9 });
+    expect(result.section).toMatchObject({
+      name: 'Floor',
+      capacity: 10,
+      available: 1,
+      prices: [{ priceCents: 800, available: 1 }],
+    });
     expect(result.orderIds).toHaveLength(2);
   });
 });

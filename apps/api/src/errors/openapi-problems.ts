@@ -1,18 +1,25 @@
 import type { OpenAPIObject, SchemaObject } from '@nestjs/swagger';
-import { PROBLEM_CONTENT_TYPE, ProblemDetailsSchema } from '@testtix/shared';
+import {
+  PROBLEM_CONTENT_TYPE,
+  ProblemDetailsSchema,
+  TicketsUnavailableProblemSchema,
+} from '@testtix/shared';
 import { z } from 'zod';
 
 const HTTP_METHODS = ['get', 'put', 'post', 'delete', 'options', 'head', 'patch', 'trace'] as const;
 
 /**
  * Registers the `ProblemDetails` schema and adds it as the `default` (error) response of every
- * operation, with the `application/problem+json` media type the API actually sends.
+ * operation, with the `application/problem+json` media type the API actually sends. Also
+ * registers the problem types with extension members, which routes reference in their own
+ * responses (e.g. the 409 of `POST /events/{eventId}/holds`).
  */
 export function addProblemDetailsResponses(document: OpenAPIObject): OpenAPIObject {
   // Registry mode emits each schema under its own name with `$ref`s that point into
   // `components.schemas`. Converting the schema alone would nest it under `definitions`.
   const registry = z.registry<{ id: string }>();
   registry.add(ProblemDetailsSchema, { id: 'ProblemDetails' });
+  registry.add(TicketsUnavailableProblemSchema, { id: 'TicketsUnavailableProblem' });
   const { schemas } = z.toJSONSchema(registry, {
     target: 'openapi-3.0',
     uri: (id) => `#/components/schemas/${id}`,

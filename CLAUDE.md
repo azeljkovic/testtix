@@ -29,7 +29,8 @@ When a decision changes, update the docs in the same PR so they stay accurate.
 - ✅ C2.2 Public catalogue API
 - ✅ C2.3 Web: event list + detail
 - ✅ C2.4 Web: admin area
-- ⏭️ Next: **C3.1 Seat map + holds API (atomic)** (see plan)
+- ✅ C3.1 Seat map + holds API (atomic)
+- ⏭️ Next: **C3.2 BullMQ setup + hold sweeper** (see plan)
 
 Update this list when a chunk is merged.
 
@@ -93,6 +94,7 @@ Run one package: `pnpm --filter @testtix/api <script>`.
 - Prisma unique-constraint races: catch `P2002` (`isUniqueViolation()` / `isForeignKeyViolation()` in `src/infra/prisma-errors.ts`) rather than checking first. Batch inserts go through `chunks()` (`src/infra/chunks.ts`) to stay under Postgres' bind-parameter limit.
 - Event writes (edits, status actions, batch releases) start their transaction with `lockEvent()` (`src/events/admin-events.service.ts`), and venue layout writes with `lockVenue()`; keep that order (event, then venue) in new code. Rules a schema can't check answer 400 via `validationFailed(errors)`; state conflicts get their own 409 problem type.
 - Public catalogue figures (`src/events/catalogue-query.ts`) count **released** tickets only and treat expired holds as available; filters and sorts on computed columns go in that SQL, not in JS, so pagination stays exact.
+- Holds (`src/holds/holds.service.ts`): claim inventory only through its locking order (event `FOR SHARE` → per-user advisory lock → units `ORDER BY id FOR UPDATE` → conditional `UPDATE`; GA with `SKIP LOCKED`). Expired = `held_until <= now`. A 409 that carries data uses `ProblemException`'s `extensions` plus a shared schema registered in `addProblemDetailsResponses()`. Scenario rows can include `holds` (`holdUnits()` in `scenario-data.ts`).
 - List endpoints paginate with `PageQuerySchema` / `pageSchema()` / `toPage()` from `packages/shared`. Generated slugs use `slugify()` + `insertWithSlug()` (`src/infra/slugs.ts`).
 - Prefer accessible names over `data-testid` in the UI; use `data-testid` only where no good accessible locator exists.
 - Every list endpoint sorts with a stable tiebreaker (`id`).
