@@ -8,11 +8,13 @@ import {
 import type { FastifyReply } from 'fastify';
 import { ZodResponse } from 'nestjs-zod';
 
+import { Public } from '../auth/auth.decorators.js';
 import { LivenessDto, ReadinessDto, ReadinessSchema } from './health.schemas.js';
 import { HealthService } from './health.service.js';
 
 @ApiTags('health')
 @Controller('health')
+@Public()
 export class HealthController {
   constructor(private readonly health: HealthService) {}
 

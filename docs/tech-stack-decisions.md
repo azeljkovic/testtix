@@ -196,6 +196,17 @@ Order lifecycle: `PENDING_PAYMENT → PROCESSING → CONFIRMED | FAILED | EXPIRE
 | CSRF          | Double-submit token for state-changing requests                                                                    | Proposed |
 | Test shortcut | In test mode: `POST /__test/sessions` creates a user with a role and returns a session cookie, for API-based setup | Proposed |
 
+**Implementation notes (C1.4)**
+
+- Hashing: `@node-rs/argon2` (argon2id, library defaults 19 MiB / t=2 / p=1, the OWASP baseline). It ships prebuilt binaries as optional dependencies, so there is no install script for pnpm to block. `PasswordService.verify` never throws: an unknown email or a hash that doesn't parse (`!locked`) is checked against a dummy hash and answers like a wrong password, in about the same time.
+- Sessions: `@fastify/cookie` parses and sets cookies. The cookie holds 32 random bytes (base64url); `sessions.token_hash` stores their SHA-256. Expiry is an idle timeout (`SESSION_TTL_HOURS`, default 168) from `ClockService`, moved forward at most once a minute, and the cookie's lifetime is `Max-Age`, never `Expires` (an absolute date from a frozen test clock would confuse browsers). `Secure` comes from `COOKIE_SECURE`, default on only in production.
+- Guards: `AuthModule` registers two global guards. `AuthGuard` denies by default: routes without `@Public()` need a valid session (401), `@Roles(...)` routes a matching role (403). It loads the user on every request. `CsrfGuard` then checks the double-submit token (`X-CSRF-Token` header equal to the `testtix_csrf` cookie, compared in constant time) on every POST, PUT, PATCH and DELETE, anonymous ones included (login CSRF), except routes marked `@SkipCsrf()`. Test API controllers use `@TestApiController(path)`, which applies `@Public()` and `@SkipCsrf()`.
+- The CSRF token is not bound to the session (plain double-submit, no server secret): enough on the single-host demo, where no sibling subdomain can plant cookies. Revisit with a signed token if the app ever shares a parent domain.
+- OpenAPI: `@Public()` and `@SkipCsrf()` also leave `x-testtix-*` markers on operations; `addAuthDocs` turns them into the `session` cookie security requirement plus a 401, and the `X-CSRF-Token` header plus a 403, then removes the markers. The spec documents exactly what the guards enforce.
+- Every 401 carries a `WWW-Authenticate` challenge (`ProblemDetailsFilter` adds `Session realm="testtix"` unless a guard set its own, like `TestKey`). New problem codes: `INVALID_CREDENTIALS`, `EMAIL_ALREADY_REGISTERED` (with a field error on `email`), `CSRF_TOKEN_INVALID`.
+- The baseline seed has three accounts (admin, customer, unverified customer). Their argon2 hashes are constants with a fixed salt, so the seed stays deterministic; a unit test checks each matches its documented password.
+- Login rate limiting is part of C5.3 (rate limits).
+
 ---
 
 ## 4. Testability features

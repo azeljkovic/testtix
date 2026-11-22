@@ -69,7 +69,7 @@ export function buildScenarioCatalogue(
     id,
     createdAt: ctx.now,
   });
-  return { ...catalogue, users: [], orders: [], orderItems: [], tickets: [] };
+  return { ...catalogue, orders: [], orderItems: [], tickets: [] };
 }
 
 /** A placeholder customer who owns a scenario's orders. Can't log in. */

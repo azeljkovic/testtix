@@ -2,6 +2,8 @@ import { Controller, Get, Header, Inject, Module } from '@nestjs/common';
 import { ApiOkResponse, ApiOperation, ApiProduces, ApiTags } from '@nestjs/swagger';
 import { collectDefaultMetrics, Registry } from '@prometheus-io/client';
 
+import { Public } from '../auth/auth.decorators.js';
+
 /** The API's own registry (not the library's global one), so each app instance starts clean. */
 export const METRICS_REGISTRY = Symbol('METRICS_REGISTRY');
 
@@ -9,6 +11,7 @@ const PROMETHEUS_CONTENT_TYPE = Registry.PROMETHEUS_CONTENT_TYPE;
 
 @ApiTags('metrics')
 @Controller('metrics')
+@Public()
 export class MetricsController {
   constructor(@Inject(METRICS_REGISTRY) private readonly registry: Registry) {}
 

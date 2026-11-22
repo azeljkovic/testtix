@@ -1,5 +1,5 @@
-import { Body, Controller, HttpCode, Post } from '@nestjs/common';
-import { ApiBody, ApiOperation, ApiTags } from '@nestjs/swagger';
+import { Body, HttpCode, Post } from '@nestjs/common';
+import { ApiBody, ApiOperation } from '@nestjs/swagger';
 import { ZodResponse, ZodValidationPipe } from 'nestjs-zod';
 
 import {
@@ -8,11 +8,11 @@ import {
   ResetRequestDto,
   ResetResponseDto,
 } from './reset.schemas.js';
+import { TestApiController } from './test-api.decorator.js';
 import { RequiresTestKey } from './test-key.guard.js';
 import { TestResetService } from './test-reset.service.js';
 
-@ApiTags('test')
-@Controller('__test/reset')
+@TestApiController('reset')
 export class TestResetController {
   constructor(private readonly resets: TestResetService) {}
 

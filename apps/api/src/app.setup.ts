@@ -1,10 +1,12 @@
 import { readFileSync } from 'node:fs';
 
+import fastifyCookie from '@fastify/cookie';
 import { FastifyAdapter, type NestFastifyApplication } from '@nestjs/platform-fastify';
 import { DocumentBuilder, type OpenAPIObject, SwaggerModule } from '@nestjs/swagger';
 import { Logger } from 'nestjs-pino';
 import { cleanupOpenApiDoc } from 'nestjs-zod';
 
+import { addAuthDocs } from './auth/openapi-auth.js';
 import { addProblemDetailsResponses } from './errors/openapi-problems.js';
 import { REQUEST_ID_HEADER, requestIdFor } from './logging/request-id.js';
 
@@ -16,11 +18,15 @@ const { version } = JSON.parse(
 
 /** The HTTP adapter shared by `main.ts` and the tests. */
 export function createHttpAdapter(): FastifyAdapter {
-  return new FastifyAdapter({
+  const adapter = new FastifyAdapter({
     genReqId: requestIdFor,
     // Fastify would otherwise copy the header verbatim; `requestIdFor` validates it first.
     requestIdHeader: false,
   });
+  // Parses `Cookie` into `request.cookies` and adds `reply.setCookie()` (session and CSRF cookies).
+  // Fastify loads plugins when the app starts, so registering here doesn't need an await.
+  void adapter.getInstance().register(fastifyCookie);
+  return adapter;
 }
 
 /** Builds the OpenAPI document. Also used by `pnpm openapi` (`src/openapi/`). */
@@ -33,7 +39,9 @@ export function buildOpenApiDocument(app: NestFastifyApplication): OpenAPIObject
     )
     .setVersion(version)
     .build();
-  return addProblemDetailsResponses(cleanupOpenApiDoc(SwaggerModule.createDocument(app, config)));
+  return addAuthDocs(
+    addProblemDetailsResponses(cleanupOpenApiDoc(SwaggerModule.createDocument(app, config))),
+  );
 }
 
 /**

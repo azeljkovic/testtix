@@ -1,6 +1,259 @@
 {
   "openapi": "3.0.0",
   "paths": {
+    "/auth/csrf": {
+      "get": {
+        "description": "Sets the `testtix_csrf` cookie (readable by scripts, 30 days) and returns the same token. Send it back in the `X-CSRF-Token` header of every POST, PUT, PATCH and DELETE request, together with the cookie. Returns the existing token when the request already has one, and renews the cookie.",
+        "operationId": "AuthController_csrf",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "The CSRF token.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CsrfTokenDto_Output"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error. The body is an RFC 9457 problem details object.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Get a CSRF token",
+        "tags": [
+          "auth"
+        ]
+      }
+    },
+    "/auth/register": {
+      "post": {
+        "description": "The new account has the CUSTOMER role and an unverified email address. Sets the `testtix_session` cookie (HttpOnly, SameSite=Lax) and ends the session the request came with, if any. 409 `email-already-registered` when the email is taken.",
+        "operationId": "AuthController_register",
+        "parameters": [
+          {
+            "name": "X-CSRF-Token",
+            "in": "header",
+            "required": true,
+            "description": "The CSRF token from `GET /auth/csrf`. Must equal the `testtix_csrf` cookie, which must be sent too.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RegisterRequestDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Registered and logged in.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthSession_Output"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The `X-CSRF-Token` header is missing or doesn't match the `testtix_csrf` cookie (type `csrf-token-invalid`).",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error. The body is an RFC 9457 problem details object.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Create a customer account and log in",
+        "tags": [
+          "auth"
+        ]
+      }
+    },
+    "/auth/login": {
+      "post": {
+        "description": "Sets the `testtix_session` cookie (HttpOnly, SameSite=Lax) and ends the session the request came with, if any. A wrong password, an unknown email and an account without a password all give the same 401 `invalid-credentials`.",
+        "operationId": "AuthController_login",
+        "parameters": [
+          {
+            "name": "X-CSRF-Token",
+            "in": "header",
+            "required": true,
+            "description": "The CSRF token from `GET /auth/csrf`. Must equal the `testtix_csrf` cookie, which must be sent too.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LoginRequestDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Logged in.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthSession_Output"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The `X-CSRF-Token` header is missing or doesn't match the `testtix_csrf` cookie (type `csrf-token-invalid`).",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error. The body is an RFC 9457 problem details object.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Log in with email and password",
+        "tags": [
+          "auth"
+        ]
+      }
+    },
+    "/auth/logout": {
+      "post": {
+        "description": "Ends the request's session and clears the `testtix_session` cookie. Succeeds without a session too, so it is safe to repeat.",
+        "operationId": "AuthController_logout",
+        "parameters": [
+          {
+            "name": "X-CSRF-Token",
+            "in": "header",
+            "required": true,
+            "description": "The CSRF token from `GET /auth/csrf`. Must equal the `testtix_csrf` cookie, which must be sent too.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Logged out."
+          },
+          "403": {
+            "description": "The `X-CSRF-Token` header is missing or doesn't match the `testtix_csrf` cookie (type `csrf-token-invalid`).",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error. The body is an RFC 9457 problem details object.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Log out",
+        "tags": [
+          "auth"
+        ]
+      }
+    },
+    "/auth/me": {
+      "get": {
+        "description": "Also moves the session expiry forward, like every authenticated request.",
+        "operationId": "AuthController_me",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "The user and session.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthSession_Output"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No session cookie, or the session has expired or was ended.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error. The body is an RFC 9457 problem details object.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "summary": "The logged-in user",
+        "tags": [
+          "auth"
+        ],
+        "security": [
+          {
+            "session": []
+          }
+        ]
+      }
+    },
     "/health": {
       "get": {
         "description": "Returns 200 while the process can serve requests. Does not check dependencies.",
@@ -365,6 +618,49 @@
           "test"
         ]
       }
+    },
+    "/__test/sessions": {
+      "post": {
+        "description": "Test mode only. Skips registration and login for API-based test setup: creates a new user (ADMIN or CUSTOMER, email verified unless `emailVerified` is false) and a session, sets the session and CSRF cookies, and returns the same tokens in the body. Send both cookies plus the `X-CSRF-Token` header on state-changing requests. Open even when the server has a test API key, since it only adds data.",
+        "operationId": "TestSessionsController_create",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TestSessionRequestDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "The user and session.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TestSessionResponseDto_Output"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error. The body is an RFC 9457 problem details object.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Create a user with a role and log it in",
+        "tags": [
+          "test"
+        ]
+      }
     }
   },
   "info": {
@@ -377,6 +673,145 @@
   "servers": [],
   "components": {
     "schemas": {
+      "CsrfTokenDto_Output": {
+        "type": "object",
+        "properties": {
+          "csrfToken": {
+            "type": "string",
+            "description": "Send it in the `X-CSRF-Token` header of every POST, PUT, PATCH and DELETE"
+          }
+        },
+        "required": [
+          "csrfToken"
+        ],
+        "additionalProperties": false
+      },
+      "RegisterRequestDto": {
+        "type": "object",
+        "properties": {
+          "email": {
+            "type": "string",
+            "maxLength": 254,
+            "format": "email",
+            "pattern": "^(?:[A-Za-z0-9_'+\\-]+\\.)*[A-Za-z0-9_'+\\-]*[A-Za-z0-9_+-]@(?:[A-Za-z0-9][A-Za-z0-9\\-]*\\.)+[A-Za-z]{2,}$",
+            "description": "Email address. Surrounding spaces are removed and it is matched case-insensitively."
+          },
+          "password": {
+            "type": "string",
+            "minLength": 8,
+            "maxLength": 128,
+            "description": "8–128 characters, used exactly as typed"
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100,
+            "description": "Display name. Surrounding spaces are removed."
+          }
+        },
+        "required": [
+          "email",
+          "password",
+          "name"
+        ],
+        "additionalProperties": false
+      },
+      "AuthUser_Output": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          },
+          "email": {
+            "type": "string",
+            "format": "email",
+            "pattern": "^(?:[A-Za-z0-9_'+\\-]+\\.)*[A-Za-z0-9_'+\\-]*[A-Za-z0-9_+-]@(?:[A-Za-z0-9][A-Za-z0-9\\-]*\\.)+[A-Za-z]{2,}$"
+          },
+          "name": {
+            "type": "string"
+          },
+          "role": {
+            "$ref": "#/components/schemas/Role_Output"
+          },
+          "emailVerified": {
+            "type": "boolean",
+            "description": "Unverified users can log in but not check out"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+          }
+        },
+        "required": [
+          "id",
+          "email",
+          "name",
+          "role",
+          "emailVerified",
+          "createdAt"
+        ],
+        "additionalProperties": false
+      },
+      "Role_Output": {
+        "type": "string",
+        "enum": [
+          "CUSTOMER",
+          "ADMIN"
+        ]
+      },
+      "AuthSession_Output": {
+        "type": "object",
+        "properties": {
+          "user": {
+            "$ref": "#/components/schemas/AuthUser_Output"
+          },
+          "session": {
+            "type": "object",
+            "properties": {
+              "expiresAt": {
+                "type": "string",
+                "format": "date-time",
+                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+                "description": "When the session ends if unused (server clock). Each authenticated request moves it forward."
+              }
+            },
+            "required": [
+              "expiresAt"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "user",
+          "session"
+        ],
+        "additionalProperties": false
+      },
+      "LoginRequestDto": {
+        "type": "object",
+        "properties": {
+          "email": {
+            "type": "string",
+            "maxLength": 254,
+            "format": "email",
+            "pattern": "^(?:[A-Za-z0-9_'+\\-]+\\.)*[A-Za-z0-9_'+\\-]*[A-Za-z0-9_+-]@(?:[A-Za-z0-9][A-Za-z0-9\\-]*\\.)+[A-Za-z]{2,}$",
+            "description": "Email address. Surrounding spaces are removed and it is matched case-insensitively."
+          },
+          "password": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          }
+        },
+        "required": [
+          "email",
+          "password"
+        ],
+        "additionalProperties": false
+      },
       "LivenessDto_Output": {
         "type": "object",
         "properties": {
@@ -570,6 +1005,11 @@
           "rows": {
             "type": "object",
             "properties": {
+              "users": {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              },
               "venues": {
                 "type": "integer",
                 "minimum": -9007199254740991,
@@ -602,6 +1042,7 @@
               }
             },
             "required": [
+              "users",
               "venues",
               "sections",
               "seats",
@@ -936,6 +1377,92 @@
         ],
         "additionalProperties": false
       },
+      "Role": {
+        "type": "string",
+        "enum": [
+          "CUSTOMER",
+          "ADMIN"
+        ]
+      },
+      "TestSessionRequestDto": {
+        "type": "object",
+        "properties": {
+          "role": {
+            "description": "Role of the new user",
+            "$ref": "#/components/schemas/Role"
+          },
+          "email": {
+            "description": "Email of the new user. Default: `user-<random>@session.testtix.test`. 409 `email-already-registered` if taken.",
+            "type": "string",
+            "maxLength": 254,
+            "format": "email",
+            "pattern": "^(?:[A-Za-z0-9_'+\\-]+\\.)*[A-Za-z0-9_'+\\-]*[A-Za-z0-9_+-]@(?:[A-Za-z0-9][A-Za-z0-9\\-]*\\.)+[A-Za-z]{2,}$"
+          },
+          "name": {
+            "description": "Default: `Test Customer <random>` or `Test Admin <random>`",
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100
+          },
+          "password": {
+            "description": "Lets the user also log in through `POST /auth/login` (e.g. a UI test of the login form). Without it the user has no password and only this session.",
+            "type": "string",
+            "minLength": 8,
+            "maxLength": 128
+          },
+          "emailVerified": {
+            "default": true,
+            "description": "Default `true`. Unverified users can log in but not check out.",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "role"
+        ],
+        "additionalProperties": false
+      },
+      "TestSessionResponseDto_Output": {
+        "type": "object",
+        "properties": {
+          "user": {
+            "$ref": "#/components/schemas/AuthUser_Output"
+          },
+          "session": {
+            "type": "object",
+            "properties": {
+              "token": {
+                "type": "string",
+                "description": "Value of the `testtix_session` cookie"
+              },
+              "expiresAt": {
+                "type": "string",
+                "format": "date-time",
+                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+              }
+            },
+            "required": [
+              "token",
+              "expiresAt"
+            ],
+            "additionalProperties": false
+          },
+          "csrfToken": {
+            "type": "string",
+            "description": "Value of the `testtix_csrf` cookie; send it in `X-CSRF-Token` too"
+          },
+          "cookie": {
+            "type": "string",
+            "description": "A ready-made `Cookie` request header with both cookies, for clients without a cookie jar"
+          }
+        },
+        "required": [
+          "user",
+          "session",
+          "csrfToken",
+          "cookie"
+        ],
+        "additionalProperties": false
+      },
       "ProblemDetails": {
         "type": "object",
         "properties": {
@@ -1002,6 +1529,14 @@
           "errors"
         ],
         "additionalProperties": false
+      }
+    },
+    "securitySchemes": {
+      "session": {
+        "type": "apiKey",
+        "in": "cookie",
+        "name": "testtix_session",
+        "description": "Session cookie set by `POST /auth/login`, `POST /auth/register` or `POST /__test/sessions`."
       }
     }
   }

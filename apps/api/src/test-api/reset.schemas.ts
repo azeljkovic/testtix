@@ -24,6 +24,7 @@ export const ResetResponseSchema = z.object({
   clock: ClockStateSchema.describe('The server clock after the reset'),
   rows: z
     .object({
+      users: z.number().int(),
       venues: z.number().int(),
       sections: z.number().int(),
       seats: z.number().int(),

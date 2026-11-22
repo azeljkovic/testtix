@@ -42,7 +42,7 @@ describe('seedDatabase', () => {
       events: { rows: summary.events },
       ticket_batches: { rows: summary.ticketBatches },
       inventory_units: { rows: summary.inventoryUnits },
-      users: { rows: 0 },
+      users: { rows: summary.users },
       orders: { rows: 0 },
     });
   });

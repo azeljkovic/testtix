@@ -2,7 +2,7 @@
  * Named fixtures in the baseline seed. Their slugs and IDs never change, so tests and the
  * testing guide can rely on them. Dates are relative to the day the seed runs (see `seed-data.ts`).
  */
-import type { EventCategory, EventStatus } from '../generated/prisma/enums.js';
+import type { EventCategory, EventStatus, Role } from '../generated/prisma/enums.js';
 import { seedId } from './seed-id.js';
 
 export interface SeatedSectionSpec {
@@ -225,6 +225,58 @@ export const EVENT_SPECS = [
 
 export type FixtureEventSlug = (typeof EVENT_SPECS)[number]['slug'];
 
+export interface UserSpec {
+  readonly email: string;
+  readonly name: string;
+  readonly role: Role;
+  readonly emailVerified: boolean;
+  /** Documented in the testing guide, so testers can log in. Never reuse it for a real account. */
+  readonly password: string;
+  /**
+   * argon2id hash of `password` with a fixed salt, so the seed stays deterministic (a fresh hash
+   * would have a random salt). `seed-data.test.ts` checks that it matches `password`.
+   */
+  readonly passwordHash: string;
+}
+
+/** Seeded accounts. Every one can log in with its documented password. */
+export const USER_SPECS = [
+  {
+    email: 'admin@testtix.test',
+    name: 'Ada Admin',
+    role: 'ADMIN',
+    emailVerified: true,
+    password: 'TestTix-admin-1',
+    passwordHash:
+      '$argon2id$v=19$m=19456,t=2,p=1$27jxHi4VrgIyf2LQMB1nJA$WwpCWRCAfsIDESVlysL0F8Y+8wX2HddtRBKThu/cNjw',
+  },
+  {
+    email: 'customer@testtix.test',
+    name: 'Casey Customer',
+    role: 'CUSTOMER',
+    emailVerified: true,
+    password: 'TestTix-customer-1',
+    passwordHash:
+      '$argon2id$v=19$m=19456,t=2,p=1$LCEvcZ3zYUGUBW+WfKnlvg$opKkdNUAKqD/ba3U2BmVzUdhdCq/g9A0NlWjqxWpAis',
+  },
+  {
+    email: 'unverified@testtix.test',
+    name: 'Uma Unverified',
+    role: 'CUSTOMER',
+    emailVerified: false,
+    password: 'TestTix-unverified-1',
+    passwordHash:
+      '$argon2id$v=19$m=19456,t=2,p=1$dSejgfY8n4wGCqLVV28HjQ$5EYOioin/Hym+3DzehZ+TpDrLGTHEV9pG2ocJkqDmt8',
+  },
+] as const satisfies readonly UserSpec[];
+
+export type FixtureUserEmail = (typeof USER_SPECS)[number]['email'];
+
+/** Stable ID of a seeded user. */
+export function userId(email: string): string {
+  return seedId(`user:${email}`);
+}
+
 /** Stable ID of a seeded venue. */
 export function venueId(slug: string): string {
   return seedId(`venue:${slug}`);
@@ -243,6 +295,10 @@ export const SEED_FIXTURES = {
   >,
   events: Object.fromEntries(EVENT_SPECS.map(({ slug }) => [slug, eventId(slug)])) as Record<
     FixtureEventSlug,
+    string
+  >,
+  users: Object.fromEntries(USER_SPECS.map(({ email }) => [email, userId(email)])) as Record<
+    FixtureUserEmail,
     string
   >,
 } as const;

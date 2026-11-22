@@ -1,5 +1,5 @@
-import { Controller, Post } from '@nestjs/common';
-import { ApiOperation, ApiTags } from '@nestjs/swagger';
+import { Post } from '@nestjs/common';
+import { ApiOperation } from '@nestjs/swagger';
 import { ZodResponse } from 'nestjs-zod';
 
 import {
@@ -8,6 +8,7 @@ import {
   SoldOutEventResultDto,
 } from './scenario.schemas.js';
 import { basicCatalogue, oneSeatLeft, soldOutEvent } from './scenarios.js';
+import { TestApiController } from '../test-api.decorator.js';
 import { TestScenariosService } from './test-scenarios.service.js';
 
 const ADDITIVE =
@@ -17,8 +18,7 @@ const ADDITIVE =
  * One route per scenario, so each documents its own response. An unknown scenario is a plain
  * 404 like any unknown path.
  */
-@ApiTags('test')
-@Controller('__test/seed')
+@TestApiController('seed')
 export class TestScenariosController {
   constructor(private readonly scenarios: TestScenariosService) {}
 

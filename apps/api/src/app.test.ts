@@ -6,6 +6,7 @@ import request from 'supertest';
 import { afterEach, describe, expect, it } from 'vitest';
 import { z } from 'zod';
 
+import { Public, SkipCsrf } from './auth/auth.decorators.js';
 import { createTestApp, down, hangs, type TestAppOptions } from './testing/test-app.js';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
@@ -16,6 +17,8 @@ class ProbeBodyDto extends createZodDto(
 
 /** Test-only routes that exercise the global validation pipe and error filter. */
 @Controller('__probe')
+@Public()
+@SkipCsrf()
 class ProbeController {
   @Post('echo')
   echo(@Body() body: ProbeBodyDto) {

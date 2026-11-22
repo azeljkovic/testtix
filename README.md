@@ -49,11 +49,12 @@ curl -i http://localhost:3000/health/ready
 | `GET /health`       | Liveness: 200 while the process is up                                          |
 | `GET /health/ready` | Readiness: checks Postgres and Redis; 503 with per-check status if one is down |
 | `GET /metrics`      | Prometheus metrics (Node.js process defaults)                                  |
+| `/auth/*`           | Register, log in, log out, current user, CSRF token (cookie sessions)          |
 | `/docs`             | Swagger UI                                                                     |
 | `/openapi.json`     | OpenAPI 3 spec                                                                 |
 | `/__test/*`         | Test API, only with `TESTTIX_TEST_MODE=true` (404 otherwise)                   |
 
-Configuration comes from environment variables (see the API section of `.env.example`). They are validated on startup, and the API exits with a list of problems if one is invalid. Logs are JSON lines on stdout; pipe them through `npx pino-pretty` for a readable view. Error responses, request IDs, test mode and the controllable clock are described in the [testing guide](docs/testing-guide.md).
+Configuration comes from environment variables (see the API section of `.env.example`). They are validated on startup, and the API exits with a list of problems if one is invalid. Logs are JSON lines on stdout; pipe them through `npx pino-pretty` for a readable view. Error responses, request IDs, accounts and sessions (with the seeded logins), test mode and the controllable clock are described in the [testing guide](docs/testing-guide.md).
 
 ## Web app
 

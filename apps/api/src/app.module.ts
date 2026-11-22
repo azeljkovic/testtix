@@ -2,6 +2,7 @@ import { type DynamicModule, Module } from '@nestjs/common';
 import { APP_FILTER, APP_INTERCEPTOR, APP_PIPE } from '@nestjs/core';
 import { ZodSerializerInterceptor, ZodValidationPipe } from 'nestjs-zod';
 
+import { AuthModule } from './auth/auth.module.js';
 import { ClockModule } from './clock/clock.module.js';
 import { AppConfigModule } from './config/config.module.js';
 import type { AppConfig } from './config/config.schema.js';
@@ -24,6 +25,8 @@ export class AppModule {
         DatabaseModule,
         RedisModule,
         ClockModule,
+        // Registers the global auth and CSRF guards: every route needs a session unless @Public().
+        AuthModule,
         HealthModule,
         MetricsModule,
         // Not even loaded outside test mode, so `/__test/*` is a plain 404 there.

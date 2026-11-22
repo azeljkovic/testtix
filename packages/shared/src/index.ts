@@ -1,3 +1,4 @@
+export * from './auth.js';
 export * from './constants.js';
 export * from './events.js';
 export * from './inventory.js';

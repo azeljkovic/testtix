@@ -55,10 +55,76 @@ Branch on `type`, never on `title` or `detail`. App-specific types end in an err
 
 Problem types so far:
 
-| `type`                                 | Status | When                                                                                |
-| -------------------------------------- | ------ | ----------------------------------------------------------------------------------- |
-| `about:blank`                          | any    | Unknown route (404), malformed JSON (400), missing or wrong `X-Test-Key` (401), 5xx |
-| `urn:testtix:problem:validation-error` | 400    | Body, query or path parameters fail validation                                      |
+| `type`                                         | Status | When                                                                                                                                                                   |
+| ---------------------------------------------- | ------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `about:blank`                                  | any    | Unknown route (404), malformed JSON (400), not logged in or session expired (401), missing or wrong `X-Test-Key` (401), logged in without the required role (403), 5xx |
+| `urn:testtix:problem:validation-error`         | 400    | Body, query or path parameters fail validation                                                                                                                         |
+| `urn:testtix:problem:invalid-credentials`      | 401    | Login with a wrong email or password                                                                                                                                   |
+| `urn:testtix:problem:csrf-token-invalid`       | 403    | A POST, PUT, PATCH or DELETE without a valid `X-CSRF-Token` header (see [CSRF](#csrf-tokens))                                                                          |
+| `urn:testtix:problem:email-already-registered` | 409    | Registering an email that already has an account (`errors[0].path` is `email`)                                                                                         |
+
+## Accounts and sessions
+
+Accounts log in with email and password. A login session is a cookie; there are no bearer tokens.
+
+| Endpoint              | Auth    | What it does                                                                                     |
+| --------------------- | ------- | ------------------------------------------------------------------------------------------------ |
+| `GET /auth/csrf`      | none    | Sets the CSRF cookie and returns its token: `{ "csrfToken": "…" }`                               |
+| `POST /auth/register` | CSRF    | `{ email, password, name }` → 201, creates a customer (email unverified) and logs it in          |
+| `POST /auth/login`    | CSRF    | `{ email, password }` → 200, logs in                                                             |
+| `POST /auth/logout`   | CSRF    | 204. Ends the session and clears the cookie. Also 204 without a session, so it is safe to repeat |
+| `GET /auth/me`        | session | 200 with the user and session, 401 without a valid session                                       |
+
+Register, login and `me` answer with the user and the session expiry:
+
+```json
+{
+  "user": {
+    "id": "019b76da-a800-7599-864c-1d5467501b78",
+    "email": "customer@testtix.test",
+    "name": "Casey Customer",
+    "role": "CUSTOMER",
+    "emailVerified": true,
+    "createdAt": "2026-08-23T12:00:00.000Z"
+  },
+  "session": { "expiresAt": "2026-11-28T18:40:00.000Z" }
+}
+```
+
+**Validation.** Emails are trimmed and lower-cased, so `  Ada@Example.COM` and `ada@example.com` are the same account (max 254 characters). Passwords are 8–128 characters, used exactly as typed (spaces count). Names are 1–100 characters after trimming. Unknown fields, such as `role`, are a 400: registration always creates a `CUSTOMER`. Login only checks that the password isn't empty.
+
+**Wrong credentials.** A wrong password, an unknown email and an account without a usable password (such as a [scenario buyer](#seed-scenarios)) all get the same 401 `invalid-credentials`, with the same body and roughly the same response time, so the API doesn't reveal which emails are registered. Registration does reveal it (409 `email-already-registered`); that's a deliberate usability trade-off.
+
+### Session cookie
+
+Register and login set `testtix_session`: `HttpOnly`, `SameSite=Lax`, `Path=/`, with `Max-Age` = the session TTL, and `Secure` when the server sets `COOKIE_SECURE=true` (the default with `NODE_ENV=production`). The cookie holds a random token; the server stores only its SHA-256 hash in the `sessions` table. Logging in or registering ends the session the request came with, so a browser holds one session at a time. Several browsers (or API clients) can each have their own session for the same account.
+
+- **Expiry is an idle timeout** of `SESSION_TTL_HOURS` (default 168, i.e. 7 days), measured by the [server clock](#the-server-clock). Every authenticated request moves the expiry to now + TTL, at most once a minute, and re-sends the cookie when it does. `session.expiresAt` in `GET /auth/me` shows the current value.
+- At `expiresAt` the session is over: the next request answers 401, deletes the session row and clears the cookie. To test it, freeze the clock, log in, then `advanceBy` the TTL (604 800 000 ms by default).
+- A request with an unknown, ended or malformed session cookie gets 401 and a `Set-Cookie` that clears it.
+- Lifetimes are sent as `Max-Age`, never `Expires`, so a frozen or moved server clock doesn't confuse browsers. Browsers count `Max-Age` in real time, though: after advancing the server clock past the TTL, the browser still sends the cookie and the server rejects it.
+- Every 401 carries `WWW-Authenticate: Session realm="testtix"`. A valid session without the required role gets 403 (`about:blank`). The user is loaded on every request, so a role change or a deleted account takes effect immediately.
+
+### CSRF tokens
+
+Every POST, PUT, PATCH and DELETE request (login and register included, the test API excluded) must send an `X-CSRF-Token` header equal to the `testtix_csrf` cookie, or it gets 403 `csrf-token-invalid`. This is the double-submit pattern: another site can make a browser send the cookie but can't read it, so it can't set the header.
+
+1. `GET /auth/csrf` sets `testtix_csrf` (readable by scripts, `SameSite=Lax`, 30 days) and returns the same token. Calling it again returns the existing token and renews the cookie.
+2. Send the cookie and the header on every state-changing request. The token doesn't change on login or logout.
+
+On a route that needs a session, a request without one gets 401 before the CSRF check, so the order is: 401 (no session) → 403 (CSRF) → 403 (role) → 400 (validation).
+
+```sh
+jar=$(mktemp)
+token=$(curl -s -c "$jar" http://localhost:3000/auth/csrf | jq -r .csrfToken)
+curl -s -b "$jar" -c "$jar" -X POST http://localhost:3000/auth/login \
+  -H 'Content-Type: application/json' -H "X-CSRF-Token: $token" \
+  -d '{"email":"customer@testtix.test","password":"TestTix-customer-1"}'
+curl -s -b "$jar" http://localhost:3000/auth/me
+curl -s -b "$jar" -c "$jar" -X POST http://localhost:3000/auth/logout -H "X-CSRF-Token: $token"
+```
+
+For API-based test setup, [`POST /__test/sessions`](#logging-in-through-the-test-api) skips all of this and returns a ready session.
 
 ## Health and readiness
 
@@ -95,6 +161,7 @@ Some test endpoints affect everyone using the server: freezing the clock or wipi
 | `POST /__test/clock`           | yes                                  |
 | `POST /__test/reset`           | yes                                  |
 | `POST /__test/seed/{scenario}` | no (it only adds data)               |
+| `POST /__test/sessions`        | no (it only adds data)               |
 
 ### The server clock
 
@@ -145,7 +212,17 @@ The baseline data set (`pnpm db:seed` on an empty database, or [`POST /__test/re
 
 Dates are relative to the **seed day**: the UTC date of the server clock when the seed ran (so with a frozen test clock, the frozen date). Below, `D+21 23:30` means 21 days after the start of that day, at 23:30 UTC. Seeding at any time on the same day gives the same dates; seeding on another day shifts every date but keeps every ID. Venues are in the fictional city of Port Ellis (time zone `America/New_York`).
 
-The baseline has no users, holds or orders: every ticket is `AVAILABLE`. (Seeded accounts arrive with sign-in in C1.4.)
+The baseline has three [accounts](#seeded-accounts) and no holds or orders: every ticket is `AVAILABLE`.
+
+### Seeded accounts
+
+| Email                     | Password               | ID                                     | Role       | Email verified |
+| ------------------------- | ---------------------- | -------------------------------------- | ---------- | -------------- |
+| `admin@testtix.test`      | `TestTix-admin-1`      | `019b76da-a800-788e-b36d-87227a4e2df8` | `ADMIN`    | yes            |
+| `customer@testtix.test`   | `TestTix-customer-1`   | `019b76da-a800-7599-864c-1d5467501b78` | `CUSTOMER` | yes            |
+| `unverified@testtix.test` | `TestTix-unverified-1` | `019b76da-a800-78a5-9bed-edb1c9007204` | `CUSTOMER` | no             |
+
+They are shared by everyone using the server: on a shared instance, prefer [`POST /__test/sessions`](#logging-in-through-the-test-api) or a registration with a unique email, so tests don't log each other out or change each other's data.
 
 ### Venues
 
@@ -199,6 +276,7 @@ curl -s -X POST http://localhost:3000/__test/reset -H 'Content-Type: application
   "seedDay": "2026-12-01",
   "clock": { "now": "2026-12-01T10:00:00.000Z", "mode": "frozen", "offsetMs": 842070954 },
   "rows": {
+    "users": 3,
     "venues": 4,
     "sections": 6,
     "seats": 412,
@@ -274,3 +352,41 @@ Every response has a `venue` (ID, slug, name and sections with their IDs) and th
 | `one-seat-left`   | `venue`, `event`, `buyer`, `orderIds`, `seat` (the available seat and its inventory unit) |
 
 The OpenAPI spec documents each response in full. Later milestones add scenarios (holds about to expire, GA last tickets, confirmed orders, ticket drops).
+
+## Logging in through the test API
+
+`POST /__test/sessions` creates a new user with a role and logs it in, in one call: API tests and UI tests that only need "a logged-in admin" skip registration, CSRF and login. Like the scenarios it only adds data, so it stays open on a server with a test API key, and it is exempt from the CSRF check.
+
+| Field           | Required | Default                                          | Meaning                                                                                       |
+| --------------- | -------- | ------------------------------------------------ | --------------------------------------------------------------------------------------------- |
+| `role`          | yes      |                                                  | `CUSTOMER` or `ADMIN`                                                                         |
+| `email`         | no       | `user-<random>@session.testtix.test`             | Normalized like registration. 409 `email-already-registered` if it is taken                   |
+| `name`          | no       | `Test Customer <random>` / `Test Admin <random>` |                                                                                               |
+| `password`      | no       | none                                             | 8–128 characters. Lets the user also log in through `POST /auth/login` (e.g. a login UI test) |
+| `emailVerified` | no       | `true`                                           | `false` gives an unverified user, who can log in but not check out                            |
+
+Without `password` the user has no usable password: the returned session is the only way in. The call answers 201, sets the `testtix_session` and `testtix_csrf` cookies, and returns the same values in the body, plus a ready-made `Cookie` header for clients without a cookie jar:
+
+```sh
+session=$(curl -s -X POST http://localhost:3000/__test/sessions \
+  -H 'Content-Type: application/json' -d '{"role":"ADMIN"}')
+curl -s http://localhost:3000/auth/me -H "Cookie: $(echo "$session" | jq -r .cookie)"
+```
+
+```json
+{
+  "user": {
+    "id": "019ac6b2-…",
+    "email": "user-3f9a1c2b@session.testtix.test",
+    "name": "Test Admin 3f9a1c2b",
+    "role": "ADMIN",
+    "emailVerified": true,
+    "createdAt": "…"
+  },
+  "session": { "token": "…", "expiresAt": "2026-11-28T18:40:00.000Z" },
+  "csrfToken": "…",
+  "cookie": "testtix_session=…; testtix_csrf=…"
+}
+```
+
+On state-changing requests, send `cookie` as the `Cookie` header and `csrfToken` as `X-CSRF-Token`. The session behaves like any other: it expires with the [server clock](#session-cookie), and `POST /auth/logout` ends it.
