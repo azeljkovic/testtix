@@ -67,7 +67,7 @@ pnpm --filter @testtix/web dev        # http://localhost:5173
 
 The dev server forwards `/api/*` to the API with the prefix removed (`/api/health` → `http://127.0.0.1:3000/health`), so the browser only ever talks to its own origin. Set `API_PROXY_TARGET` or `WEB_PORT` in the root `.env` to change either. The footer shows whether the API answers. `pnpm --filter @testtix/web build` writes the static site to `apps/web/dist`.
 
-Accounts: register at `/register`, open the link from the verification email in Mailpit (<http://localhost:8025>), and log in at `/login`. `/account` needs a login and `/admin` an admin; see the [testing guide](docs/testing-guide.md#account-pages).
+Accounts: register at `/register`, open the link from the verification email in Mailpit (<http://localhost:8025>), and log in at `/login`. `/account` needs a login and `/admin` an admin; see the [testing guide](docs/testing-guide.md#account-pages). Log in as the seeded admin (`admin@testtix.test`, [seeded accounts](docs/testing-guide.md#seeded-accounts)) to create venues and events, release tickets and publish them under `/admin` ([admin pages](docs/testing-guide.md#admin-pages)).
 
 The web app calls the API through a typed client generated from the API's OpenAPI spec. After changing an API route or schema, regenerate the spec and the client types, then commit both. CI fails when they are stale.
 

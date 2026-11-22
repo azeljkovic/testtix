@@ -207,6 +207,7 @@ Claude's workspace has no Docker daemon, so Testcontainers can't run there. Beca
 
 - Admin-only routes: event list (including drafts), create/edit event (seated, GA or mixed sections), release a batch, publish or cancel.
 - Verify: component tests and a manual flow where admin creates and publishes an event that then appears in the public list.
+- Also added: venue list and venue create/edit/delete pages with a layout editor (seated and GA sections), since an event's sections come from its venue. Individual seats are released through the API only.
 
 **M2 demo:** admin creates and publishes an event; a customer finds it through filters and search.
 

@@ -2,6 +2,7 @@ import { screen, waitFor, within } from '@testing-library/react';
 import { http } from 'msw';
 import { describe, expect, it } from 'vitest';
 
+import { adminRiverside, draftEvent, publishedEvent } from '../testing/admin-fixtures.js';
 import { admin, customer, logInAs } from '../testing/auth.js';
 import { axe } from '../testing/axe.js';
 import { mockEventList } from '../testing/catalogue.js';
@@ -93,19 +94,41 @@ describe('accessibility (axe)', () => {
     expect(await axe(document.body)).toHaveNoViolations();
   });
 
-  it('the admin and access denied pages have no axe violations', async () => {
-    logInAs(admin);
-    const first = renderApp('/admin');
-    await screen.findByRole('heading', { level: 1, name: 'Admin' });
-    await settled();
-    expect(await axe(document.body)).toHaveNoViolations();
-    first.unmount();
-
+  it('the access denied page has no axe violations', async () => {
     logInAs(customer);
     renderApp('/admin');
     await screen.findByRole('heading', { level: 1, name: 'Access denied' });
     await settled();
     expect(await axe(document.body)).toHaveNoViolations();
+  });
+
+  describe('admin', () => {
+    it.each([
+      ['/admin/events', 'Events', 'Midnight Echoes Live'],
+      [`/admin/events/${publishedEvent.id}`, 'Midnight Echoes Live', 'Early bird'],
+      ['/admin/events/new', 'New event', 'Title'],
+      [`/admin/events/${publishedEvent.id}/edit`, 'Edit event', 'Title'],
+      [`/admin/events/${publishedEvent.id}/batches/new`, 'Release tickets', 'Batch name'],
+      ['/admin/venues', 'Venues', 'Riverside Hall'],
+      ['/admin/venues/new', 'New venue', 'Section name'],
+      [`/admin/venues/${adminRiverside.id}`, 'Riverside Hall', 'Name'],
+    ])('%s has no axe violations', async (path, heading, loaded) => {
+      logInAs(admin);
+      renderApp(path);
+      await screen.findByRole('heading', { level: 1, name: heading });
+      await screen.findAllByText(loaded);
+      await settled();
+      expect(await axe(document.body)).toHaveNoViolations();
+    });
+
+    it('the confirmation dialog has no axe violations', async () => {
+      logInAs(admin);
+      const { user } = renderApp(`/admin/events/${draftEvent.id}`);
+      await settled();
+      await user.click(await screen.findByRole('button', { name: 'Cancel event' }));
+      await screen.findByRole('alertdialog', { name: 'Cancel this event?' });
+      expect(await axe(document.body)).toHaveNoViolations();
+    });
   });
 
   describe('catalogue', () => {

@@ -1,5 +1,5 @@
 import type { ErrorCode } from '@testtix/shared';
-import type { FieldValues, Path, UseFormSetError } from 'react-hook-form';
+import type { FieldErrors, FieldValues, Path, UseFormSetError } from 'react-hook-form';
 
 import { ApiError } from '../api/errors.js';
 
@@ -46,4 +46,9 @@ export function showSubmitError<Values extends FieldValues>(
       { shouldFocus: index === 0 },
     );
   });
+}
+
+/** The form-level error to show at the top of a form: from the API, or a rule of the whole form. */
+export function formLevelError(errors: FieldErrors): string | undefined {
+  return errors.root?.server?.message ?? errors.root?.schema?.message;
 }

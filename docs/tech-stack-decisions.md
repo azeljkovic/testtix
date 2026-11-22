@@ -85,6 +85,18 @@ Notes:
 - The app's query client doesn't retry 4xx responses (a 404 event, an invalid query); network errors and 5xx still get three retries.
 - "Choose seats" links to `/events/:slug/seats`, a placeholder page until the seat map (C3.3).
 
+**Admin area (C2.4)**
+
+- **Routes** sit under one `<RequireAuth role="ADMIN" />` layout route and an `AdminLayout` (an "Admin" sub-navigation): `/admin/events` (list, `?status=` and `?page=` in the URL), `/admin/events/new`, `/admin/events/:eventId` (details, status actions, batches), `…/edit`, `…/batches/new`, `/admin/venues`, `/admin/venues/new` and `/admin/venues/:venueId`. `/admin` redirects to `/admin/events`. Pages address events by ID, as the admin API does.
+- **Venue pages are in scope** although the plan only names event pages: "seated, GA or mixed sections" come from the venue layout, so creating one needs the layout editor (`useFieldArray`). Releasing individual seats (`seatIds`) stays API-only until the seat map (C3.3) gives a seat picker.
+- **Form values aren't requests.** Admin forms keep text as typed (numbers, dollars, wall-clock times). `requestResolver(schema, convert)` (`src/forms/request-resolver.ts`) converts the values, then validates the result with the shared request schema, so form and API share rules and messages; conversion errors (a malformed price, a skipped time) take the place of schema errors on their field, and errors on paths that aren't fields go to `root.schema`. Messages only a form can produce (dollar format, time zones) live in the web app.
+- **Times are entered in the venue's time zone**, matching how they are shown and printed. `datetime-local` inputs hold wall-clock time; `fromZonedLocal()` / `toZonedLocal()` (`src/admin/zoned-time.ts`) convert with `Intl` only, no date library: a time that happens twice is the earlier instant, one the clocks skip is refused.
+- **Edits send only changed fields:** the form's request is compared with the request built from the loaded event or venue, so an unchanged past `startsAt` isn't re-validated and an unchanged layout isn't replaced (which would issue new seat IDs).
+- **Native controls** (`SelectField`, `DateTimeField`, `CheckboxField` in `src/forms/NativeFields.tsx`) as in the catalogue filters; text and number fields stay React Aria `TextField`s, with `inputMode` for numbers so testers can still type anything. Irreversible actions (cancel, delete) confirm in a React Aria `alertdialog`.
+- **Caching:** a change writes the returned event into its query and marks the admin lists and the public catalogue stale (`eventChanged()` / `venueChanged()` in `src/admin/queries.ts`), so a published event shows up in `/events` straight away.
+- `packages/shared` gains `BATCH_EMPTY_MESSAGE`, and a missing event time now says "Enter the start time" (API too) instead of the ISO 8601 format message.
+- Bundle after C2.4: about 760 kB (232 kB gzipped). The admin pages are a good first candidate for route-level code splitting.
+
 ---
 
 ## 3. Backend (`apps/api`)

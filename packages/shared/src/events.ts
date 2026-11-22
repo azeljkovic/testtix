@@ -34,7 +34,13 @@ export const HOLD_DURATION_SEC = { min: 60, max: 3600, default: 600 } as const;
 export const MAX_TICKETS_PER_ORDER = { min: 1, max: 20, default: 6 } as const;
 
 const dateTime = (label: string) =>
-  z.iso.datetime({ offset: true, error: `${label} must be an ISO 8601 date-time` });
+  z.iso.datetime({
+    offset: true,
+    error: (issue) =>
+      issue.input === undefined
+        ? `Enter the ${label.toLowerCase()}`
+        : `${label} must be an ISO 8601 date-time`,
+  });
 
 export const EVENT_SCHEDULE_MESSAGES = {
   endsBeforeStart: 'End time must be after the start time',
@@ -123,6 +129,8 @@ export const BATCH_NAME_MAX_LENGTH = 100;
 export const BATCH_PRICE_MAX_CENTS = 1_000_000;
 /** Most seat IDs in one batch: the most seats a venue can have. */
 export const BATCH_SEAT_IDS_MAX = 20_000;
+/** The error of a batch that releases nothing. */
+export const BATCH_EMPTY_MESSAGE = 'Release at least one seated section, seat or GA place';
 
 const uuidList = (max: number) =>
   z
@@ -189,7 +197,7 @@ export const ReleaseBatchRequestSchema = z
     if (empty) {
       ctx.addIssue({
         code: 'custom',
-        message: 'Release at least one seated section, seat or GA place',
+        message: BATCH_EMPTY_MESSAGE,
       });
     }
   });
