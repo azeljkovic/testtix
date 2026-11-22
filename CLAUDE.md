@@ -25,7 +25,8 @@ When a decision changes, update the docs in the same PR so they stay accurate.
 - ✅ C1.4 Auth API (sessions, roles, CSRF)
 - ✅ C1.5 Mailer + account verification email
 - ✅ C1.6 Web auth pages
-- ⏭️ Next: **C2.1 Admin events + ticket batches API** (see plan)
+- ✅ C2.1 Admin events + ticket batches API
+- ⏭️ Next: **C2.2 Public catalogue API** (see plan)
 
 Update this list when a chunk is merged.
 
@@ -83,8 +84,10 @@ Run one package: `pnpm --filter @testtix/api <script>`.
 - Server code must take "now" from `ClockService` (`await clock.now()`; global, inject by type), never `Date.now()` / `new Date()` directly. ESLint enforces it in `apps/api/src` (tests and `src/testing/` are exempt).
 - Test-only endpoints go in `TestApiModule` (`apps/api/src/test-api/`, routes under `/__test/`), which is loaded only when `TESTTIX_TEST_MODE=true`. Put `@RequiresTestKey()` on endpoints with a global effect (clock, reset). Tests turn test mode on with `env: { TESTTIX_TEST_MODE: 'true' }`; the clock is global, so tests that change it reset it.
 - `POST /__test/reset` reseeds via `resetAndSeedDatabase()` (truncate + seed in one transaction). Seed scenarios (`src/test-api/scenarios/`) are one route each under `/__test/seed/`, built by pure functions that reuse `buildCatalogue()`; they only add rows, with random IDs (`uuidv7(now)`) and a random suffix in slugs, titles and emails. Document new scenarios in `docs/testing-guide.md`.
-- **Auth is deny-by-default.** The global `AuthGuard` requires a session on every route; mark open routes (or controllers) `@Public()`, restrict with `@Roles('ADMIN')`, read the user with `@CurrentUser()` (`src/auth/auth.decorators.ts`). The global `CsrfGuard` requires `X-CSRF-Token` on every POST/PUT/PATCH/DELETE unless `@SkipCsrf()`. New test API controllers use `@TestApiController(path)` (public, no CSRF). In tests, `openBrowser(app)` / `createTestSession(app, { role })` (`src/testing/auth.ts`) give a logged-in client; `createIntegrationApp({ controllers })` adds probe routes.
-- Prisma unique-constraint races: catch `P2002` (`isUniqueViolation()` in `src/auth/auth.service.ts`) rather than checking first.
+- **Auth is deny-by-default.** The global `AuthGuard` requires a session on every route; mark open routes (or controllers) `@Public()`, restrict with `@Roles('ADMIN')`, read the user with `@CurrentUser()` (`src/auth/auth.decorators.ts`). The global `CsrfGuard` requires `X-CSRF-Token` on every POST/PUT/PATCH/DELETE unless `@SkipCsrf()`. New test API controllers use `@TestApiController(path)` (public, no CSRF). In tests, `openBrowser(app)` / `createTestSession(app, { role })` (`src/testing/auth.ts`) give a logged-in client, and `sessionClient(app, session)` sends its cookie and CSRF header for you; `createIntegrationApp({ controllers })` adds probe routes.
+- Prisma unique-constraint races: catch `P2002` (`isUniqueViolation()` / `isForeignKeyViolation()` in `src/infra/prisma-errors.ts`) rather than checking first. Batch inserts go through `chunks()` (`src/infra/chunks.ts`) to stay under Postgres' bind-parameter limit.
+- Event writes (edits, status actions, batch releases) start their transaction with `lockEvent()` (`src/events/admin-events.service.ts`), and venue layout writes with `lockVenue()`; keep that order (event, then venue) in new code. Rules a schema can't check answer 400 via `validationFailed(errors)`; state conflicts get their own 409 problem type.
+- List endpoints paginate with `PageQuerySchema` / `pageSchema()` / `toPage()` from `packages/shared`. Generated slugs use `slugify()` + `insertWithSlug()` (`src/infra/slugs.ts`).
 - Prefer accessible names over `data-testid` in the UI; use `data-testid` only where no good accessible locator exists.
 - Every list endpoint sorts with a stable tiebreaker (`id`).
 - Email: send through `MailService.send({ to, template, data })` (`src/mail/`); add the template's variables to `MailTemplateData` and its `<name>.html.hbs` / `<name>.text.hbs` to `apps/api/templates/mail/` (Prettier ignores `*.hbs`). Integration tests read mail with `waitForEmail(to, subject)` (`src/testing/integration/mailpit.ts`); Mailpit is never emptied, so use a unique recipient. `createTestApp()` swaps SMTP for a JSON transport.

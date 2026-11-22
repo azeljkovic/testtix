@@ -143,6 +143,17 @@ Notes:
 - It refuses to run when venues or events exist (an advisory lock serializes concurrent runs) instead of mixing data sets. Faker is a runtime dependency, because the test API's reset (C1.3) reseeds inside the running API.
 - `pnpm db:seed` runs `prisma db seed`, which runs the compiled CLI (`dist/seed/main.js`). Prisma 7's `migrate reset` no longer seeds, so a fresh start is `pnpm db:reset && pnpm db:seed`.
 
+**Admin API (C2.1)**
+
+- `VenuesModule` (`src/venues/`) and `EventsModule` (`src/events/`) hold the admin routes under `/admin/*`; both controllers carry `@Roles('ADMIN')`. The public catalogue (C2.2) adds its own controller to `EventsModule`.
+- **Venue layouts are generated:** a seated section is `rows` × `seatsPerRow` (rows lettered from the front, as in the seed, which now shares `rowLabel()` from `src/venues/venue-layout.ts`); a GA section has a capacity. Limits (20 sections, 50 × 100 seats, 5000 GA, 20 000 per venue) keep one request from inserting millions of inventory rows. A layout can be replaced only while no inventory exists at the venue: inventory units reference seats and sections with `onDelete: Restrict`, so "no layout edits after sales" is enforced from the first released batch, not the first sale.
+- **One lock per event:** every event change (edit, publish/unpublish/cancel, delete, batch release) runs in a transaction that starts with `SELECT … FOR UPDATE` on the event row (`lockEvent()`). Batch releases also take `FOR SHARE` on the venue row, which layout replacement and venue deletion lock `FOR UPDATE`. So concurrent releases can't release a seat twice or exceed a GA capacity, and a status check can't race a release. The unique `(event_id, seat_id)` index stays as the last line of defence.
+- **Rules a schema can't check** (references to other rows, the current time, merged values of a PATCH) answer the same 400 `validation-error` as schema failures, via `validationFailed()` in `src/errors/problem.exception.ts`. State conflicts are 409 with their own problem types (`slug-taken`, `layout-locked`, `event-status-conflict`, …).
+- **Slugs** are generated from the name or title (`slugify()` in `packages/shared`) and numbered when taken (`-2`, `-3`); `insertWithSlug()` (`src/infra/slugs.ts`) retries a generated slug on a unique violation, and maps a violation on a client-chosen slug to 409 `slug-taken`.
+- **Ticket counts** are one grouped SQL query (`countUnits()`), counting `HELD` units with an expired `heldUntil` as available, matching the lazy hold expiry of C3.1.
+- **Pagination** helpers (`PageQuerySchema`, `pageSchema()`, `toPage()`) live in `packages/shared`, so C2.2 reuses the same `page` / `pageSize` / `total` / `totalPages` shape.
+- Not in C2.1: editing or deleting batches, and the drop settings (`waitingRoomEnabled`, admission rate), which arrive with C5.1.
+
 **Concurrency for "buying the last seat"**
 
 - Seat claims use an atomic conditional update inside a Prisma interactive transaction, e.g. `UPDATE inventory_units SET status='HELD', hold_id=…, held_until=… WHERE id=… AND (status='AVAILABLE' OR held_until < now)`. If 0 rows were affected, the seat is already taken and the API returns 409.
