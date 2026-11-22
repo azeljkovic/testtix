@@ -53,6 +53,17 @@ export const envSchema = z
       .optional(),
     // How long an email verification link works.
     EMAIL_VERIFICATION_TTL_HOURS: z.coerce.number().int().min(1).max(720).default(24),
+    // The API process also runs the background job worker. Set false when the worker runs as its
+    // own process (`node dist/worker.js`), e.g. to scale it separately.
+    WORKER_IN_PROCESS: z
+      .stringbool({ truthy: ['true'], falsy: ['false'], error: 'Must be true or false' })
+      .default(true),
+    // Repeatable job that deletes expired holds and frees their tickets. Cleanup only: expired
+    // holds count as available whether or not it runs.
+    HOLD_SWEEPER_ENABLED: z
+      .stringbool({ truthy: ['true'], falsy: ['false'], error: 'Must be true or false' })
+      .default(true),
+    HOLD_SWEEPER_INTERVAL_MS: z.coerce.number().int().min(100).max(86_400_000).default(60_000),
   })
   .superRefine((env, ctx) => {
     // Dev defaults carry well-known credentials or point at localhost, so production must set
@@ -84,6 +95,11 @@ export const envSchema = z
     mailFrom: env.MAIL_FROM,
     webBaseUrl: (env.WEB_BASE_URL ?? DEV_WEB_BASE_URL).replace(/\/+$/, ''),
     emailVerificationTtlMs: env.EMAIL_VERIFICATION_TTL_HOURS * 60 * 60 * 1000,
+    workerInProcess: env.WORKER_IN_PROCESS,
+    holdSweeper: {
+      enabled: env.HOLD_SWEEPER_ENABLED,
+      intervalMs: env.HOLD_SWEEPER_INTERVAL_MS,
+    },
   }));
 
 export type AppConfig = Readonly<z.output<typeof envSchema>>;

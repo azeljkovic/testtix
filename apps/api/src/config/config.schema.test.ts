@@ -42,6 +42,8 @@ describe('parseConfig', () => {
       mailFrom: 'TestTix <no-reply@testtix.test>',
       webBaseUrl: 'http://localhost:5173',
       emailVerificationTtlMs: 24 * 60 * 60 * 1000,
+      workerInProcess: true,
+      holdSweeper: { enabled: true, intervalMs: 60_000 },
     });
   });
 
@@ -62,6 +64,9 @@ describe('parseConfig', () => {
       MAIL_FROM: 'Shop <shop@example.com>',
       WEB_BASE_URL: 'https://shop.example.com/',
       EMAIL_VERIFICATION_TTL_HOURS: '48',
+      WORKER_IN_PROCESS: 'false',
+      HOLD_SWEEPER_ENABLED: 'false',
+      HOLD_SWEEPER_INTERVAL_MS: '5000',
     });
     expect(config).toEqual({
       nodeEnv: 'production',
@@ -79,6 +84,8 @@ describe('parseConfig', () => {
       mailFrom: 'Shop <shop@example.com>',
       webBaseUrl: 'https://shop.example.com',
       emailVerificationTtlMs: 48 * 60 * 60 * 1000,
+      workerInProcess: false,
+      holdSweeper: { enabled: false, intervalMs: 5000 },
     });
   });
 
@@ -116,6 +123,16 @@ describe('parseConfig', () => {
     expect(parseError({ EMAIL_VERIFICATION_TTL_HOURS: value }).issues[0]?.path).toEqual([
       'EMAIL_VERIFICATION_TTL_HOURS',
     ]);
+  });
+
+  it.each(['99', '86400001', '1.5'])('rejects HOLD_SWEEPER_INTERVAL_MS=%s', (value) => {
+    expect(parseError({ HOLD_SWEEPER_INTERVAL_MS: value }).issues[0]?.path).toEqual([
+      'HOLD_SWEEPER_INTERVAL_MS',
+    ]);
+  });
+
+  it.each(['WORKER_IN_PROCESS', 'HOLD_SWEEPER_ENABLED'])('rejects %s=1', (key) => {
+    expect(parseError({ [key]: '1' }).issues[0]?.message).toBe('Must be true or false');
   });
 
   it.each(['0', '8761', '1.5'])('rejects SESSION_TTL_HOURS=%s', (value) => {

@@ -12,6 +12,7 @@ import { ProblemException, validationFailed } from '../errors/problem.exception.
 import type { Prisma } from '../generated/prisma/client.js';
 import { PrismaService } from '../infra/prisma.service.js';
 import { uuidv7 } from '../infra/uuid.js';
+import { deleteHold, lockHoldUnits, lockUserEvent } from './hold-locks.js';
 import type { Hold } from './holds.schemas.js';
 import { publishedEventNotFound } from './seat-map.service.js';
 
@@ -29,7 +30,7 @@ interface HoldableEvent {
 /**
  * Customers' holds (C3.1): a temporary, all-or-nothing claim on seats and GA places. A unit is
  * claimable when its batch is released and it is `AVAILABLE`, or `HELD` by a hold that has
- * expired (`heldUntil <= now`, lazy expiry: correctness never waits for the sweeper of C3.2).
+ * expired (`heldUntil <= now`, lazy expiry: correctness never waits for `HoldSweeperService`).
  *
  * Concurrency, all inside one transaction per request:
  *
@@ -134,10 +135,9 @@ export class HoldsService {
       });
       if (hold === null) throw holdNotFound();
       await lockUserEvent(tx, userId, hold.eventId);
-      await tx.$queryRaw`
-        SELECT id FROM inventory_units WHERE hold_id = ${holdId}::uuid ORDER BY id FOR UPDATE`;
-      // Gone if a concurrent request of the same user replaced or released it meanwhile.
-      if ((await deleteHold(tx, holdId)) === 0) throw holdNotFound();
+      await lockHoldUnits(tx, holdId);
+      // Gone if a concurrent request of the same user (or the sweeper) deleted it meanwhile.
+      if ((await deleteHold(tx, holdId)).holds === 0) throw holdNotFound();
     });
   }
 }
@@ -192,12 +192,6 @@ async function shareLockPublishedEvent(tx: Db, eventId: string): Promise<Holdabl
   return event;
 }
 
-/** Serializes one user's hold changes for one event until the transaction ends. */
-async function lockUserEvent(tx: Db, userId: string, eventId: string): Promise<void> {
-  await tx.$executeRaw`
-    SELECT pg_advisory_xact_lock(hashtextextended(${`hold:${userId}:${eventId}`}, 0))`;
-}
-
 /**
  * 400 for seats that aren't at the event's venue and sections that aren't GA sections there.
  * (Seats of the venue that the event doesn't sell are a 409 later, like taken seats.)
@@ -237,14 +231,6 @@ async function requireVenueLayout(tx: Db, venueId: string, input: HoldRequest): 
     });
   }
   if (errors.length > 0) throw validationFailed(errors);
-}
-
-/** Releases a hold's units and deletes it. Returns the number of holds deleted (0 or 1). */
-async function deleteHold(tx: Db, holdId: string): Promise<number> {
-  await tx.$executeRaw`
-    UPDATE inventory_units SET status = 'AVAILABLE', hold_id = NULL, held_until = NULL
-    WHERE hold_id = ${holdId}::uuid`;
-  return (await tx.hold.deleteMany({ where: { id: holdId } })).count;
 }
 
 interface Claim {

@@ -31,7 +31,13 @@ export interface TestAppOptions {
  * use `createIntegrationApp()` (`src/testing/integration/`).
  */
 export async function createTestApp(options: TestAppOptions = {}): Promise<NestFastifyApplication> {
-  const config: AppConfig = parseConfig({ NODE_ENV: 'test', LOG_LEVEL: 'silent', ...options.env });
+  const config: AppConfig = parseConfig({
+    NODE_ENV: 'test',
+    LOG_LEVEL: 'silent',
+    // BullMQ needs a real Redis.
+    WORKER_IN_PROCESS: 'false',
+    ...options.env,
+  });
   const database = options.database ?? up;
   const redis = options.redis ?? up;
 
