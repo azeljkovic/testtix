@@ -1,9 +1,9 @@
 import { PASSWORD_MIN_LENGTH } from '@testtix/shared';
 import { screen, waitFor } from '@testing-library/react';
-import { http, HttpResponse } from 'msw';
+import { http } from 'msw';
 import { describe, expect, it } from 'vitest';
 
-import { csrfHeaderOf, customer, sessionFor } from '../testing/auth.js';
+import { csrfHeaderOf, customer, loggedInResponse } from '../testing/auth.js';
 import { MOCK_CSRF_TOKEN, server } from '../testing/msw-server.js';
 import { problemResponse } from '../testing/problems.js';
 import { renderApp } from '../testing/render.js';
@@ -45,25 +45,28 @@ describe('register page', () => {
       http.post('/api/auth/register', async ({ request }) => {
         body = await request.json();
         csrf = csrfHeaderOf(request);
-        return HttpResponse.json(sessionFor(newUser), { status: 201 });
+        return loggedInResponse(newUser, 201);
       }),
     );
-    const { user, router } = renderApp('/register');
+    const { user, router, queryClient } = renderApp('/register');
 
     await fillIn(user, { name: '  Ada Lovelace ', email: 'Ada@Example.com' });
 
-    await waitFor(() => {
-      expect(router.state.location.pathname).toBe('/account');
-    });
+    expect(
+      await screen.findByRole('heading', { level: 2, name: 'Verify your email address' }),
+    ).toBeVisible();
     expect(body).toEqual({
       name: 'Ada Lovelace',
       email: 'ada@example.com',
       password: 'long enough',
     });
     expect(csrf).toBe(MOCK_CSRF_TOKEN);
-    expect(
-      screen.getByRole('heading', { level: 2, name: 'Verify your email address' }),
-    ).toBeVisible();
+    // The account page re-checks the session when it mounts; the user must still be logged in after.
+    await waitFor(() => {
+      expect(queryClient.isFetching()).toBe(0);
+    });
+    expect(router.state.location.pathname).toBe('/account');
+    expect(screen.getByRole('heading', { level: 1, name: 'Your account' })).toBeVisible();
   });
 
   it('shows a taken email address on the email field', async () => {
@@ -105,11 +108,7 @@ describe('register page', () => {
   });
 
   it('honours a same-origin redirectTo after registering', async () => {
-    server.use(
-      http.post('/api/auth/register', () =>
-        HttpResponse.json(sessionFor(newUser), { status: 201 }),
-      ),
-    );
+    server.use(http.post('/api/auth/register', () => loggedInResponse(newUser, 201)));
     const { user, router } = renderApp('/register?redirectTo=%2Fevents');
 
     await fillIn(user);

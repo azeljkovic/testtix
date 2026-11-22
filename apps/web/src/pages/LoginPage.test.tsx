@@ -2,7 +2,7 @@ import { screen, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { describe, expect, it } from 'vitest';
 
-import { csrfHeaderOf, customer, logInAs, sessionFor } from '../testing/auth.js';
+import { csrfHeaderOf, customer, loggedInResponse, logInAs } from '../testing/auth.js';
 import { MOCK_CSRF_TOKEN, server } from '../testing/msw-server.js';
 import { problemResponse } from '../testing/problems.js';
 import { renderApp } from '../testing/render.js';
@@ -39,7 +39,7 @@ describe('login page', () => {
       http.post('/api/auth/login', async ({ request }) => {
         body = await request.json();
         csrf = csrfHeaderOf(request);
-        return HttpResponse.json(sessionFor(customer));
+        return loggedInResponse(customer);
       }),
     );
     const { user, router } = renderApp('/login?redirectTo=%2Fevents%3Fpage%3D2');
@@ -57,7 +57,7 @@ describe('login page', () => {
   });
 
   it('goes to the home page after login when redirectTo leaves the site', async () => {
-    server.use(http.post('/api/auth/login', () => HttpResponse.json(sessionFor(customer))));
+    server.use(http.post('/api/auth/login', () => loggedInResponse(customer)));
     const { user, router } = renderApp('/login?redirectTo=%2F%2Fevil.example');
 
     await fillIn(user, 'ada@example.com', 'secret');

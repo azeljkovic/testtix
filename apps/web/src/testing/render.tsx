@@ -18,5 +18,5 @@ export function renderApp(path = '/') {
       <RouterProvider router={router} />
     </AppProviders>,
   );
-  return { ...result, router, user };
+  return { ...result, router, user, queryClient };
 }

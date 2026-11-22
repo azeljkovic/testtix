@@ -2,7 +2,7 @@ import { screen, waitFor, within } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { describe, expect, it } from 'vitest';
 
-import { admin, csrfHeaderOf, customer, logInAs } from '../testing/auth.js';
+import { admin, csrfHeaderOf, customer, logInAs, logOut } from '../testing/auth.js';
 import { MOCK_CSRF_TOKEN, server } from '../testing/msw-server.js';
 import { renderApp } from '../testing/render.js';
 
@@ -51,6 +51,7 @@ describe('account menu', () => {
     server.use(
       http.post('/api/auth/logout', ({ request }) => {
         csrf = csrfHeaderOf(request);
+        logOut();
         return new HttpResponse(null, { status: 204 });
       }),
     );
