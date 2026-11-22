@@ -129,6 +129,8 @@ Problem types so far:
 | `urn:testtix:problem:event-has-sales`            | 409    | Unpublishing or deleting an event with tickets sold or held (or, for deleting, with orders)                                                                            |
 | `urn:testtix:problem:inventory-already-released` | 409    | A batch lists a seat, or a whole section, that earlier batches already released (`errors` names each)                                                                  |
 | `urn:testtix:problem:ga-capacity-exceeded`       | 409    | A batch asks for more GA places than the section has left to release                                                                                                   |
+| `urn:testtix:problem:event-not-on-sale`          | 409    | [Holding tickets](#seat-maps-and-holds) before `salesOpenAt` or once the event has started                                                                             |
+| `urn:testtix:problem:tickets-unavailable`        | 409    | A hold asks for a seat that is sold, held or not on sale, or for more GA places than are left. Extra members `unavailableSeatIds` and `gaShortfalls` say which         |
 
 ## Accounts and sessions
 
@@ -244,6 +246,79 @@ Each event has an `availability`, computed at the server clock:
 | `SALES_ENDED`    | The event has started (e.g. `season-opener-showcase`)                                                                    |
 
 Ticket figures count **released tickets only**: a batch with a later `releasesAt` adds nothing until then. List items have `availableTickets` (released, not sold, not held; tickets whose hold expired count) and `priceRange` (`minCents`, `maxCents` over all the event's tickets, scheduled ones included, so it doesn't change as tickets sell). `GET /events/{slug}` adds the description, the venue's address, `maxTicketsPerOrder`, the event's [ticket counts](#ticket-counts) (`tickets`) and `sections`: each section with tickets for the event, in the venue's order, with its own counts, `priceRange` and `nextReleaseAt` (when a scheduled batch releases more tickets there, or `null`). For `midnight-echoes-live` before D+3 15:00, the Balcony shows `total: 0` and `nextReleaseAt` at D+3 15:00.
+
+## Seat maps and holds
+
+Choosing tickets is two steps: read the event's seat map, then **hold** seats and GA places. A hold reserves them for the event's hold duration (default 10 minutes) so nobody else can take them while you check out.
+
+| Endpoint                          | Session | What it does                                                                         |
+| --------------------------------- | ------- | ------------------------------------------------------------------------------------ |
+| `GET /events/{eventId}/seats`     | no      | The seat map of a published event: every seat's status, GA places left by price      |
+| `POST /events/{eventId}/holds`    | yes     | Holds seats and GA places, all or nothing. 201 with the hold                         |
+| `GET /holds/current?eventId={id}` | yes     | Your unexpired hold for the event; without `eventId`, your most recent one. Else 404 |
+| `DELETE /holds/{holdId}`          | yes     | Releases your hold at once. 204; 404 for unknown holds and other customers' holds    |
+
+The routes take the event's **ID**, not its slug (`GET /events/{slug}` returns the ID). Holds need a session and, on `POST` and `DELETE`, the [CSRF header](#csrf-tokens); any logged-in user can hold tickets (checkout will require a verified email).
+
+### Seat map
+
+`GET /events/{eventId}/seats` answers 404 unless the event is published. It has the event's `availability` (holds are only possible while it is `ON_SALE`), `maxTicketsPerOrder`, `holdDurationSec`, and **every section of the venue** in the venue's order:
+
+- **Seated sections** (`type: "SEATED"`) have `rows` (front first, each with its `label` and `index`) of `seats` (by number), each with its `id`, `number`, `priceCents` and `status`, and `available`, the number of `AVAILABLE` seats.
+- **GA sections** (`type: "GA"`) have their `capacity`, `available` (the most a hold can ask for there) and `prices`: available places by price, cheapest first. A hold takes the cheapest places, so the running total of _n_ places is the sum of the first _n_ from `prices`.
+
+| Seat `status` | Meaning                                                                                                              |
+| ------------- | -------------------------------------------------------------------------------------------------------------------- |
+| `AVAILABLE`   | On sale and free. A seat whose hold has expired is `AVAILABLE` again at once, even before the cleanup job removes it |
+| `HELD`        | In someone's unexpired hold                                                                                          |
+| `SOLD`        | Bought                                                                                                               |
+| `NOT_ON_SALE` | No released batch includes it: the event doesn't sell it, or its batch releases later. `priceCents` is null or set   |
+
+Statuses don't depend on who asks: your own held seats show as `HELD` too (use `GET /holds/current` to see which are yours).
+
+### Holding tickets
+
+```sh
+session=$(curl -s -X POST http://localhost:3000/__test/sessions -H 'Content-Type: application/json' -d '{"role":"CUSTOMER"}')
+curl -s -X POST "http://localhost:3000/events/$EVENT_ID/holds" \
+  -H "Cookie: $(echo "$session" | jq -r .cookie)" -H "X-CSRF-Token: $(echo "$session" | jq -r .csrfToken)" \
+  -H 'Content-Type: application/json' \
+  -d '{"seats":["<seat id>"],"ga":[{"sectionId":"<GA section id>","quantity":2}]}'
+```
+
+The body has `seats` (seat IDs from the seat map) and `ga` (`sectionId` and `quantity` per GA section); either may be left out, but not both. The answer is the hold: its `id`, `eventId`, `createdAt`, `expiresAt` (now + the event's hold duration, [server clock](#the-server-clock)), `totalCents` and `items`, one per ticket, in the venue's section order, then row and seat (GA places by price), each with its `inventoryUnitId`, `section`, `seat` (null for GA) and `priceCents`.
+
+Rules, checked in this order:
+
+1. **400 `validation-error`** for an invalid body: no tickets, a seat or section listed twice, a quantity below 1, more than 20 tickets, unknown fields.
+2. **404** unless the event is published.
+3. **409 `event-not-on-sale`** before `salesOpenAt` or once the event has started.
+4. **400 `validation-error`** for more tickets (seats plus GA places) than the event's `maxTicketsPerOrder` (6 by default; `errors[0]` has `path: ""`, `code: "too_big"`), and for seats or sections that aren't at the event's venue (`seats.<i>` / `ga.<i>.sectionId`, `code: "not_found"`; a seated section in `ga` counts as not found).
+5. **409 `tickets-unavailable`** when any requested seat is sold, in an unexpired hold or not on sale, or a GA section has fewer claimable places than asked for. **Nothing is held**: a mixed request whose GA part fails doesn't hold its seats either. The body says what failed:
+
+```json
+{
+  "type": "urn:testtix:problem:tickets-unavailable",
+  "title": "Tickets unavailable",
+  "status": 409,
+  "detail": "A seat is no longer available. A general-admission section has only 2 places left. Nothing was held.",
+  "unavailableSeatIds": ["019ac6b2-…"],
+  "gaShortfalls": [{ "sectionId": "019ac6b2-…", "requested": 3, "available": 2 }],
+  "…": "instance, requestId, errors as usual"
+}
+```
+
+**One hold per customer and event.** A successful hold replaces your previous hold for the event (its tickets are released in the same step, so you can keep some seats and swap others). A failed request leaves the previous hold as it was. Holds for different events are independent.
+
+**Concurrency.** Holds are atomic: when many customers ask for the same seat at the same moment, exactly one gets 201 and the others 409; when 20 customers each ask for one of the last 3 GA places, exactly 3 succeed. No seat or place is ever in two unexpired holds.
+
+**Expiry** is lazy: once `expiresAt` passes, the hold's tickets count as available everywhere (seat map, catalogue figures, new holds), and `GET /holds/current` no longer returns it. Nothing needs to run first. Test it without waiting by moving the clock:
+
+```sh
+curl -s -X POST http://localhost:3000/__test/clock -H 'Content-Type: application/json' -d '{"advanceBy":600000}'
+```
+
+`DELETE /holds/{holdId}` works on an expired hold too (204); it never takes back tickets someone else has held since.
 
 ## Admin API
 
@@ -585,19 +660,22 @@ Scenario data stays until the next reset. It is real data: scenario events are p
 
 Dates are relative to the clock's UTC day (`D`), like the baseline: every scenario event has been on sale since D−1 15:00 and starts at D+7 to D+14, at 23:00 UTC. Rows get `createdAt` = the server clock. Unknown scenario names answer 404.
 
-| Scenario          | Creates                                                                                                                                                                                                    |
-| ----------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `basic-catalogue` | A venue with Seats (rows A–C × 6) and Standing (GA, capacity 20), and three published events on sale: a concert using both ($40.00 seats, $25.00 standing), a seated talk ($15.00) and a GA meetup ($5.00) |
-| `sold-out-event`  | A published concert on sale whose 12 tickets (Seats rows A–B × 4 at $50.00, Standing GA capacity 4 at $30.00) are all sold, through confirmed orders of a new buyer (at most 6 tickets per order)          |
-| `one-seat-left`   | A published concert on sale with 8 seats (rows A–B × 4, $45.00); all are sold through confirmed orders except row B seat 4                                                                                 |
+| Scenario               | Creates                                                                                                                                                                                                       |
+| ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `basic-catalogue`      | A venue with Seats (rows A–C × 6) and Standing (GA, capacity 20), and three published events on sale: a concert using both ($40.00 seats, $25.00 standing), a seated talk ($15.00) and a GA meetup ($5.00)    |
+| `sold-out-event`       | A published concert on sale whose 12 tickets (Seats rows A–B × 4 at $50.00, Standing GA capacity 4 at $30.00) are all sold, through confirmed orders of a new buyer (at most 6 tickets per order)             |
+| `one-seat-left`        | A published concert on sale with 8 seats (rows A–B × 4, $45.00); all are sold through confirmed orders except row B seat 4                                                                                    |
+| `hold-about-to-expire` | A published concert on sale with 8 seats (rows A–B × 4, $45.00); a new customer (the _holder_) holds row A seats 1–2 until `expiresInSec` from now (body, 1–600, default 60). The response logs the holder in |
+| `ga-meetup`            | A published GA-only meetup on sale with Floor (40 places: 20 at $10.00, then 20 at $15.00) and Balcony (10 places at $20.00)                                                                                  |
+| `ga-last-ticket`       | A published GA meetup on sale whose Floor (10 places, $8.00) has one place left; the other nine are sold through confirmed orders                                                                             |
 
-Buyers are customers with a verified email `buyer-<suffix>@scenario.testtix.test` and no usable password: nobody can log in as them. Their orders are `CONFIRMED` and every sold ticket has a ticket code.
+Buyers are customers with a verified email `buyer-<suffix>@scenario.testtix.test` and no usable password: nobody can log in as them. The holder of `hold-about-to-expire` (`holder-<suffix>@scenario.testtix.test`) has no password either, but the response includes a session for them (`holder`, the same shape as [`POST /__test/sessions`](#logging-in-through-the-test-api)), so a test can act as the holder at once, e.g. watch the countdown and the expiry. Their orders are `CONFIRMED` and every sold ticket has a ticket code.
 
 ```sh
 curl -s -X POST http://localhost:3000/__test/seed/one-seat-left
 ```
 
-Every response has a `venue` (ID, slug, name and sections with their IDs) and the events, each with its ID, slug, title, category, status, `startsAt`, `salesOpenAt` and a ticket count by status:
+Every response has a `venue` (ID, slug, name and sections with their IDs) and the events, each with its ID, slug, title, category, status, `startsAt`, `salesOpenAt`, `holdDurationSec`, `maxTicketsPerOrder` and a ticket count by status:
 
 ```json
 {
@@ -616,7 +694,9 @@ Every response has a `venue` (ID, slug, name and sections with their IDs) and th
     "venueId": "019ac6b2-…",
     "startsAt": "2026-12-05T23:00:00.000Z",
     "salesOpenAt": "2026-11-20T15:00:00.000Z",
-    "tickets": { "total": 8, "available": 1, "sold": 7 }
+    "holdDurationSec": 600,
+    "maxTicketsPerOrder": 6,
+    "tickets": { "total": 8, "available": 1, "held": 0, "sold": 7 }
   },
   "buyer": { "id": "019ac6b2-…", "email": "buyer-3f9a1c2b@scenario.testtix.test" },
   "orderIds": ["019ac6b2-…", "019ac6b2-…"],
@@ -627,17 +707,21 @@ Every response has a `venue` (ID, slug, name and sections with their IDs) and th
     "number": 4,
     "inventoryUnitId": "019ac6b2-…",
     "priceCents": 4500
-  }
+  },
+  "soldSeats": [{ "id": "019ac6b2-…", "row": "A", "number": 1, "…": "…" }]
 }
 ```
 
-| Scenario          | Response fields                                                                           |
-| ----------------- | ----------------------------------------------------------------------------------------- |
-| `basic-catalogue` | `venue`, `events.concert`, `events.talk`, `events.meetup`                                 |
-| `sold-out-event`  | `venue`, `event`, `buyer`, `orderIds`                                                     |
-| `one-seat-left`   | `venue`, `event`, `buyer`, `orderIds`, `seat` (the available seat and its inventory unit) |
+| Scenario               | Response fields                                                                                                                   |
+| ---------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| `basic-catalogue`      | `venue`, `events.concert`, `events.talk`, `events.meetup`                                                                         |
+| `sold-out-event`       | `venue`, `event`, `buyer`, `orderIds`                                                                                             |
+| `one-seat-left`        | `venue`, `event`, `buyer`, `orderIds`, `seat` (the available seat and its inventory unit), `soldSeats` (the seven others)         |
+| `hold-about-to-expire` | `venue`, `event`, `holder` (user, session, `csrfToken`, `cookie`), `hold` (`id`, `createdAt`, `expiresAt`, `totalCents`, `seats`) |
+| `ga-meetup`            | `venue`, `event`, `sections.floor`, `sections.balcony` (each with `capacity`, `available` and `prices`)                           |
+| `ga-last-ticket`       | `venue`, `event`, `buyer`, `orderIds`, `section` (the Floor, `available: 1`)                                                      |
 
-The OpenAPI spec documents each response in full. Later milestones add scenarios (holds about to expire, GA last tickets, confirmed orders, ticket drops).
+The OpenAPI spec documents each response in full. Later milestones add scenarios (confirmed orders, ticket drops).
 
 ## Logging in through the test API
 
