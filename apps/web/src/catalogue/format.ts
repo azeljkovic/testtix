@@ -26,6 +26,14 @@ export const AVAILABILITY_LABELS: Record<EventAvailability, string> = {
   SALES_ENDED: 'Sales ended',
 };
 
+/** Why tickets can't be chosen, for each availability but `ON_SALE`. */
+export const NOT_ON_SALE_NOTES: Record<Exclude<EventAvailability, 'ON_SALE'>, string> = {
+  SOLD_OUT:
+    'Every released ticket is sold or held. Held tickets go back on sale if their hold expires.',
+  SALES_NOT_OPEN: 'Tickets aren’t on sale yet.',
+  SALES_ENDED: 'This event has started, so tickets are no longer sold.',
+};
+
 export const SECTION_TYPE_LABELS: Record<SectionType, string> = {
   SEATED: 'Seated',
   GA: 'General admission',

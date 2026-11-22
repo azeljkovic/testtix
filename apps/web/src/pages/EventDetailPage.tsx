@@ -11,6 +11,7 @@ import {
   formatEventDateTime,
   formatEventTimeRange,
   formatPriceRange,
+  NOT_ON_SALE_NOTES,
   SEATING_LABELS,
   SECTION_TYPE_LABELS,
   ticketCount,
@@ -167,22 +168,19 @@ function TicketsCallToAction({ event }: { event: CatalogueEvent }) {
       case 'SOLD_OUT':
         return (
           <>
-            <p>
-              Every released ticket is sold or held. Held tickets go back on sale if their hold
-              expires.
-            </p>
+            <p>{NOT_ON_SALE_NOTES.SOLD_OUT}</p>
             {releaseNote}
           </>
         );
       case 'SALES_NOT_OPEN':
         return (
           <>
-            <p>Tickets aren’t on sale yet.</p>
+            <p>{NOT_ON_SALE_NOTES.SALES_NOT_OPEN}</p>
             {releaseNote}
           </>
         );
       case 'SALES_ENDED':
-        return <p>This event has started, so tickets are no longer sold.</p>;
+        return <p>{NOT_ON_SALE_NOTES.SALES_ENDED}</p>;
     }
   })();
 

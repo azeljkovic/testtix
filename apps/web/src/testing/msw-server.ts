@@ -10,6 +10,7 @@ import {
   eventPage,
 } from './catalogue-fixtures.js';
 import { problemResponse } from './problems.js';
+import { seatMaps } from './seat-fixtures.js';
 
 /** Response bodies from the OpenAPI spec, so a mock that drifts from the API fails the typecheck. */
 export type Schemas = components['schemas'];
@@ -32,6 +33,11 @@ export const handlers = [
   http.get('/api/events/:slug', ({ params }) => {
     const event = catalogueEventDetails.find(({ slug }) => slug === params.slug);
     return event ? HttpResponse.json(event) : problemResponse({ status: 404 });
+  }),
+  // The seat map fixtures; `mockSeatMap()` from `./seats.js` answers others.
+  http.get('/api/events/:eventId/seats', ({ params }) => {
+    const seatMap = seatMaps.find(({ eventId }) => eventId === params.eventId);
+    return seatMap ? HttpResponse.json(seatMap) : problemResponse({ status: 404 });
   }),
   http.get('/api/venues', () =>
     HttpResponse.json({
