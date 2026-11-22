@@ -121,7 +121,40 @@ export const meetupDetail: EventDetail = {
   ],
 };
 
-export const catalogueEventDetails = [concertDetail, meetupDetail];
+/** Seated and standing event on sale: a Mezzanine and a Standing Floor. */
+export const mixedDetail: EventDetail = {
+  ...concertDetail,
+  id: '01970000-0000-7000-8000-0000000000e4',
+  slug: 'harbour-lights',
+  title: 'Harbour Lights',
+  performer: 'The Harbour Lights',
+  venue: { ...loft23, address: '23 Mill Street' },
+  seating: 'MIXED',
+  maxTicketsPerOrder: 6,
+  priceRange: { minCents: 2500, maxCents: 4500 },
+  availableTickets: 46,
+  tickets: { total: 48, available: 46, held: 0, sold: 2 },
+  sections: [
+    {
+      id: '01970000-0000-7000-8000-0000000000b5',
+      name: 'Mezzanine',
+      type: 'SEATED',
+      tickets: { total: 8, available: 6, held: 0, sold: 2 },
+      priceRange: { minCents: 4500, maxCents: 4500 },
+      nextReleaseAt: null,
+    },
+    {
+      id: '01970000-0000-7000-8000-0000000000b6',
+      name: 'Standing Floor',
+      type: 'GA',
+      tickets: { total: 40, available: 40, held: 0, sold: 0 },
+      priceRange: { minCents: 2500, maxCents: 2500 },
+      nextReleaseAt: null,
+    },
+  ],
+};
+
+export const catalogueEventDetails = [concertDetail, meetupDetail, mixedDetail];
 
 /** A `GET /events` response with `items` as one page of `total` events. */
 export function eventPage(

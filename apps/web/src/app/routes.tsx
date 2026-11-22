@@ -28,7 +28,6 @@ export const routes: RouteObject[] = [
       { index: true, element: <HomePage /> },
       { path: 'events', element: <EventsPage /> },
       { path: 'events/:slug', element: <EventDetailPage /> },
-      // Placeholder until the seat map (C3.3).
       { path: 'events/:slug/seats', element: <ChooseSeatsPage /> },
       { path: 'login', element: <LoginPage /> },
       { path: 'register', element: <RegisterPage /> },
