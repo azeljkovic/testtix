@@ -83,7 +83,7 @@ Notes:
 - **Dates:** event times are shown in the venue's time zone (`Intl.DateTimeFormat` with `timeZone`), as printed on a ticket. The "From" / "To" filter days are local to the browser, with "To" included (the API's `to` is exclusive, so it gets the next midnight).
 - **No `keepPreviousData`:** a new query shows the loading state (placeholder cards and "Loading events…") until its results arrive, so every list change has an observable loading → loaded transition; revisiting a list is instant from the cache.
 - The app's query client doesn't retry 4xx responses (a 404 event, an invalid query); network errors and 5xx still get three retries.
-- "Choose seats" links to `/events/:slug/seats`, a placeholder page until the seat map (C3.3).
+- "Choose seats" links to `/events/:slug/seats`, the seat map (C3.3).
 
 **Admin area (C2.4)**
 
@@ -96,6 +96,16 @@ Notes:
 - **Caching:** a change writes the returned event into its query and marks the admin lists and the public catalogue stale (`eventChanged()` / `venueChanged()` in `src/admin/queries.ts`), so a published event shows up in `/events` straight away.
 - `packages/shared` gains `BATCH_EMPTY_MESSAGE`, and a missing event time now says "Enter the start time" (API too) instead of the ISO 8601 format message.
 - Bundle after C2.4: about 760 kB (232 kB gzipped). The admin pages are a good first candidate for route-level code splitting.
+
+**Seat map (C3.3)**
+
+- `/events/:slug/seats` loads the event by slug (for its ID, title and sections), then `GET /events/{eventId}/seats` (`seatQueries` in `src/seats/queries.ts`, `staleTime: 0` so it refetches on mount and window focus). It shows only the venue sections the event sells (the catalogue event's `sections`, which include scheduled releases), so a GA-only event at a mixed venue doesn't show a grid of unsellable seats.
+- **Hand-built, no React Aria**, as decided: each seated section is a `role="grid"` labelled by its heading (`SeatGrid`), with a `rowheader` per row and a `gridcell` per seat. One tab stop per grid (roving tabindex, starting on the first available seat); arrows, Home / End and Ctrl+Home / Ctrl+End move (`nextPosition()` in `src/seats/grid-navigation.ts`), without wrapping; Enter or Space toggles. Keyboard and click handling is delegated to the grid and finds the seat by its `data-row` / `data-col`. Unavailable seats stay focusable with `aria-disabled="true"`; while the event isn't on sale the grid is `aria-readonly` and nothing has `aria-selected`.
+- **Seat names** are "Stalls, row B, seat 12, $89.00, available"; the last part is the state (`selected` replaces `available`), so the state is in the name as well as in `aria-selected`, which screen readers announce inconsistently for grid cells. States differ by icon or shape as well as colour (number in an outline, tick, clock, cross, dashed outline), with a "Seat key" legend.
+- **GA stepper is a hand-built spin button**, not React Aria's `NumberField`: in RAC 1.22 that renders a plain textbox (`aria-roledescription="Number field"`, no `spinbutton` role or `aria-valuemin` / `aria-valuemax`), so the limits wouldn't be announced. `GaStepper` is an `<input role="spinbutton">` with `aria-valuenow/min/max` (Arrow Up / Down, Page Up / Down by 5, Home / End; typed values are clamped on blur or Enter) between − / + buttons that use `aria-disabled` at the limits so they keep focus. Its maximum is the places left, capped by what the order limit leaves.
+- **Selection** is page state (`Selection` in `src/seats/selection.ts`, shaped like a hold request), not the URL. `summarize()` checks it against the current map (venue, row, seat order; GA priced cheapest first like the API); when a refetched map takes seats away, `pruneSelection()` drops them (the "adjust state on prop change" pattern, no effect). The order's `maxTicketsPerOrder` covers seats and GA together; trying to go past it announces `HOLD_MESSAGES.tooMany()`.
+- **Live region:** one `role="status"` (visually hidden) announces seat changes, − / + presses and removals with the new count and total, e.g. "Added Stalls, row A, seat 3. 1 ticket, $89.00 in total." A repeated message gets a no-break space appended so it is read again. Changes made in the spin button itself aren't announced twice. Removing a line in "Your selection" moves the focus to its heading.
+- Bundle after C3.3: about 777 kB (237 kB gzipped).
 
 ---
 

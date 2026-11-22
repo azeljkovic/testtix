@@ -242,7 +242,7 @@ Claude's workspace has no Docker daemon, so Testcontainers can't run there. Beca
 **C3.3 Web: accessible seat map**
 
 - Hand-built seat map. Rows and sections are labelled. Grid semantics with roving tabindex and arrow-key navigation; Enter or Space toggles a seat.
-- Each seat has an accessible name, e.g. "Section A, row B, seat 12, €45, available".
+- Each seat has an accessible name, e.g. "Section A, row B, seat 12, $45.00, available".
 - Seat states are shown by shape or icon **and** colour, never colour alone. There's a legend and a live region that announces selection changes.
 - GA sections get an accessible quantity stepper (labelled, min/max announced, shows remaining count) instead of a seat grid. Mixed events show both.
 - A selection summary shows seats, GA quantities and a running total in USD.
