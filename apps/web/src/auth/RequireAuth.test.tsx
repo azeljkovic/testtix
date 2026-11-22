@@ -45,9 +45,10 @@ describe('route guards', () => {
 
   it('lets an admin into the admin area', async () => {
     logInAs(admin);
-    renderApp('/admin');
+    const { router } = renderApp('/admin');
 
-    expect(await screen.findByRole('heading', { level: 1, name: 'Admin' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { level: 1, name: 'Events' })).toBeInTheDocument();
+    expect(router.state.location.pathname).toBe('/admin/events');
   });
 
   it('shows the loading state, then offers a retry when the session check fails', async () => {

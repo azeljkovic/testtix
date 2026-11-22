@@ -43,8 +43,8 @@ describe('account menu', () => {
     await user.click(await screen.findByRole('button', { name: 'Grace Hopper, account menu' }));
     await user.click(screen.getByRole('menuitem', { name: 'Admin' }));
 
-    expect(router.state.location.pathname).toBe('/admin');
-    expect(await screen.findByRole('heading', { level: 1, name: 'Admin' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { level: 1, name: 'Events' })).toBeInTheDocument();
+    expect(router.state.location.pathname).toBe('/admin/events');
   });
 
   it('logs out from a guarded page to the home page, never via the login page', async () => {

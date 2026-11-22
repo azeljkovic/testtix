@@ -2,6 +2,7 @@ import { http, HttpResponse } from 'msw';
 import { setupServer } from 'msw/node';
 
 import type { components } from '../api/generated/openapi.js';
+import { adminHandlers } from './admin-handlers.js';
 import {
   catalogueEventDetails,
   catalogueEvents,
@@ -41,6 +42,8 @@ export const handlers = [
       totalPages: 1,
     } satisfies Schemas['CatalogueVenuePage_Output']),
   ),
+  // The admin fixtures; `mockAdminRequest()` from `./admin.js` answers and records other calls.
+  ...adminHandlers,
 ];
 
 export const server = setupServer(...handlers);
