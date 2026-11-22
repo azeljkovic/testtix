@@ -33,7 +33,8 @@ When a decision changes, update the docs in the same PR so they stay accurate.
 - ✅ C3.2 BullMQ setup + hold sweeper
 - ✅ C3.3 Web: accessible seat map
 - ✅ C3.4 Web: hold flow + countdown
-- ⏭️ Next: **C4.1 Fake payments service** (see plan)
+- ✅ C4.1 Fake payments service
+- ⏭️ Next: **C4.2 Orders API** (see plan)
 
 Update this list when a chunk is merged.
 
@@ -104,6 +105,7 @@ Run one package: `pnpm --filter @testtix/api <script>`.
 - Prefer accessible names over `data-testid` in the UI; use `data-testid` only where no good accessible locator exists.
 - Every list endpoint sorts with a stable tiebreaker (`id`).
 - Email: send through `MailService.send({ to, template, data })` (`src/mail/`); add the template's variables to `MailTemplateData` and its `<name>.html.hbs` / `<name>.text.hbs` to `apps/api/templates/mail/` (Prettier ignores `*.hbs`). Integration tests read mail with `waitForEmail(to, subject)` (`src/testing/integration/mailpit.ts`); Mailpit is never emptied, so use a unique recipient. `createTestApp()` swaps SMTP for a JSON transport.
+- Fake payments (`apps/fake-payments`, NestJS on Fastify, port 4000): in-memory sessions, test cards in `src/cards/test-cards.ts` (keep `docs/testing-guide.md#payments` in sync), webhooks via `WebhookDispatcher`. The contract (request/session/event schemas, signature headers) is in `packages/shared/src/payments.ts`; the API must use it rather than its own copies. The payment page is built with the `markup` tagged template (`src/page/html.ts`), which escapes every value; don't rename it `html` (Prettier would reformat the templates). App tests use `createTestApp()` + `app.inject()` (`src/testing/test-app.ts`, `FakeClock` to move time); `*.int.test.ts` deliver real webhooks to `WebhookReceiver` (`src/testing/webhook-receiver.ts`). Compose builds its image from `apps/fake-payments/Dockerfile`; `pnpm infra:up --build` after code changes.
 - Local infra is `docker/compose.yml`, driven by `pnpm infra:*` from the repo root (`--project-directory .`, so the root `.env` overrides the compose defaults). Pin image tags to an exact version. New services get a health check, and `docker/smoke-test.sh` checks them.
 
 ## Repo

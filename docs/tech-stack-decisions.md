@@ -273,6 +273,10 @@ Order lifecycle: `PENDING_PAYMENT → PROCESSING → CONFIRMED | FAILED | EXPIRE
 - Behaviour is driven by test card numbers (like Stripe's test cards): success, decline, insufficient funds, timeout/no webhook, delayed webhook, duplicate webhook.
 - Webhooks are signed (HMAC), so the API verifies signatures and handles them idempotently.
 - Real providers are out of scope. This keeps payment behaviour deterministic, with no external dependency.
+- Implemented in C4.1 (NestJS on Fastify, like the API). Sessions and pending webhook deliveries are **in memory**: the provider is a test double, so a restart forgetting them is acceptable. The page is server-rendered HTML with no JavaScript.
+- `POST /sessions` and `GET /sessions/:id` need `Authorization: Bearer <PAYMENTS_API_KEY>`, like a real provider's secret key; without it anyone could make the service POST to any URL. Webhook signature: `X-Payments-Signature: v1=<hex HMAC-SHA256 of "<timestamp>.<body>">` with `X-Payments-Timestamp` (Unix seconds), re-signed on every attempt; retries back off exponentially without jitter, so they are predictable. The contract (schemas, header names) is in `packages/shared/src/payments.ts`.
+- The receiver (API, C4.3) should check the replay window against the **real** time, not the controllable test clock: the provider's timestamps are real, so moving the API clock would otherwise reject every webhook.
+- Its Dockerfile was written in C4.1 (compose runs it locally); C6.1 adds the api and web images.
 
 ### 3.7 Email
 

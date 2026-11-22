@@ -30,7 +30,7 @@ nvm use            # or install Node 24 another way
 corepack enable    # provides the pnpm version pinned in package.json
 pnpm install
 pnpm build
-pnpm infra:up      # Postgres, Redis and Mailpit in Docker
+pnpm infra:up      # Postgres, Redis, Mailpit and the fake payment provider in Docker
 pnpm db:deploy     # apply database migrations to the local Postgres
 pnpm db:seed       # load the deterministic sample data (venues, events, tickets)
 ```
@@ -117,15 +117,18 @@ Each run applies the migrations, and each test file starts with empty tables and
 
 ## Local infrastructure
 
-`docker/compose.yml` runs the services the app depends on. `pnpm infra:up` starts them and waits until every health check passes; `pnpm infra:check` then checks each one from the host (a query, a `PING`, an email delivered to Mailpit).
+`docker/compose.yml` runs the services the app depends on. `pnpm infra:up` starts them and waits until every health check passes; `pnpm infra:check` then checks each one from the host (a query, a `PING`, an email delivered to Mailpit, a payment session).
 
-| Service    | Address                                    | Notes                                                         |
-| ---------- | ------------------------------------------ | ------------------------------------------------------------- |
-| PostgreSQL | `localhost:5432`                           | user, password and database: `testtix`                        |
-| Redis      | `localhost:6379`                           | no password, append-only persistence                          |
-| Mailpit    | SMTP `localhost:1025`, UI `localhost:8025` | catches every email the app sends; any SMTP login is accepted |
+| Service       | Address                                    | Notes                                                                                     |
+| ------------- | ------------------------------------------ | ----------------------------------------------------------------------------------------- |
+| PostgreSQL    | `localhost:5432`                           | user, password and database: `testtix`                                                    |
+| Redis         | `localhost:6379`                           | no password, append-only persistence                                                      |
+| Mailpit       | SMTP `localhost:1025`, UI `localhost:8025` | catches every email the app sends; any SMTP login is accepted                             |
+| Fake payments | `localhost:4000`                           | hosted payment page and signed webhooks ([testing guide](docs/testing-guide.md#payments)) |
 
 Open the Mailpit inbox at <http://localhost:8025>. Ports bind to `127.0.0.1` only. If one is already taken (for example by a native Postgres), copy `.env.example` to `.env` and change it there.
+
+The fake payment provider (`apps/fake-payments`) is built from its own Dockerfile the first time. After changing its code, rebuild it with `pnpm infra:up --build`, or run it on the host instead with `pnpm --filter @testtix/fake-payments start` (after `pnpm build`; stop the container first, since both use port 4000). It reaches an API running on the host at `host.docker.internal`.
 
 Data lives in named Docker volumes, so it survives `pnpm infra:down`. Use `pnpm infra:reset` to delete it and start clean.
 

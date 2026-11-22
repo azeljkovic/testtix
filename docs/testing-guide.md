@@ -345,6 +345,97 @@ curl -s -X POST http://localhost:3000/__test/clock -H 'Content-Type: application
 
 **Cleanup.** A background job, the hold sweeper, deletes expired holds and frees the tickets they still have, every `HOLD_SWEEPER_INTERVAL_MS` (default 60 seconds) by the server clock: after `advanceBy`, the next sweep picks them up. It is cleanup only, so no response above changes because of it, with one exception: once a hold has been swept, `DELETE /holds/{holdId}` answers 404 instead of 204. `HOLD_SWEEPER_ENABLED=false` turns it off (expired holds then stay in the database, with their tickets still available). The job runs inside the API by default; see [background jobs](../README.md#background-jobs) to run it as a separate worker.
 
+## Payments
+
+Checkout pays through a **fake hosted payment provider** (`apps/fake-payments`, `http://localhost:4000`, started by `pnpm infra:up`). It behaves like a real one: the shop creates a payment session, sends the customer to the provider's payment page, and later learns the result from a signed **webhook**. What happens is decided by the [test card](#test-cards) the customer types. From C4.2 on, the API creates the sessions; until then (and for testing the provider itself) you can call it directly.
+
+| Endpoint             | Auth    | What it does                                                                     |
+| -------------------- | ------- | -------------------------------------------------------------------------------- |
+| `POST /sessions`     | API key | Creates a payment session. 201 with the session, whose `url` is the payment page |
+| `GET /sessions/{id}` | API key | The session: its `status`, `failureCode` and every webhook delivery attempt      |
+| `GET /pay/{id}`      | none    | The payment page (HTML)                                                          |
+| `POST /pay/{id}`     | none    | The page's form submission                                                       |
+| `GET /health`        | none    | `{"status":"ok"}`                                                                |
+
+The API key is `Authorization: Bearer <PAYMENTS_API_KEY>` (default `sk_test_testtix_local_only`); without it the answer is 401 with `WWW-Authenticate: Bearer`. JSON errors use the [same problem details format](#error-format) as the API.
+
+```sh
+curl -s http://localhost:4000/sessions \
+  -H 'Authorization: Bearer sk_test_testtix_local_only' -H 'Content-Type: application/json' \
+  -d '{"amountCents":9000,"currency":"USD","description":"2 tickets for Jazz Night",
+       "returnUrl":"http://localhost:5173/orders/123","webhookUrl":"http://host.docker.internal:3000/webhooks/payments",
+       "metadata":{"orderId":"123"}}'
+```
+
+The body: `amountCents` (1 to 100,000,000), `currency` (`USD` only), `description` (shown on the page), `returnUrl` and `webhookUrl` (http or https), and optional `metadata` (up to 20 string values, returned in the session and every webhook). The session adds `id` (`ps_…`), `status`, `url`, `failureCode`, `createdAt`, `expiresAt` (30 minutes later, `SESSION_TTL_MINUTES`), `completedAt` and `webhookDeliveries`.
+
+| Session `status` | Meaning                                                                         |
+| ---------------- | ------------------------------------------------------------------------------- |
+| `OPEN`           | Waiting on the payment page                                                     |
+| `SUCCEEDED`      | Paid                                                                            |
+| `FAILED`         | The card was declined; `failureCode` is `CARD_DECLINED` or `INSUFFICIENT_FUNDS` |
+| `EXPIRED`        | Nobody paid before `expiresAt`. No webhook is sent                              |
+
+Sessions live **in memory**: restarting the container forgets them, along with webhooks waiting to be retried. A session is forgotten a day after it expires.
+
+### Payment page
+
+`GET /pay/{id}` shows the amount, the description and a card form (card number, expiry `MM/YY`, security code, name on card), plus a "Cancel and return to the shop" link and a **Test cards** disclosure that lists the cards below. It needs no JavaScript.
+
+- A submission with problems answers **400** and shows the form again: an error summary (`role="alert"`, focused on load, each problem a link to its field) and the message next to each field (`aria-invalid="true"`). Everything typed is kept except the security code. The title starts with `Error:`. Messages: `Enter the card number`, `Enter a card number of 12 to 19 digits`, `Enter a valid card number` (fails the Luhn check), `This is not a test card. Use one of the test cards listed on this page`, `Enter the expiry date`, `Enter the expiry date as MM/YY, for example 08/29`, `The card has expired` (before the current month, UTC), `Enter the security code`, `Enter the 3 or 4 digit security code`, `Enter the name on the card`.
+- A valid test card completes the payment **once** and answers **303** to `returnUrl` with `session_id=<id>` added to its query, for success and failure alike: the shop learns the result from the webhook, not from the redirect.
+- After that, the page shows "Payment complete" or "Payment failed" (200), and submitting again answers **409** with the same page. An expired session shows "This payment link has expired" with **410**, also on submit. An unknown session is a **404** "Payment not found" page.
+
+### Test cards
+
+Any expiry date in the future, any 3- or 4-digit security code and any name work.
+
+| Card number           | Result                                                                 |
+| --------------------- | ---------------------------------------------------------------------- |
+| `4242 4242 4242 4242` | Succeeds; webhook sent right away                                      |
+| `4000 0000 0000 0002` | Fails with `CARD_DECLINED`                                             |
+| `4000 0000 0000 9995` | Fails with `INSUFFICIENT_FUNDS`                                        |
+| `4000 0000 0000 0077` | Succeeds, but **no webhook** is ever sent                              |
+| `4000 0000 0000 0457` | Succeeds; webhook sent after `DELAYED_WEBHOOK_MS` (default 10 seconds) |
+| `4000 0000 0000 0887` | Succeeds; the same event (same `id`) is **delivered twice** at once    |
+
+Other card numbers are rejected as "not a test card", so a typo never charges anything by accident.
+
+### Webhooks
+
+Each payment result is one event, POSTed as JSON to the session's `webhookUrl`:
+
+```json
+{
+  "id": "evt_…",
+  "type": "payment.succeeded",
+  "createdAt": "2026-11-22T20:39:02.123Z",
+  "data": {
+    "sessionId": "ps_…",
+    "status": "SUCCEEDED",
+    "amountCents": 9000,
+    "currency": "USD",
+    "failureCode": null,
+    "metadata": { "orderId": "123" }
+  }
+}
+```
+
+`type` is `payment.succeeded` or `payment.failed` (with `status: "FAILED"` and a `failureCode`). Every delivery of an event has the same body and `id`, so receivers deduplicate on `id`.
+
+**Signature.** Each request has `X-Payments-Timestamp` (Unix seconds) and `X-Payments-Signature: v1=<hex>`, the HMAC-SHA256 of `<timestamp>.<raw body>` keyed with `PAYMENTS_WEBHOOK_SECRET` (default `whsec_testtix_local_only`). Verify against the raw bytes, before parsing the JSON. To check a signature by hand, or to forge a webhook in a test:
+
+```sh
+printf '%s' '1795000000.{"id":"evt_1"}' | openssl dgst -sha256 -hmac 'whsec_testtix_local_only'
+# → 4e45a225d44ef0629890f9f07196d76d0d3199c5e0f4ee719ee5cf966c250460, sent as v1=4e45a2…
+```
+
+`X-Payments-Attempt` (1, 2, …) says which attempt this is; it is not signed.
+
+**Retries.** Any 2xx answer counts as delivered. Any other status, a redirect (not followed), a connection error or no answer within `WEBHOOK_TIMEOUT_MS` (5 s) is retried: after `WEBHOOK_RETRY_BASE_MS` (1 s), then 2 s, 4 s, 8 s and so on (capped at 5 minutes, no jitter), up to `WEBHOOK_MAX_ATTEMPTS` deliveries in all (6). Each attempt is signed again with a fresh timestamp. `GET /sessions/{id}` lists every attempt in `webhookDeliveries`: `eventId`, `attempt`, `sentAt`, `statusCode` (null without an answer) and `error` (e.g. `ECONNREFUSED`, `No response within 5000 ms`).
+
+The container reaches an API on your machine at `host.docker.internal` (e.g. `http://host.docker.internal:3000/webhooks/payments`). The timing variables are set through the root `.env` with a `FAKE_PAYMENTS_` prefix (`FAKE_PAYMENTS_DELAYED_WEBHOOK_MS=2000`, see `.env.example`), then `pnpm infra:up` recreates the container.
+
 ## Admin API
 
 Admins manage venues, events and ticket batches under `/admin/*`. This is also the **API-based data setup** path: a test creates exactly the venue, event and inventory it needs, with its own IDs, instead of sharing the [seed data](#seed-data). Every route needs a session with the `ADMIN` role (anonymous → 401, customer → 403) and, on writes, the [CSRF header](#csrf-tokens). The quickest admin session is [`POST /__test/sessions`](#logging-in-through-the-test-api) with `{"role":"ADMIN"}`; outside test mode, log in as an admin.
