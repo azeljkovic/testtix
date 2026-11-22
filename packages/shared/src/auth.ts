@@ -43,5 +43,17 @@ export const LoginRequestSchema = z.strictObject({
   password: z.string().min(1).max(PASSWORD_MAX_LENGTH),
 });
 
+/** Longest token `POST /auth/verify-email` accepts. Real tokens are 43 characters. */
+export const VERIFICATION_TOKEN_MAX_LENGTH = 256;
+
+export const VerifyEmailRequestSchema = z.strictObject({
+  token: z
+    .string()
+    .min(1)
+    .max(VERIFICATION_TOKEN_MAX_LENGTH)
+    .describe('The `token` query parameter of the link in the verification email'),
+});
+
 export type RegisterRequest = z.infer<typeof RegisterRequestSchema>;
 export type LoginRequest = z.infer<typeof LoginRequestSchema>;
+export type VerifyEmailRequest = z.infer<typeof VerifyEmailRequestSchema>;

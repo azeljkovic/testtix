@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest';
 
-import { checkTestDatabaseUrl, checkTestRedisUrl } from './targets.js';
+import {
+  checkTestDatabaseUrl,
+  checkTestMailpitUrl,
+  checkTestRedisUrl,
+  checkTestSmtpUrl,
+} from './targets.js';
 
 describe('checkTestDatabaseUrl', () => {
   it.each([
@@ -34,5 +39,25 @@ describe('checkTestRedisUrl', () => {
     ['another protocol', 'http://localhost:6379/1', /redis:\/\/ or rediss:\/\//],
   ])('rejects %s', (_label, url, message) => {
     expect(() => checkTestRedisUrl(url)).toThrow(message);
+  });
+});
+
+describe('checkTestSmtpUrl', () => {
+  it('accepts an smtp:// URL', () => {
+    expect(checkTestSmtpUrl('smtp://localhost:1025')).toBe('smtp://localhost:1025');
+  });
+
+  it('rejects another protocol', () => {
+    expect(() => checkTestSmtpUrl('http://localhost:1025')).toThrow(/smtp:\/\/ or smtps:\/\//);
+  });
+});
+
+describe('checkTestMailpitUrl', () => {
+  it('accepts an http:// URL and drops a trailing slash', () => {
+    expect(checkTestMailpitUrl('http://localhost:8025/')).toBe('http://localhost:8025');
+  });
+
+  it('rejects another protocol', () => {
+    expect(() => checkTestMailpitUrl('smtp://localhost:8025')).toThrow(/http:\/\/ or https:\/\//);
   });
 });

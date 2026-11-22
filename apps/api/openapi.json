@@ -36,7 +36,7 @@
     },
     "/auth/register": {
       "post": {
-        "description": "The new account has the CUSTOMER role and an unverified email address. Sets the `testtix_session` cookie (HttpOnly, SameSite=Lax) and ends the session the request came with, if any. 409 `email-already-registered` when the email is taken.",
+        "description": "The new account has the CUSTOMER role and an unverified email address, and is sent a verification email (if sending fails, the account is still created; ask for a new email with `POST /auth/verify-email/resend`). Sets the `testtix_session` cookie (HttpOnly, SameSite=Lax) and ends the session the request came with, if any. 409 `email-already-registered` when the email is taken.",
         "operationId": "AuthController_register",
         "parameters": [
           {
@@ -203,6 +203,123 @@
         "summary": "Log out",
         "tags": [
           "auth"
+        ]
+      }
+    },
+    "/auth/verify-email": {
+      "post": {
+        "description": "Takes the token from the link in the verification email (`/verify-email?token=…` on the web app) and marks its account verified. Needs no session: the link may be opened in another browser. Using a link again succeeds without changes. 400 `verification-token-invalid` for an unknown token or one replaced by a newer email; 400 `verification-token-expired` for an unused link past its expiry.",
+        "operationId": "AuthController_verifyEmail",
+        "parameters": [
+          {
+            "name": "X-CSRF-Token",
+            "in": "header",
+            "required": true,
+            "description": "The CSRF token from `GET /auth/csrf`. Must equal the `testtix_csrf` cookie, which must be sent too.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/VerifyEmailRequestDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": "The email address is verified."
+          },
+          "403": {
+            "description": "The `X-CSRF-Token` header is missing or doesn't match the `testtix_csrf` cookie (type `csrf-token-invalid`).",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error. The body is an RFC 9457 problem details object.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Verify an email address",
+        "tags": [
+          "auth"
+        ]
+      }
+    },
+    "/auth/verify-email/resend": {
+      "post": {
+        "description": "Emails the logged-in user a new verification link. Links from earlier emails stop working. 409 `email-already-verified` when the user's address is already verified; 503 when the email can't be sent.",
+        "operationId": "AuthController_resendVerification",
+        "parameters": [
+          {
+            "name": "X-CSRF-Token",
+            "in": "header",
+            "required": true,
+            "description": "The CSRF token from `GET /auth/csrf`. Must equal the `testtix_csrf` cookie, which must be sent too.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "The email has been sent."
+          },
+          "401": {
+            "description": "No session cookie, or the session has expired or was ended.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The `X-CSRF-Token` header is missing or doesn't match the `testtix_csrf` cookie (type `csrf-token-invalid`).",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error. The body is an RFC 9457 problem details object.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Send a new verification email",
+        "tags": [
+          "auth"
+        ],
+        "security": [
+          {
+            "session": []
+          }
         ]
       }
     },
@@ -809,6 +926,21 @@
         "required": [
           "email",
           "password"
+        ],
+        "additionalProperties": false
+      },
+      "VerifyEmailRequestDto": {
+        "type": "object",
+        "properties": {
+          "token": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256,
+            "description": "The `token` query parameter of the link in the verification email"
+          }
+        },
+        "required": [
+          "token"
         ],
         "additionalProperties": false
       },

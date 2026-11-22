@@ -94,9 +94,10 @@ model User {
   createdAt       DateTime  @map("created_at") @db.Timestamptz(3)
   updatedAt       DateTime  @map("updated_at") @db.Timestamptz(3)
 
-  sessions Session[]
-  holds    Hold[]
-  orders   Order[]
+  sessions          Session[]
+  verificationToken EmailVerificationToken?
+  holds             Hold[]
+  orders            Order[]
 
   @@map("users")
 }
@@ -118,6 +119,25 @@ model Session {
 }
 
 // --- Venues --------------------------------------------------------------------------------
+
+/// A user's current email verification link (C1.5). At most one per user: issuing a new link
+/// (a resend) replaces the old one, so only the latest email's link works.
+model EmailVerificationToken {
+  id        String    @id @default(uuid(7)) @db.Uuid
+  userId    String    @unique @map("user_id") @db.Uuid
+  /// SHA-256 of the token in the link. The token itself is never stored.
+  tokenHash String    @unique @map("token_hash")
+  expiresAt DateTime  @map("expires_at") @db.Timestamptz(3)
+  /// Set when the link is used. Using it again succeeds without changes, until it is replaced.
+  usedAt    DateTime? @map("used_at") @db.Timestamptz(3)
+  createdAt DateTime  @map("created_at") @db.Timestamptz(3)
+  /// When the current link was issued.
+  updatedAt DateTime  @map("updated_at") @db.Timestamptz(3)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("email_verification_tokens")
+}
 
 model Venue {
   id        String   @id @default(uuid(7)) @db.Uuid

@@ -6,6 +6,7 @@ import { ProblemException } from '../errors/problem.exception.js';
 import { Prisma, type User } from '../generated/prisma/client.js';
 import { PrismaService } from '../infra/prisma.service.js';
 import { uuidv7 } from '../infra/uuid.js';
+import { EmailVerificationService } from './email-verification.service.js';
 import { PasswordService } from './password.service.js';
 import { type NewSession, SessionService } from './session.service.js';
 
@@ -21,33 +22,41 @@ export class AuthService {
     private readonly clock: ClockService,
     private readonly passwords: PasswordService,
     private readonly sessions: SessionService,
+    private readonly verification: EmailVerificationService,
   ) {}
 
   /**
-   * Creates a customer account (email not yet verified) and logs it in. `previousToken` (the
-   * caller's current session cookie, if any) is ended, so the browser holds one session only.
+   * Creates a customer account (email not yet verified), emails it a verification link and logs
+   * it in. `previousToken` (the caller's current session cookie, if any) is ended, so the browser
+   * holds one session only. A failed email doesn't fail the registration (see
+   * `EmailVerificationService.sendAfterRegistration`).
    */
   async register(input: RegisterRequest, previousToken?: string): Promise<LoggedIn> {
     const passwordHash = await this.passwords.hash(input.password);
     const now = await this.clock.now();
     let user: User;
+    let verificationToken: string;
     try {
-      user = await this.prisma.user.create({
-        data: {
-          id: uuidv7(now),
-          email: input.email,
-          name: input.name,
-          passwordHash,
-          role: 'CUSTOMER',
-          createdAt: now,
-          updatedAt: now,
-        },
+      [user, verificationToken] = await this.prisma.$transaction(async (tx) => {
+        const created = await tx.user.create({
+          data: {
+            id: uuidv7(now),
+            email: input.email,
+            name: input.name,
+            passwordHash,
+            role: 'CUSTOMER',
+            createdAt: now,
+            updatedAt: now,
+          },
+        });
+        return [created, await this.verification.issue(created.id, tx)] as const;
       });
     } catch (err) {
       // The unique index decides, so two concurrent registrations can't both win.
       if (isUniqueViolation(err)) throw emailAlreadyRegistered();
       throw err;
     }
+    await this.verification.sendAfterRegistration(user, verificationToken);
     return this.startSession(user, previousToken);
   }
 

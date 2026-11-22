@@ -339,6 +339,7 @@ Claude's workspace has no Docker daemon, so Testcontainers can't run there. Beca
 - `@nestjs/throttler` with Redis storage. Limits per route group are set through env.
 - `X-Load-Test-Key` lifts limits; `/__test/*` gets its own limit and an audit log line.
 - 429 responses include `Retry-After`.
+- A per-user limit on `POST /auth/verify-email/resend` (C1.5 left a TODO).
 - Verify: integration tests that exceed a limit, bypass it with the key, and check the test API limit.
 
 **C5.4 Drop scenarios + testing guide**

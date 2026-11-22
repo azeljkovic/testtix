@@ -23,7 +23,8 @@ When a decision changes, update the docs in the same PR so they stay accurate.
 - ✅ C1.2 Domain data model + deterministic seed
 - ✅ C1.3 Test API: reset, seed scenarios
 - ✅ C1.4 Auth API (sessions, roles, CSRF)
-- ⏭️ Next: **C1.5 Mailer + account verification email** (see plan)
+- ✅ C1.5 Mailer + account verification email
+- ⏭️ Next: **C1.6 Web auth pages** (see plan)
 
 Update this list when a chunk is merged.
 
@@ -82,6 +83,7 @@ Run one package: `pnpm --filter @testtix/api <script>`.
 - Prisma unique-constraint races: catch `P2002` (`isUniqueViolation()` in `src/auth/auth.service.ts`) rather than checking first.
 - Prefer accessible names over `data-testid` in the UI; use `data-testid` only where no good accessible locator exists.
 - Every list endpoint sorts with a stable tiebreaker (`id`).
+- Email: send through `MailService.send({ to, template, data })` (`src/mail/`); add the template's variables to `MailTemplateData` and its `<name>.html.hbs` / `<name>.text.hbs` to `apps/api/templates/mail/` (Prettier ignores `*.hbs`). Integration tests read mail with `waitForEmail(to, subject)` (`src/testing/integration/mailpit.ts`); Mailpit is never emptied, so use a unique recipient. `createTestApp()` swaps SMTP for a JSON transport.
 - Local infra is `docker/compose.yml`, driven by `pnpm infra:*` from the repo root (`--project-directory .`, so the root `.env` overrides the compose defaults). Pin image tags to an exact version. New services get a health check, and `docker/smoke-test.sh` checks them.
 
 ## Repo

@@ -29,17 +29,18 @@ const REDIS_READY_TIMEOUT_MS = 10_000;
 
 /**
  * Boots the real app (same modules and `configureApp` as `main.ts`) against the integration
- * Postgres and Redis. Use with Supertest: `request(app.getHttpServer())`. Close it when the test is done.
+ * Postgres, Redis and Mailpit. Use with Supertest: `request(app.getHttpServer())`. Close it when the test is done.
  */
 export async function createIntegrationApp(
   options: IntegrationAppOptions = {},
 ): Promise<NestFastifyApplication> {
-  const { databaseUrl, redisUrl } = inject('integration');
+  const { databaseUrl, redisUrl, smtpUrl } = inject('integration');
   const config = parseConfig({
     NODE_ENV: 'test',
     LOG_LEVEL: 'silent',
     DATABASE_URL: databaseUrl,
     REDIS_URL: redisUrl,
+    SMTP_URL: smtpUrl,
     ...options.env,
   });
   const moduleRef = await Test.createTestingModule({
