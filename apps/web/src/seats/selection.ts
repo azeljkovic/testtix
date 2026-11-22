@@ -1,4 +1,4 @@
-import type { SeatStatus } from '@testtix/shared';
+import type { HoldRequest, SeatStatus, TicketsUnavailableProblem } from '@testtix/shared';
 
 import type {
   SeatMap,
@@ -10,8 +10,8 @@ import type {
 import { formatTicketPrice } from '../catalogue/format.js';
 
 /**
- * What the visitor has picked: seat IDs, and a quantity per GA section ID. It has the shape of a hold
- * request (C3.4), with GA quantities keyed by section.
+ * What the visitor has picked: seat IDs, and a quantity per GA section ID. `holdRequest()` turns
+ * its summary into a hold request.
  */
 export interface Selection {
   readonly seats: readonly string[];
@@ -140,4 +140,43 @@ export function pruneSelection(map: SeatMap, selection: Selection): Selection {
     seats.length === selection.seats.length &&
     Object.keys(selection.ga).every((id) => selection.ga[id] === (ga[id] ?? 0));
   return unchanged ? selection : { seats, ga };
+}
+
+/** The hold request for what `summary` says can be held. */
+export function holdRequest(summary: SelectionSummary): HoldRequest {
+  return {
+    seats: summary.seats.map(({ seat }) => seat.id),
+    ga: summary.ga.map(({ section, quantity }) => ({ sectionId: section.id, quantity })),
+  };
+}
+
+/**
+ * What a 409 `tickets-unavailable` took away, in words, using the map the request was made from:
+ * "Stalls, row A, seat 3" per seat, and "Loft: 1 left (you asked for 3)" per GA section.
+ */
+export function unavailableTickets(
+  map: SeatMap,
+  problem: Pick<TicketsUnavailableProblem, 'unavailableSeatIds' | 'gaShortfalls'>,
+): string[] {
+  const places = new Map<string, string>();
+  const gaNames = new Map<string, string>();
+  for (const section of map.sections) {
+    if (section.type === 'GA') {
+      gaNames.set(section.id, section.name);
+      continue;
+    }
+    for (const row of section.rows) {
+      for (const seat of row.seats) {
+        places.set(seat.id, seatPlace(section.name, row.label, seat.number));
+      }
+    }
+  }
+  return [
+    ...problem.unavailableSeatIds.map((id) => places.get(id) ?? 'A seat you chose'),
+    ...problem.gaShortfalls.map(({ sectionId, requested, available }) => {
+      const name = gaNames.get(sectionId) ?? 'General admission';
+      const left = available === 0 ? 'none left' : `${available.toString()} left`;
+      return `${name}: ${left} (you asked for ${requested.toString()})`;
+    }),
+  ];
 }

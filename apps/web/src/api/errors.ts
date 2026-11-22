@@ -13,6 +13,8 @@ export class ApiError extends Error {
   readonly problem: ProblemDetails | undefined;
   /** The error code of the problem `type`, for errors that have one. Branch on this, not on `detail`. */
   readonly code: ErrorCode | undefined;
+  /** The response body as received, for problem types with extra members (e.g. `tickets-unavailable`). */
+  readonly body: unknown;
 
   constructor(response: Response, body: unknown) {
     const parsed = ProblemDetailsSchema.safeParse(body);
@@ -21,6 +23,7 @@ export class ApiError extends Error {
     this.status = response.status;
     this.problem = problem;
     this.code = problem === undefined ? undefined : errorCodeOf(problem.type);
+    this.body = body;
   }
 }
 

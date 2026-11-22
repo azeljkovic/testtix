@@ -39,6 +39,8 @@ export const handlers = [
     const seatMap = seatMaps.find(({ eventId }) => eventId === params.eventId);
     return seatMap ? HttpResponse.json(seatMap) : problemResponse({ status: 404 });
   }),
+  // Nobody has a hold; `mockCurrentHold()` from `./holds.js` changes that.
+  http.get('/api/holds/current', () => problemResponse({ status: 404 })),
   http.get('/api/venues', () =>
     HttpResponse.json({
       items: catalogueVenues,

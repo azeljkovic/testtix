@@ -1,5 +1,5 @@
 import { formatPrice } from '@testtix/shared';
-import { useRef } from 'react';
+import { type ReactNode, useEffect, useRef } from 'react';
 
 import { formatTicketPrice, ticketCount } from '../catalogue/format.js';
 import { type SelectedSeat, type SelectionSummary as Summary, seatPlace } from './selection.js';
@@ -10,6 +10,10 @@ interface SelectionSummaryProps {
   onRemoveSeat: (seat: SelectedSeat) => void;
   onRemoveGa: (sectionId: string) => void;
   onClear: () => void;
+  /** Moves the focus to the heading when it appears (e.g. after a hold was released). */
+  focusOnMount?: boolean;
+  /** Actions below the summary (the hold button). */
+  children?: ReactNode;
 }
 
 const REMOVE_CLASS = 'text-sm font-medium text-indigo-700 underline underline-offset-4';
@@ -21,10 +25,16 @@ export function SelectionSummary({
   onRemoveSeat,
   onRemoveGa,
   onClear,
+  focusOnMount = false,
+  children,
 }: SelectionSummaryProps) {
   const { seats, ga, count, totalCents } = summary;
   // A remove button disappears with its line, so the focus moves to the heading instead of the page.
   const headingRef = useRef<HTMLHeadingElement>(null);
+  const shouldFocus = useRef(focusOnMount);
+  useEffect(() => {
+    if (shouldFocus.current) headingRef.current?.focus();
+  }, []);
   const andRefocus = (action: () => void) => () => {
     action();
     headingRef.current?.focus();
@@ -114,6 +124,7 @@ export function SelectionSummary({
           Clear selection
         </button>
       )}
+      {children}
     </section>
   );
 }
