@@ -7,7 +7,14 @@ import {
   mixedSeatMap,
 } from '../testing/seat-fixtures.js';
 import { withSeatStatus } from '../testing/seats.js';
-import { gaCost, pruneSelection, seatName, summarize } from './selection.js';
+import {
+  gaCost,
+  holdRequest,
+  pruneSelection,
+  seatName,
+  summarize,
+  unavailableTickets,
+} from './selection.js';
 
 const LOFT = '01970000-0000-7000-8000-0000000000b3';
 const FLOOR = '01970000-0000-7000-8000-0000000000b6';
@@ -95,5 +102,40 @@ describe('pruneSelection', () => {
       seats: [],
       ga: { [LOFT]: 3 },
     });
+  });
+});
+
+describe('holdRequest', () => {
+  it('asks for the seats and GA places that can still be held', () => {
+    const map = withSeatStatus(mixedSeatMap, [fixtureSeatId(5, 'A', 3)], 'SOLD');
+    const summary = summarize(map, {
+      seats: [fixtureSeatId(5, 'A', 2), fixtureSeatId(5, 'A', 3)],
+      ga: { [FLOOR]: 2 },
+    });
+    expect(holdRequest(summary)).toEqual({
+      seats: [fixtureSeatId(5, 'A', 2)],
+      ga: [{ sectionId: FLOOR, quantity: 2 }],
+    });
+  });
+});
+
+describe('unavailableTickets', () => {
+  it('names the taken seats and the GA sections that ran short', () => {
+    expect(
+      unavailableTickets(mixedSeatMap, {
+        unavailableSeatIds: [fixtureSeatId(5, 'B', 2), fixtureSeatId(5, 'A', 4)],
+        gaShortfalls: [{ sectionId: FLOOR, requested: 3, available: 1 }],
+      }),
+    ).toEqual([
+      'Mezzanine, row B, seat 2',
+      'Mezzanine, row A, seat 4',
+      'Standing Floor: 1 left (you asked for 3)',
+    ]);
+    expect(
+      unavailableTickets(meetupSeatMap, {
+        unavailableSeatIds: [],
+        gaShortfalls: [{ sectionId: LOFT, requested: 2, available: 0 }],
+      }),
+    ).toEqual(['Loft: none left (you asked for 2)']);
   });
 });
