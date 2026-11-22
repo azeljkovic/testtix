@@ -26,7 +26,8 @@ When a decision changes, update the docs in the same PR so they stay accurate.
 - ✅ C1.5 Mailer + account verification email
 - ✅ C1.6 Web auth pages
 - ✅ C2.1 Admin events + ticket batches API
-- ⏭️ Next: **C2.2 Public catalogue API** (see plan)
+- ✅ C2.2 Public catalogue API
+- ⏭️ Next: **C2.3 Web: event list + detail** (see plan)
 
 Update this list when a chunk is merged.
 
@@ -87,6 +88,7 @@ Run one package: `pnpm --filter @testtix/api <script>`.
 - **Auth is deny-by-default.** The global `AuthGuard` requires a session on every route; mark open routes (or controllers) `@Public()`, restrict with `@Roles('ADMIN')`, read the user with `@CurrentUser()` (`src/auth/auth.decorators.ts`). The global `CsrfGuard` requires `X-CSRF-Token` on every POST/PUT/PATCH/DELETE unless `@SkipCsrf()`. New test API controllers use `@TestApiController(path)` (public, no CSRF). In tests, `openBrowser(app)` / `createTestSession(app, { role })` (`src/testing/auth.ts`) give a logged-in client, and `sessionClient(app, session)` sends its cookie and CSRF header for you; `createIntegrationApp({ controllers })` adds probe routes.
 - Prisma unique-constraint races: catch `P2002` (`isUniqueViolation()` / `isForeignKeyViolation()` in `src/infra/prisma-errors.ts`) rather than checking first. Batch inserts go through `chunks()` (`src/infra/chunks.ts`) to stay under Postgres' bind-parameter limit.
 - Event writes (edits, status actions, batch releases) start their transaction with `lockEvent()` (`src/events/admin-events.service.ts`), and venue layout writes with `lockVenue()`; keep that order (event, then venue) in new code. Rules a schema can't check answer 400 via `validationFailed(errors)`; state conflicts get their own 409 problem type.
+- Public catalogue figures (`src/events/catalogue-query.ts`) count **released** tickets only and treat expired holds as available; filters and sorts on computed columns go in that SQL, not in JS, so pagination stays exact.
 - List endpoints paginate with `PageQuerySchema` / `pageSchema()` / `toPage()` from `packages/shared`. Generated slugs use `slugify()` + `insertWithSlug()` (`src/infra/slugs.ts`).
 - Prefer accessible names over `data-testid` in the UI; use `data-testid` only where no good accessible locator exists.
 - Every list endpoint sorts with a stable tiebreaker (`id`).
