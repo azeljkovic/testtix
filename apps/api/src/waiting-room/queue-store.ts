@@ -11,8 +11,10 @@ export const QUEUE_KEY_PREFIX = 'testtix:queue';
 /**
  * Queue order (sorted-set score). Customers who join before sales open get a random score below
  * `POST_OPEN_BASE`, so they are let in in a random order once sales open; later ones get
- * `POST_OPEN_BASE` plus their join time, so they follow in join order. Both stay exact integers
- * in a double (below 2^53) for join times up to the year 2109.
+ * `POST_OPEN_BASE` plus their join time, so they follow in join order. A join in the same
+ * millisecond as the last one waiting (always, with a frozen test clock) scores one more than it,
+ * so ties never fall back to Redis's order by user ID. Both stay exact integers in a double
+ * (below 2^53) for join times up to the year 2109.
  */
 export const POST_OPEN_BASE = 2 ** 42;
 const PRE_OPEN_RANGE = 2 ** 40;
@@ -60,10 +62,15 @@ if existing then
   redis.call('HDEL', KEYS[5], oldAdmission)
   redis.call('ZREM', KEYS[3], ARGV[1])
 end
+local score = tonumber(ARGV[4])
+if ARGV[7] == '1' then
+  local last = redis.call('ZRANGE', KEYS[2], -1, -1, 'WITHSCORES')
+  if last[2] and tonumber(last[2]) >= score then score = tonumber(last[2]) + 1 end
+end
 local entry = ARGV[2] .. ' ' .. ARGV[3] .. ' ' .. ARGV[5]
 local owner = ARGV[6] .. ' ' .. ARGV[1]
 redis.call('HSET', KEYS[1], ARGV[1], entry)
-redis.call('ZADD', KEYS[2], ARGV[4], ARGV[1])
+redis.call('ZADD', KEYS[2], string.format('%.0f', score), ARGV[1])
 redis.call('HSET', KEYS[4], ARGV[2], owner)
 redis.call('HSET', KEYS[5], ARGV[3], owner)
 redis.call('SADD', KEYS[6], ARGV[6])
@@ -205,6 +212,7 @@ export class QueueStore {
       String(score),
       String(now.getTime()),
       eventId,
+      beforeOpen ? '0' : '1',
     )) as [number, string];
     const entry = await this.read(eventId, userId);
     if (entry === null) throw new Error(`Queue entry of ${userId} for ${eventId} vanished`);
