@@ -19,6 +19,8 @@ import {
 import { catalogueQueries } from '../catalogue/queries.js';
 import { errorMessage } from '../forms/form-errors.js';
 import { PageTitle } from '../layout/PageTitle.js';
+import { queuePath } from '../waiting-room/admission.js';
+import { SalesCountdown } from '../waiting-room/SalesCountdown.js';
 
 const LINK_CLASS = 'font-medium text-indigo-700 underline underline-offset-4';
 
@@ -69,10 +71,16 @@ export function EventDetailPage() {
     );
   }
 
-  return <EventDetails event={event.data} />;
+  return <EventDetails event={event.data} onSalesOpen={() => void event.refetch()} />;
 }
 
-function EventDetails({ event }: { event: CatalogueEvent }) {
+interface EventDetailsProps {
+  event: CatalogueEvent;
+  /** Called when a ticket drop's sales open by the browser clock. */
+  onSalesOpen: () => void;
+}
+
+function EventDetails({ event, onSalesOpen }: EventDetailsProps) {
   const { timezone } = event.venue;
 
   return (
@@ -108,7 +116,7 @@ function EventDetails({ event }: { event: CatalogueEvent }) {
             </Detail>
             <Detail term="Per order">Up to {ticketCount(event.maxTicketsPerOrder)}</Detail>
           </dl>
-          <TicketsCallToAction event={event} />
+          <TicketsCallToAction event={event} onSalesOpen={onSalesOpen} />
         </div>
 
         <section aria-labelledby="about-heading" className="mt-10">
@@ -141,8 +149,14 @@ function nextRelease(event: CatalogueEvent): string | undefined {
   return dates.sort()[0];
 }
 
-/** The sales state, and the way to buy while the event is on sale. */
-function TicketsCallToAction({ event }: { event: CatalogueEvent }) {
+const PRIMARY_LINK_CLASS =
+  'mt-1 inline-block rounded-md bg-indigo-700 px-5 py-3 text-center font-semibold text-white hover:bg-indigo-800';
+
+/**
+ * The sales state, and the way to buy while the event is on sale. A ticket drop's way in is its
+ * waiting room, which opens before sales do; until then a countdown shows when they open.
+ */
+function TicketsCallToAction({ event, onSalesOpen }: EventDetailsProps) {
   const release = nextRelease(event);
   const releaseNote = release !== undefined && (
     <p>
@@ -151,16 +165,32 @@ function TicketsCallToAction({ event }: { event: CatalogueEvent }) {
     </p>
   );
 
+  const drop = event.waitingRoomEnabled;
+  const dropNote = drop && (
+    <p>
+      This is a ticket drop: you wait in a queue, and when it’s your turn you get a few minutes to
+      choose tickets.
+    </p>
+  );
+
   const content = (() => {
     switch (event.availability) {
       case 'ON_SALE':
+        if (drop) {
+          return (
+            <>
+              <p>{ticketCount(event.availableTickets)} available.</p>
+              {dropNote}
+              <Link to={queuePath(event.slug)} className={PRIMARY_LINK_CLASS}>
+                Join the queue
+              </Link>
+            </>
+          );
+        }
         return (
           <>
             <p>{ticketCount(event.availableTickets)} available.</p>
-            <Link
-              to={`/events/${event.slug}/seats`}
-              className="mt-1 inline-block rounded-md bg-indigo-700 px-5 py-3 text-center font-semibold text-white hover:bg-indigo-800"
-            >
+            <Link to={`/events/${event.slug}/seats`} className={PRIMARY_LINK_CLASS}>
               {event.seating === 'GA' ? 'Choose tickets' : 'Choose seats'}
             </Link>
           </>
@@ -177,6 +207,19 @@ function TicketsCallToAction({ event }: { event: CatalogueEvent }) {
           <>
             <p>{NOT_ON_SALE_NOTES.SALES_NOT_OPEN}</p>
             {releaseNote}
+            {drop && (
+              <>
+                {dropNote}
+                <SalesCountdown salesOpenAt={event.salesOpenAt} onOpen={onSalesOpen} />
+                <p>
+                  Join the waiting room now: everyone who joins before sales open gets a place in a
+                  random order.
+                </p>
+                <Link to={queuePath(event.slug)} className={PRIMARY_LINK_CLASS}>
+                  Join the waiting room
+                </Link>
+              </>
+            )}
           </>
         );
       case 'SALES_ENDED':

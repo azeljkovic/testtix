@@ -7,6 +7,7 @@ import {
 import { api, csrfHeader } from './client.js';
 import { ApiError, unwrap } from './errors.js';
 import type { components } from './generated/openapi.js';
+import { admissionHeader } from './seats.js';
 
 export type Hold = components['schemas']['Hold_Output'];
 export type HoldItem = components['schemas']['HoldItem_Output'];
@@ -24,11 +25,19 @@ export async function fetchCurrentHold(
 /**
  * `POST /events/{eventId}/holds`: holds every requested ticket or none, replacing your previous hold
  * for the event. A 409 `tickets-unavailable` says what was taken: read it with `ticketsUnavailable()`.
+ * A ticket drop needs your admission token from its waiting room (else 403 `queue-required`).
  */
-export async function createHold(eventId: string, body: HoldRequest): Promise<Hold> {
+export async function createHold(
+  eventId: string,
+  body: HoldRequest,
+  admissionToken: string | null = null,
+): Promise<Hold> {
   return unwrap(
     await api.POST('/events/{eventId}/holds', {
-      params: { path: { eventId }, header: await csrfHeader() },
+      params: {
+        path: { eventId },
+        header: { ...(await csrfHeader()), ...admissionHeader(admissionToken) },
+      },
       body,
     }),
   );

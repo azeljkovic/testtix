@@ -1,6 +1,6 @@
 import type { SeatStatus } from '@testtix/shared';
 
-import { concert, meetup, mixedDetail } from './catalogue-fixtures.js';
+import { concert, dropDetail, meetup, mixedDetail } from './catalogue-fixtures.js';
 import type { Schemas } from './msw-server.js';
 
 type SeatMap = Schemas['SeatMap_Output'];
@@ -132,4 +132,13 @@ export const mixedSeatMap: SeatMap = {
   ],
 };
 
-export const seatMaps = [concertSeatMap, meetupSeatMap, mixedSeatMap];
+/** The admission token MSW's ticket drop seat map (`dropSeatMap`) accepts. */
+export const FIXTURE_ADMISSION_TOKEN = 'fixture-admission-token';
+
+/**
+ * The ticket drop's seat map: the concert's. MSW only serves it with the admission token
+ * `FIXTURE_ADMISSION_TOKEN`, else 403 `queue-required`.
+ */
+export const dropSeatMap: SeatMap = { ...concertSeatMap, eventId: dropDetail.id };
+
+export const seatMaps = [concertSeatMap, meetupSeatMap, mixedSeatMap, dropSeatMap];

@@ -48,7 +48,8 @@ describe('new event page', () => {
     expect(router.state.location.pathname).toBe(`/admin/events/${draftEvent.id}`);
     expect(requests).toHaveLength(1);
     expect(requests[0]?.csrf).toBe(MOCK_CSRF_TOKEN);
-    // 8 PM in New York in January is 1 AM UTC the next day. Empty optional fields are left out.
+    // 8 PM in New York in January is 1 AM UTC the next day. Empty optional fields are left out;
+    // the waiting room checkbox is always sent.
     expect(requests[0]?.body).toEqual({
       title: 'Winter Warmers',
       performer: 'The Mittens',
@@ -59,7 +60,45 @@ describe('new event page', () => {
       endsAt: '2027-01-10T04:00:00.000Z',
       salesOpenAt: '2026-12-01T15:00:00.000Z',
       maxTicketsPerOrder: 4,
+      waitingRoomEnabled: false,
     });
+  });
+
+  it('sets up a ticket drop', async () => {
+    logInAs(admin);
+    const requests = mockAdminRequest('post', '/api/admin/events', () => draftEvent);
+    const { user } = renderApp('/admin/events/new');
+
+    await fillNewEvent(user);
+    const drop = screen.getByRole('group', { name: 'Ticket drop' });
+    await user.click(within(drop).getByRole('checkbox', { name: 'Waiting room' }));
+    await user.type(within(drop).getByLabelText('Admission rate per second (optional)'), '25');
+    await user.type(within(drop).getByLabelText('Admission time in seconds (optional)'), '300');
+    await user.click(screen.getByRole('button', { name: 'Create event' }));
+
+    await screen.findByRole('heading', { level: 1, name: 'Winter Warmers' });
+    expect(requests[0]?.body).toMatchObject({
+      waitingRoomEnabled: true,
+      admissionRatePerSec: 25,
+      admissionTokenTtlSec: 300,
+    });
+  });
+
+  it('checks the drop settings’ limits', async () => {
+    logInAs(admin);
+    const requests = mockAdminRequest('post', '/api/admin/events', () => draftEvent);
+    const { user } = renderApp('/admin/events/new');
+
+    await fillNewEvent(user);
+    const rate = screen.getByLabelText('Admission rate per second (optional)');
+    const ttl = screen.getByLabelText('Admission time in seconds (optional)');
+    await user.type(rate, '0');
+    await user.type(ttl, '1.5');
+    await user.click(screen.getByRole('button', { name: 'Create event' }));
+
+    expect(rate).toHaveAttribute('aria-invalid', 'true');
+    expect(ttl).toHaveAttribute('aria-invalid', 'true');
+    expect(requests).toHaveLength(0);
   });
 
   it('reads the times in the chosen venue’s zone', async () => {
@@ -199,6 +238,28 @@ describe('edit event page', () => {
     expect(requests.map((request) => request.body)).toEqual([
       { title: 'Midnight Echoes: Encore', endsAt: '2026-12-13T08:00:00.000Z' },
     ]);
+  });
+
+  it('shows and changes the drop settings', async () => {
+    logInAs(admin);
+    const requests = mockAdminRequest('patch', `/api/admin/events/${publishedEvent.id}`, () => ({
+      ...publishedEvent,
+      waitingRoomEnabled: true,
+    }));
+    const { user } = renderApp(`/admin/events/${publishedEvent.id}/edit`);
+
+    const waitingRoom = await screen.findByRole('checkbox', { name: 'Waiting room' });
+    expect(waitingRoom).not.toBeChecked();
+    expect(screen.getByLabelText('Admission rate per second (optional)')).toHaveValue('10');
+    expect(screen.getByLabelText('Admission time in seconds (optional)')).toHaveValue('600');
+    await user.click(waitingRoom);
+    await user.click(screen.getByRole('button', { name: 'Save changes' }));
+
+    await screen.findByRole('heading', { level: 1, name: 'Midnight Echoes Live' });
+    expect(requests.map((request) => request.body)).toEqual([{ waitingRoomEnabled: true }]);
+    expect(
+      screen.getByText('On: 10 customers let in per second, for 10 minutes each'),
+    ).toBeInTheDocument();
   });
 
   it('lets a draft without tickets move to another venue', async () => {

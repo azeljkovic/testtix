@@ -7,13 +7,14 @@ export interface RecordedRequest {
   url: URL;
   body: unknown;
   csrf: string | null;
+  headers: Headers;
 }
 
 type Method = 'get' | 'post' | 'patch' | 'delete';
 
 /**
  * Answers `method path` with `respond(request)` and records each request (URL, JSON body, CSRF
- * header), in order. A `Response` is sent as it is; anything else as JSON (`undefined`: 204).
+ * header, all headers), in order. A `Response` is sent as it is; anything else as JSON (`undefined`: 204).
  */
 export function mockAdminRequest(
   method: Method,
@@ -28,6 +29,7 @@ export function mockAdminRequest(
         url: new URL(request.url),
         body: text === '' ? undefined : (JSON.parse(text) as unknown),
         csrf: csrfHeaderOf(request),
+        headers: request.headers,
       };
       requests.push(recorded);
       const result = respond(recorded);

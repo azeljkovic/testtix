@@ -1,5 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
+  ADMISSION_RATE_PER_SEC,
+  ADMISSION_TOKEN_TTL_SEC,
   type CreateEventRequest,
   CreateEventRequestSchema,
   EVENT_CATEGORIES,
@@ -27,7 +29,7 @@ import {
 import { CATEGORY_LABELS } from '../../catalogue/format.js';
 import { FormAlert } from '../../forms/FormAlert.js';
 import { errorMessage, formLevelError, showSubmitError } from '../../forms/form-errors.js';
-import { DateTimeField, SelectField } from '../../forms/NativeFields.js';
+import { CheckboxField, DateTimeField, SelectField } from '../../forms/NativeFields.js';
 import { requestResolver } from '../../forms/request-resolver.js';
 import { SubmitButton } from '../../forms/SubmitButton.js';
 import { TextField } from '../../forms/TextField.js';
@@ -46,6 +48,9 @@ const FIELDS = [
   'salesOpenAt',
   'holdDurationSec',
   'maxTicketsPerOrder',
+  'waitingRoomEnabled',
+  'admissionRatePerSec',
+  'admissionTokenTtlSec',
 ] as const;
 
 /** `/admin/events/new` */
@@ -258,6 +263,30 @@ function EventForm({ venues, event }: EventFormProps) {
           label="Tickets per order (optional)"
           inputMode="numeric"
           description={`Most tickets in one order: ${String(MAX_TICKETS_PER_ORDER.min)}–${String(MAX_TICKETS_PER_ORDER.max)}. Default ${String(MAX_TICKETS_PER_ORDER.default)}.`}
+        />
+      </fieldset>
+
+      <fieldset className="flex flex-col gap-5 rounded-lg border border-slate-200 p-4">
+        <legend className="px-1 font-semibold text-slate-900">Ticket drop</legend>
+        <CheckboxField
+          control={control}
+          name="waitingRoomEnabled"
+          label="Waiting room"
+          description="Customers queue and are let in a few at a time; only those let in see the seat map and hold tickets. Turning it off lets everyone waiting in at once."
+        />
+        <TextField
+          control={control}
+          name="admissionRatePerSec"
+          label="Admission rate per second (optional)"
+          inputMode="numeric"
+          description={`Customers let in each second: ${String(ADMISSION_RATE_PER_SEC.min)}–${String(ADMISSION_RATE_PER_SEC.max)}. Default ${String(ADMISSION_RATE_PER_SEC.default)}.`}
+        />
+        <TextField
+          control={control}
+          name="admissionTokenTtlSec"
+          label="Admission time in seconds (optional)"
+          inputMode="numeric"
+          description={`How long a customer who was let in may choose and hold tickets: ${String(ADMISSION_TOKEN_TTL_SEC.min)}–${String(ADMISSION_TOKEN_TTL_SEC.max)}. Default ${String(ADMISSION_TOKEN_TTL_SEC.default)}.`}
         />
       </fieldset>
 

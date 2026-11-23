@@ -23,6 +23,9 @@ describe('event form', () => {
       salesOpenAt: publishedEvent.salesOpenAt,
       holdDurationSec: 300,
       maxTicketsPerOrder: 4,
+      waitingRoomEnabled: false,
+      admissionRatePerSec: 10,
+      admissionTokenTtlSec: 600,
     });
   });
 
@@ -37,6 +40,9 @@ describe('event form', () => {
     const { request } = convertEventForm(eventFormValues(), NEW_YORK);
     expect(request).not.toHaveProperty('slug');
     expect(request).not.toHaveProperty('holdDurationSec');
+    expect(request).not.toHaveProperty('admissionRatePerSec');
+    // A checkbox is never empty: it is always sent, so an edit can turn the waiting room off.
+    expect(request).toHaveProperty('waitingRoomEnabled', false);
     expect(request).not.toHaveProperty('startsAt');
   });
 

@@ -299,6 +299,13 @@ Order lifecycle: `PENDING_PAYMENT → PROCESSING → CONFIRMED | FAILED | EXPIRE
 - `POST /__test/reset` empties the waiting rooms (`QueueStore.clear()`, after the data swap). Redis errors while Redis is down become 503 in the waiting-room paths.
 - Tests: `waiting-room.int.test.ts` runs the job body (`QueueAdmissionService.admit()`) directly with a frozen clock (worker off), plus one run with the worker on.
 
+**Web waiting room (C5.2)**
+
+- Route `/events/:slug/queue` (`WaitingRoomPage`, behind `RequireAuth`). The queue entry is one TanStack query per event (`queueQueries.entry()`, key `['queue', eventId]`): its first fetch is `POST /events/{eventId}/queue` (idempotent, so a reload or a second tab picks the entry up), later fetches `GET /queue/{token}`, polled with `refetchInterval` = the last `retryAfterMs`. A 404 token joins again; `EXPIRED` stays until the customer presses "Join the queue again". No token is kept in browser storage: after a reload the join answers the current entry, admission included.
+- The seat map page reads the same query through `useAdmission(event)`: for a drop it needs `ADMITTED`, else it redirects to the waiting room. The admission token is part of the seat map's query key and goes in `X-Admission-Token` on the map and the hold. A 403 `queue-required` (or the admission's countdown reaching 0:00 by the browser clock) refetches the event and the entry before the query fails (`recheckAdmission()`), so the page follows the API's verdict and never bounces between the two pages on clock skew.
+- Countdowns (pre-sale, the admission) use `useCountdown()`, i.e. the browser clock, like the hold timer.
+- The admin event form sets `waitingRoomEnabled`, `admissionRatePerSec` and `admissionTokenTtlSec`; the checkbox is always sent so an edit can turn it off.
+
 ### 3.5 Real-time updates
 
 - **Polling for v1**, for queue position and order status: `GET` endpoints with a `retryAfterMs` hint. It is the most testable option and fits the "polling vs. fixed waits" demo.

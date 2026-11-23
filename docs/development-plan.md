@@ -340,6 +340,8 @@ Claude's workspace has no Docker daemon, so Testcontainers can't run there. Beca
 - Pre-sale countdown, queue page with position and estimated wait (polling), a live region for position changes, and an automatic move to the seat map when admitted.
 - From C5.1: the event page knows a drop by `waitingRoomEnabled` (`GET /events/{slug}`). Join with `POST /events/{eventId}/queue` (201 new, 200 existing), poll `GET /queue/{token}` with `retryAfterMs` (null stops), statuses `PRE_SALE` / `WAITING` / `ADMITTED` / `EXPIRED` (`QUEUE_STATUSES`). Send `admission.token` in `X-Admission-Token` (`ADMISSION_TOKEN_HEADER`) on the seat map and hold requests; a 403 `queue-required` (expired admission included) means back to the queue. The admin event form doesn't have the drop settings yet (`waitingRoomEnabled`, `admissionRatePerSec`, `admissionTokenTtlSec`); add them here.
 - Verify: component tests for every queue state, plus axe checks.
+- Also added: the admin event page shows the drop settings; the seat map page of a drop shows the admission's countdown ("Your turn ends in") and goes back to the waiting room when it ends; an ended turn offers "Join the queue again" and links to checkout if tickets are still held.
+- For C5.4: the UI needs nothing from a scenario beyond a drop event (`waitingRoomEnabled`) and logged-in customers; an e2e test can queue many customers through the API and watch one in the browser.
 
 **C5.3 Rate limiting**
 

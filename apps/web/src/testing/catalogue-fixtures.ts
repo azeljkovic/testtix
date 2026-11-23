@@ -156,7 +156,22 @@ export const mixedDetail: EventDetail = {
   ],
 };
 
-export const catalogueEventDetails = [concertDetail, meetupDetail, mixedDetail];
+/**
+ * A ticket drop on sale (`waitingRoomEnabled`): the concert's venue and sections, but its seat map
+ * and holds need an admission from the waiting room. Thu, Dec 31, 2026, 10:00 PM EST.
+ */
+export const dropDetail: EventDetail = {
+  ...concertDetail,
+  id: '01970000-0000-7000-8000-0000000000e5',
+  slug: 'new-year-drop',
+  title: 'New Year Drop',
+  performer: 'The Countdown',
+  startsAt: '2027-01-01T03:00:00.000Z',
+  endsAt: '2027-01-01T06:00:00.000Z',
+  waitingRoomEnabled: true,
+};
+
+export const catalogueEventDetails = [concertDetail, meetupDetail, mixedDetail, dropDetail];
 
 /** A `GET /events` response with `items` as one page of `total` events. */
 export function eventPage(

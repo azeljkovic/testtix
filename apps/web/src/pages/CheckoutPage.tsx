@@ -85,7 +85,7 @@ function Checkout({ event, hold }: { event: CatalogueEvent; hold: Hold | null })
   const expire = () => {
     setExpired(true);
     queryClient.setQueryData(seatQueries.currentHold(event.id).queryKey, null);
-    void queryClient.invalidateQueries({ queryKey: seatQueries.seatMap(event.id).queryKey });
+    void queryClient.invalidateQueries({ queryKey: seatQueries.seatMapKey(event.id) });
   };
 
   return (
