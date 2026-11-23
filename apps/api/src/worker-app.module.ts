@@ -14,7 +14,8 @@ import { LoggingModule } from './logging/logging.module.js';
 
 /**
  * Root module of the standalone worker process (`src/worker.ts`): the background jobs and what
- * they need (config, logs, Postgres, the shared clock). Its only routes are the health checks.
+ * they need (config, logs, Postgres, the shared clock). Its only routes are the health checks and
+ * `/metrics` (which `WorkerModule` brings).
  */
 @Module({})
 export class WorkerAppModule {

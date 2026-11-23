@@ -232,9 +232,16 @@ jobs:
       - name: Smoke test
         run: pnpm full:check
 
+      - name: Start Prometheus and Grafana
+        run: pnpm observability:up
+
+      # Targets scraped, dashboard provisioned and its queries valid, and a short drop moves it.
+      - name: Observability smoke test
+        run: pnpm observability:check
+
       - name: Show service logs
         if: failure()
-        run: docker compose --project-directory . -f docker/compose.yml --profile full logs --no-color
+        run: docker compose --project-directory . -f docker/compose.yml --profile full --profile observability logs --no-color
 
       - name: Stop the full stack
         if: always()

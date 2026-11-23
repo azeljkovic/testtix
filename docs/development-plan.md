@@ -391,6 +391,9 @@ Claude's workspace has no Docker daemon, so Testcontainers can't run there. Beca
 
 - `observability` profile: Prometheus scraping api and worker, plus Grafana with a provisioned "Ticket drop" dashboard (request rate and latency, holds, 409s, queue length, admissions, orders by status, job lag).
 - Verify: a short local load script makes the dashboard panels move.
+- Also added: API metrics `testtix_http_requests_total{method,route,status}` and `testtix_http_request_duration_seconds` (route patterns, every response), `testtix_hold_requests_total{outcome}`, `testtix_held_tickets{event_id}` and `testtix_orders{status}` (read from Postgres at scrape time, by the status customers see); worker metrics `testtix_job_wait_seconds` (lag of first attempts), `testtix_job_duration_seconds{outcome}` and `testtix_job_queue_jobs{state}`, on the worker's own `/metrics` (port 3001) or the API's with the worker inside. Prometheus 3.16 (5 s scrapes, the `api` replicas by Docker DNS, or `OBSERVABILITY_TARGETS=host` for `pnpm dev`) and Grafana 13.3 (anonymous admin on 127.0.0.1, the dashboard as its home page) on ports 9090 and 3030; `pnpm observability:up|check|load|down`; `scripts/drop-load.mjs` (a `drop-open-now` drop with contention for the same seats, declined and unpaid orders); the smoke check runs every dashboard query against Prometheus and a short drop, in CI's `images` job too; metrics reference in the testing guide.
+- For C6.3: Caddy serves every API path on port 3000, `/metrics` included; the hosted demo should not expose it (or Grafana, which has no login) publicly. Run the profile there behind basic auth, or keep it local and point `targets-*.yml` at the demo.
+- For C6.4: nothing; the dashboard JSON and Prometheus config are plain files in the repo, not images.
 
 **C6.3 Hosted demo** _(needs your input: VPS, domain, secrets)_
 

@@ -48,7 +48,7 @@ curl -i http://localhost:3000/health/ready
 | ------------------- | ------------------------------------------------------------------------------ |
 | `GET /health`       | Liveness: 200 while the process is up                                          |
 | `GET /health/ready` | Readiness: checks Postgres and Redis; 503 with per-check status if one is down |
-| `GET /metrics`      | Prometheus metrics (Node.js process defaults)                                  |
+| `GET /metrics`      | Prometheus metrics: process, requests, holds, orders, waiting rooms, jobs      |
 | `/auth/*`           | Register, log in, log out, current user, CSRF token (cookie sessions)          |
 | `/docs`             | Swagger UI                                                                     |
 | `/openapi.json`     | OpenAPI 3 spec                                                                 |
@@ -65,7 +65,7 @@ pnpm --filter @testtix/api build
 pnpm --filter @testtix/api start:worker   # node dist/worker.js; reads the root .env if present
 ```
 
-The worker answers `GET /health` and `GET /health/ready` (Postgres and Redis) on `WORKER_PORT` (default 3001), for container health checks; it serves nothing else.
+The worker answers `GET /health` and `GET /health/ready` (Postgres and Redis) on `WORKER_PORT` (default 3001), for container health checks, and `GET /metrics` with its job metrics; it serves nothing else.
 
 ## Web app
 
@@ -136,7 +136,7 @@ The fake payment provider (`apps/fake-payments`) is built from its own Dockerfil
 
 Data lives in named Docker volumes, so it survives `pnpm infra:down`. Use `pnpm infra:reset` to delete it and start clean.
 
-The compose file has two profiles: `full` runs the app itself in containers ([below](#running-everything-in-containers)), and `observability` (a placeholder until C6.2) adds Prometheus and Grafana.
+The compose file has two profiles: `full` runs the app itself in containers ([below](#running-everything-in-containers)), and `observability` adds Prometheus and Grafana ([dashboards](#dashboards-prometheus-and-grafana)).
 
 ## Running everything in containers
 
@@ -167,34 +167,56 @@ pnpm full:up
 
 The api image runs the API by default (`node dist/main.js`, port 3000); the same image is the worker (`node dist/worker.js`) and runs the migrations (`prisma migrate deploy`, then `node dist/seed/main.js --if-empty`). Every image runs as a non-root user and has a health check.
 
+## Dashboards (Prometheus and Grafana)
+
+The `observability` compose profile runs Prometheus and Grafana with a provisioned **Ticket drop** dashboard: request rate, latency and status codes per route, 409s and 429s, waiting-room queues and admissions, hold outcomes and held tickets, orders by status, background job lag, queue depth and run time, and each process' event loop, CPU and memory. It's meant for watching k6 runs and drops.
+
+```sh
+pnpm full:up --build        # the app in containers (Prometheus scrapes these)
+pnpm observability:up       # Prometheus at http://localhost:9090, Grafana at http://localhost:3030
+pnpm observability:load     # a short drop with 30 customers, to make the panels move
+pnpm observability:check    # smoke test: targets up, dashboard provisioned, its queries valid, a short drop
+pnpm observability:down     # stop Prometheus and Grafana, keeping their data
+```
+
+Grafana opens on the dashboard, without a login (anyone who reaches the port is an admin, so it binds to `127.0.0.1` like every other port). Prometheus scrapes every 5 s: each API replica (found through Docker's DNS for `api`, so `API_REPLICAS` changes are picked up) and the worker. To watch `pnpm dev` on the host instead, start the profile with `OBSERVABILITY_TARGETS=host pnpm observability:up` (the API at `host.docker.internal:3000`, with the worker in it); on Linux, the API must listen on `0.0.0.0` (`HOST`) for that. `PROMETHEUS_PORT`, `GRAFANA_PORT` and `PROMETHEUS_RETENTION` (default `7d`) change the defaults. `pnpm full:reset` deletes their data too.
+
+`pnpm observability:load` (`scripts/drop-load.mjs`, `--customers <n>`, up to 250) adds a `drop-open-now` scenario and test customers, who queue, hold two of the first free seats (customers let in together collide, so there are 409s), check out and pay with a test card: most succeed, some are declined, some never pay. It only adds data. Without `LOAD_TEST_KEY` on the server, large runs hit the default rate limit and wait out the 429s; with it set on both sides, nothing is limited.
+
+The dashboard is `docker/observability/grafana/dashboards/ticket-drop.json`. Change it there (Grafana reloads it within 10 s); edits made in the UI can't be saved over it, only as a copy. The metrics themselves are listed in the [testing guide](docs/testing-guide.md#metrics).
+
 ## Scripts
 
-| Command                 | What it does                                                |
-| ----------------------- | ----------------------------------------------------------- |
-| `pnpm dev`              | Runs the API and the web app in watch mode                  |
-| `pnpm build`            | Builds every package (Turborepo, cached)                    |
-| `pnpm typecheck`        | Type-checks every package with `tsc --noEmit`               |
-| `pnpm lint`             | Lints every package with ESLint                             |
-| `pnpm test`             | Runs unit tests with Vitest                                 |
-| `pnpm test:integration` | Runs API integration tests (needs Docker, or `TEST_*` URLs) |
-| `pnpm openapi`          | Regenerates the OpenAPI spec and the web client types       |
-| `pnpm openapi:check`    | Fails if the committed spec or client types are stale       |
-| `pnpm docs:examples`    | Runs the testing guide's examples against the local API     |
-| `pnpm db:deploy`        | Applies database migrations                                 |
-| `pnpm db:migrate`       | Creates and applies a migration (development)               |
-| `pnpm db:reset`         | Drops the local database and re-applies every migration     |
-| `pnpm db:seed`          | Builds the API and seeds an empty database                  |
-| `pnpm format`           | Formats the repo with Prettier                              |
-| `pnpm format:check`     | Checks formatting without writing                           |
-| `pnpm clean`            | Removes build output and Turborepo caches                   |
-| `pnpm infra:up`         | Starts local infra and waits until healthy                  |
-| `pnpm infra:check`      | Smoke-tests the running local infra                         |
-| `pnpm infra:down`       | Stops local infra, keeping its data                         |
-| `pnpm infra:reset`      | Stops local infra and deletes its data                      |
-| `pnpm full:up`          | Starts the whole app in containers (`--build` to rebuild)   |
-| `pnpm full:check`       | Smoke-tests the running containers (resets the data)        |
-| `pnpm full:down`        | Stops every container (infra too), keeping the data         |
-| `pnpm full:reset`       | Stops every container and deletes the data                  |
+| Command                    | What it does                                                |
+| -------------------------- | ----------------------------------------------------------- |
+| `pnpm dev`                 | Runs the API and the web app in watch mode                  |
+| `pnpm build`               | Builds every package (Turborepo, cached)                    |
+| `pnpm typecheck`           | Type-checks every package with `tsc --noEmit`               |
+| `pnpm lint`                | Lints every package with ESLint                             |
+| `pnpm test`                | Runs unit tests with Vitest                                 |
+| `pnpm test:integration`    | Runs API integration tests (needs Docker, or `TEST_*` URLs) |
+| `pnpm openapi`             | Regenerates the OpenAPI spec and the web client types       |
+| `pnpm openapi:check`       | Fails if the committed spec or client types are stale       |
+| `pnpm docs:examples`       | Runs the testing guide's examples against the local API     |
+| `pnpm db:deploy`           | Applies database migrations                                 |
+| `pnpm db:migrate`          | Creates and applies a migration (development)               |
+| `pnpm db:reset`            | Drops the local database and re-applies every migration     |
+| `pnpm db:seed`             | Builds the API and seeds an empty database                  |
+| `pnpm format`              | Formats the repo with Prettier                              |
+| `pnpm format:check`        | Checks formatting without writing                           |
+| `pnpm clean`               | Removes build output and Turborepo caches                   |
+| `pnpm infra:up`            | Starts local infra and waits until healthy                  |
+| `pnpm infra:check`         | Smoke-tests the running local infra                         |
+| `pnpm infra:down`          | Stops local infra, keeping its data                         |
+| `pnpm infra:reset`         | Stops local infra and deletes its data                      |
+| `pnpm full:up`             | Starts the whole app in containers (`--build` to rebuild)   |
+| `pnpm full:check`          | Smoke-tests the running containers (resets the data)        |
+| `pnpm full:down`           | Stops every container (infra too), keeping the data         |
+| `pnpm full:reset`          | Stops every container and deletes the data                  |
+| `pnpm observability:up`    | Starts Prometheus and Grafana                               |
+| `pnpm observability:check` | Smoke-tests them, with a short drop (adds data)             |
+| `pnpm observability:load`  | Runs a short drop against the API to fill the dashboard     |
+| `pnpm observability:down`  | Stops Prometheus and Grafana, keeping their data            |
 
 ## Tech stack
 

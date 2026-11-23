@@ -1,7 +1,8 @@
 import { Module } from '@nestjs/common';
 
+import { MetricsModule } from '../metrics/metrics.module.js';
 import { WaitingRoomModule } from '../waiting-room/waiting-room.module.js';
-
+import { HoldMetrics } from './hold-metrics.js';
 import { HoldsController } from './holds.controller.js';
 import { HoldsService } from './holds.service.js';
 import { SeatMapService } from './seat-map.service.js';
@@ -11,8 +12,8 @@ import { SeatMapService } from './seat-map.service.js';
  * of ticket drops (C5.1).
  */
 @Module({
-  imports: [WaitingRoomModule],
+  imports: [MetricsModule, WaitingRoomModule],
   controllers: [HoldsController],
-  providers: [HoldsService, SeatMapService],
+  providers: [HoldsService, SeatMapService, HoldMetrics],
 })
 export class HoldsModule {}

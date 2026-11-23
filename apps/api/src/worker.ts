@@ -2,7 +2,8 @@
  * The background worker as its own process: `node dist/worker.js` (`pnpm start:worker`). Run it
  * with `WORKER_IN_PROCESS=false` on the API, so jobs are processed here and the two scale apart.
  * It reads the same environment variables as the API (it ignores `WORKER_IN_PROCESS`), and serves
- * only `GET /health` and `GET /health/ready` on `HOST`:`WORKER_PORT`, for container health checks.
+ * only `GET /health`, `GET /health/ready` (container health checks) and `GET /metrics` (Prometheus)
+ * on `HOST`:`WORKER_PORT`.
  */
 import 'reflect-metadata';
 

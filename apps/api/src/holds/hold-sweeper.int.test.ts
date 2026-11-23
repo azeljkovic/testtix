@@ -257,7 +257,7 @@ describe('with the hold sweeper enabled', () => {
 });
 
 describe('the standalone worker (src/worker.ts)', () => {
-  it('sweeps while the API runs without an in-process worker, and answers health checks', async () => {
+  it('sweeps while the API runs without an in-process worker, and answers health checks and metrics', async () => {
     const { databaseUrl, redisUrl, smtpUrl } = inject('integration');
     await emptyQueue();
     const app = await createIntegrationApp({ env: TEST_MODE });
@@ -293,6 +293,24 @@ describe('the standalone worker (src/worker.ts)', () => {
       await app.get(ClockService).advanceBy(60_000);
       await eventually(async () => {
         expect(await holdRow(prisma, seeded.hold.id)).toBeNull();
+      });
+
+      // Its own /metrics: process metrics and the background jobs it ran.
+      await eventually(async () => {
+        const metrics = await request(worker.getHttpServer()).get('/metrics').expect(200);
+        expect(metrics.text).toContain('process_cpu_user_seconds_total');
+        expect(metrics.text).toMatch(
+          /^testtix_job_duration_seconds_count\{queue="hold-sweeper",name="sweep",outcome="completed"\} [1-9]/m,
+        );
+        expect(metrics.text).toMatch(
+          /^testtix_job_wait_seconds_count\{queue="hold-sweeper",name="sweep"\} [1-9]/m,
+        );
+        expect(metrics.text).toMatch(
+          /^testtix_job_queue_jobs\{queue="hold-sweeper",state="delayed"\} 1$/m,
+        );
+        expect(metrics.text).toContain(
+          'testtix_job_queue_jobs{queue="order-processing",state="failed"} 0',
+        );
       });
     } finally {
       await app.get(ClockService).reset();
