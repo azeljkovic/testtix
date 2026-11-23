@@ -1,6 +1,7 @@
 import { LOCALE, type SectionType } from '@testtix/shared';
 
 import type { Prisma } from '../generated/prisma/client.js';
+import { ORDER_ITEM_ORDER } from '../orders/order-views.js';
 
 type Db = Prisma.TransactionClient;
 
@@ -46,20 +47,17 @@ const ticketSelect = {
   },
 } as const satisfies Prisma.TicketSelect;
 
-/** The order's section order, then row and seat (GA places by ID), as order items are listed. */
-const ticketOrder = [
-  { orderItem: { inventoryUnit: { section: { sortOrder: 'asc' } } } },
-  { orderItem: { inventoryUnit: { seat: { rowIndex: 'asc' } } } },
-  { orderItem: { inventoryUnit: { seat: { number: 'asc' } } } },
-  { id: 'asc' },
-] as const satisfies Prisma.TicketOrderByWithRelationInput[];
+/** In the order of their items, exactly as `GET /orders/{orderId}` lists them. */
+const ticketOrder: Prisma.TicketOrderByWithRelationInput[] = ORDER_ITEM_ORDER.map((orderItem) => ({
+  orderItem,
+}));
 
-/** The tickets matching `where`, in the order's section, row and seat order. */
+/** The tickets matching `where`, in their order's item order (`ORDER_ITEM_ORDER`). */
 export async function loadTicketDetails(
   db: Db,
   where: Prisma.TicketWhereInput,
 ): Promise<TicketDetails[]> {
-  const rows = await db.ticket.findMany({ where, orderBy: [...ticketOrder], select: ticketSelect });
+  const rows = await db.ticket.findMany({ where, orderBy: ticketOrder, select: ticketSelect });
   return rows.map(({ id, code, orderItem }) => ({
     id,
     code,

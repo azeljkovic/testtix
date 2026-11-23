@@ -8,6 +8,7 @@ import { ClockService } from '../clock/clock.service.js';
 import { APP_CONFIG } from '../config/config.module.js';
 import type { AppConfig } from '../config/config.schema.js';
 import { PrismaService } from '../infra/prisma.service.js';
+import { uuidv7 } from '../infra/uuid.js';
 import { QUEUE_PREFIX } from '../jobs/jobs.module.js';
 import { MailService } from '../mail/mail.service.js';
 import {
@@ -290,6 +291,42 @@ describe('the e-ticket email', () => {
     expect(await pdfPageCount(pdfBytes)).toBe(pages);
     expect((await qrCodesInPdf(pdfBytes)).sort()).toEqual(codes);
     expect(inline.map((part) => decodeQrPng(part.bytes)).sort()).toEqual(codes);
+  });
+
+  it('lists GA places in the order’s item order, whatever the ticket IDs', async () => {
+    const placed = await placeOrder({ ga: { Floor: 4 } });
+    await payAndFinalize(placed);
+    // Give the tickets IDs in the reverse of their units' order, so that sorting by ticket ID
+    // and sorting like the order's items disagree.
+    const items = await prisma.orderItem.findMany({
+      where: { orderId: placed.order.id },
+      orderBy: { inventoryUnitId: 'asc' },
+      select: { id: true, ticket: { select: { code: true } } },
+    });
+    const ids = items
+      .map(() => uuidv7(NOW))
+      .sort()
+      .reverse();
+    await prisma.$transaction([
+      prisma.ticket.deleteMany({ where: { orderItem: { orderId: placed.order.id } } }),
+      prisma.ticket.createMany({
+        data: items.map((item, index) => ({
+          id: ids[index],
+          orderItemId: item.id,
+          code: item.ticket?.code ?? '',
+          issuedAt: NOW,
+        })),
+      }),
+    ]);
+    const order = await getOrder(placed.customer, placed.order.id);
+
+    await ticketEmail.send(placed.order.id);
+
+    const email = await waitForEmail(placed.customer.user.email, subjectOf(placed.title));
+    const { pdfBytes } = await documentsOf(email);
+    expect(await qrCodesInPdf(pdfBytes)).toEqual(order.items.map((item) => item.ticket?.code));
+    const codesInText = [...email.text.matchAll(/Ticket code: (\S+)/g)].map((match) => match[1]);
+    expect(codesInText).toEqual(order.items.map((item) => item.ticket?.code));
   });
 
   it('is sent once when the job runs again', async () => {
