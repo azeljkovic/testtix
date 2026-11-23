@@ -1,3 +1,4 @@
+import { ADMISSION_TOKEN_HEADER } from '@testtix/shared';
 import { http, HttpResponse } from 'msw';
 import { setupServer } from 'msw/node';
 
@@ -10,7 +11,7 @@ import {
   eventPage,
 } from './catalogue-fixtures.js';
 import { problemResponse } from './problems.js';
-import { seatMaps } from './seat-fixtures.js';
+import { dropSeatMap, FIXTURE_ADMISSION_TOKEN, seatMaps } from './seat-fixtures.js';
 
 /** Response bodies from the OpenAPI spec, so a mock that drifts from the API fails the typecheck. */
 export type Schemas = components['schemas'];
@@ -34,6 +35,12 @@ export const handlers = [
     const event = catalogueEventDetails.find(({ slug }) => slug === params.slug);
     return event ? HttpResponse.json(event) : problemResponse({ status: 404 });
   }),
+  // The ticket drop's map needs the fixture admission token, as the API needs a valid one.
+  http.get(`/api/events/${dropSeatMap.eventId}/seats`, ({ request }) =>
+    request.headers.get(ADMISSION_TOKEN_HEADER) === FIXTURE_ADMISSION_TOKEN
+      ? HttpResponse.json(dropSeatMap)
+      : problemResponse({ status: 403, code: 'QUEUE_REQUIRED' }),
+  ),
   // The seat map fixtures; `mockSeatMap()` from `./seats.js` answers others.
   http.get('/api/events/:eventId/seats', ({ params }) => {
     const seatMap = seatMaps.find(({ eventId }) => eventId === params.eventId);

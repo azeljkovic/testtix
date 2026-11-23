@@ -22,6 +22,9 @@ export interface EventFormValues {
   salesOpenAt: string;
   holdDurationSec: string;
   maxTicketsPerOrder: string;
+  waitingRoomEnabled: boolean;
+  admissionRatePerSec: string;
+  admissionTokenTtlSec: string;
 }
 
 const TIME_FIELDS = ['startsAt', 'endsAt', 'salesOpenAt'] as const;
@@ -48,6 +51,9 @@ export function eventFormValues(event?: AdminEvent): EventFormValues {
       salesOpenAt: '',
       holdDurationSec: '',
       maxTicketsPerOrder: '',
+      waitingRoomEnabled: false,
+      admissionRatePerSec: '',
+      admissionTokenTtlSec: '',
     };
   }
   const timeZone = event.venue.timezone;
@@ -63,12 +69,16 @@ export function eventFormValues(event?: AdminEvent): EventFormValues {
     salesOpenAt: toZonedLocal(event.salesOpenAt, timeZone),
     holdDurationSec: String(event.holdDurationSec),
     maxTicketsPerOrder: String(event.maxTicketsPerOrder),
+    waitingRoomEnabled: event.waitingRoomEnabled,
+    admissionRatePerSec: String(event.admissionRatePerSec),
+    admissionTokenTtlSec: String(event.admissionTokenTtlSec),
   };
 }
 
 /**
  * Builds the create request from the form. `timeZone` is the chosen venue's (times are entered
- * in it); empty optional fields are left out, so the API applies its defaults.
+ * in it); empty optional fields are left out, so the API applies its defaults. The waiting room
+ * checkbox is always sent.
  */
 export function convertEventForm(
   values: EventFormValues,
@@ -102,6 +112,10 @@ export function convertEventForm(
     ...times,
     holdDurationSec: parseIntegerInput(values.holdDurationSec),
     maxTicketsPerOrder: parseIntegerInput(values.maxTicketsPerOrder),
+    // Always sent (a checkbox is never empty), so an edit can turn it off.
+    waitingRoomEnabled: values.waitingRoomEnabled,
+    admissionRatePerSec: parseIntegerInput(values.admissionRatePerSec),
+    admissionTokenTtlSec: parseIntegerInput(values.admissionTokenTtlSec),
   };
   return { request: withoutUndefined(request), errors };
 }

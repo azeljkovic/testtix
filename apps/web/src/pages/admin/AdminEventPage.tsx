@@ -213,6 +213,11 @@ function EventDetails({ event }: { event: AdminEvent }) {
           </Detail>
           <Detail term="Seat holds last">{holdDuration(event.holdDurationSec)}</Detail>
           <Detail term="Tickets per order">Up to {event.maxTicketsPerOrder}</Detail>
+          <Detail term="Waiting room">
+            {event.waitingRoomEnabled
+              ? `On: ${count(event.admissionRatePerSec)} ${event.admissionRatePerSec === 1 ? 'customer' : 'customers'} let in per second, for ${holdDuration(event.admissionTokenTtlSec)} each`
+              : 'Off'}
+          </Detail>
           <Detail term="Tickets">{countsText(event.tickets)}</Detail>
         </dl>
         <p className="mt-6 max-w-3xl whitespace-pre-line text-slate-700">{event.description}</p>

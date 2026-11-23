@@ -39,6 +39,7 @@ describe('admin event page', () => {
       '/events/midnight-echoes-live',
       '5 minutes',
       'Up to 4',
+      'Off',
       '30 released: 23 available, 2 held, 5 sold',
     ]);
     expect(batchRows()).toEqual([

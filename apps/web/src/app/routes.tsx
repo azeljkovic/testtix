@@ -22,6 +22,7 @@ import { OrderPage } from '../pages/OrderPage.js';
 import { OrdersPage } from '../pages/OrdersPage.js';
 import { RegisterPage } from '../pages/RegisterPage.js';
 import { VerifyEmailPage } from '../pages/VerifyEmailPage.js';
+import { WaitingRoomPage } from '../pages/WaitingRoomPage.js';
 
 /** Route table shared by the browser router (`main.tsx`) and the memory router in tests. */
 export const routes: RouteObject[] = [
@@ -41,6 +42,8 @@ export const routes: RouteObject[] = [
         element: <RequireAuth />,
         children: [
           { path: 'account', element: <AccountPage /> },
+          // A ticket drop's waiting room (`waitingRoomEnabled`).
+          { path: 'events/:slug/queue', element: <WaitingRoomPage /> },
           { path: 'events/:slug/checkout', element: <CheckoutPage /> },
           { path: 'orders', element: <OrdersPage /> },
           // The payment provider returns here, and the e-ticket email links here (apps/api).

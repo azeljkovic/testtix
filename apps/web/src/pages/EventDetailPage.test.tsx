@@ -1,8 +1,9 @@
-import { screen, within } from '@testing-library/react';
+import { act, screen, within } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { concertDetail, meetupDetail } from '../testing/catalogue-fixtures.js';
+import { concertDetail, dropDetail, meetupDetail } from '../testing/catalogue-fixtures.js';
+import { advanceClock, fakeClockAt, settleWithFakeClock } from '../testing/fake-clock.js';
 import { server } from '../testing/msw-server.js';
 import { problemResponse } from '../testing/problems.js';
 import { renderApp } from '../testing/render.js';
@@ -175,5 +176,67 @@ describe('event page', () => {
       'href',
       '/events',
     );
+  });
+});
+
+describe('event page of a ticket drop', () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('offers to join the queue while on sale', async () => {
+    renderApp('/events/new-year-drop');
+
+    const tickets = within(await screen.findByRole('region', { name: 'Tickets' }));
+    expect(tickets.getByText(/This is a ticket drop: you wait in a queue/)).toBeInTheDocument();
+    expect(tickets.getByRole('link', { name: 'Join the queue' })).toHaveAttribute(
+      'href',
+      '/events/new-year-drop/queue',
+    );
+    expect(tickets.queryByRole('link', { name: 'Choose seats' })).not.toBeInTheDocument();
+    expect(tickets.queryByRole('timer')).not.toBeInTheDocument();
+  });
+
+  it('counts down to the opening and opens the waiting room before it', async () => {
+    const now = Date.parse('2026-12-01T18:00:00.000Z');
+    fakeClockAt(now);
+    let event: typeof dropDetail = {
+      ...dropDetail,
+      availability: 'SALES_NOT_OPEN',
+      salesOpenAt: new Date(now + 26 * 3600_000 + 2000).toISOString(),
+    };
+    let requests = 0;
+    server.use(
+      http.get(`/api/events/${dropDetail.slug}`, () => {
+        requests++;
+        return HttpResponse.json(event);
+      }),
+    );
+    renderApp('/events/new-year-drop');
+
+    await settleWithFakeClock(() => {
+      expect(screen.getByRole('timer', { name: 'Sales open in' })).toHaveTextContent(
+        '1 day, 2:00:02',
+      );
+    });
+    const tickets = within(screen.getByRole('region', { name: 'Tickets' }));
+    expect(tickets.getByText('Tickets aren’t on sale yet.')).toBeInTheDocument();
+    expect(tickets.getByRole('link', { name: 'Join the waiting room' })).toHaveAttribute(
+      'href',
+      '/events/new-year-drop/queue',
+    );
+    expect(requests).toBe(1);
+
+    // When the countdown ends the event is fetched again, and is on sale.
+    event = { ...event, availability: 'ON_SALE' };
+    act(() => {
+      vi.setSystemTime(Date.parse(event.salesOpenAt) - 1500);
+    });
+    advanceClock(2000);
+    await settleWithFakeClock(() => {
+      expect(screen.getByRole('link', { name: 'Join the queue' })).toBeInTheDocument();
+    });
+    expect(requests).toBe(2);
+    expect(screen.queryByRole('timer')).not.toBeInTheDocument();
   });
 });

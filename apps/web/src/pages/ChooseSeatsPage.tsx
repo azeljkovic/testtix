@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { HOLD_MESSAGES, type HoldRequest, formatPrice } from '@testtix/shared';
 import { useRef, useState } from 'react';
-import { Link, useLocation, useParams } from 'react-router';
+import { Link, Navigate, useLocation, useParams } from 'react-router';
 
 import type { CatalogueEvent } from '../api/catalogue.js';
 import { ApiError } from '../api/errors.js';
@@ -21,10 +21,11 @@ import { catalogueQueries } from '../catalogue/queries.js';
 import { FormAlert } from '../forms/FormAlert.js';
 import { errorMessage } from '../forms/form-errors.js';
 import { PageTitle } from '../layout/PageTitle.js';
-import { formatDuration } from '../seats/countdown.js';
+import { formatDuration, useCountdown } from '../seats/countdown.js';
 import { GaStepper, type QuantitySource } from '../seats/GaStepper.js';
+import { TimeLeft } from '../seats/HeldTickets.js';
 import { HoldPanel } from '../seats/HoldPanel.js';
-import { seatQueries } from '../seats/queries.js';
+import { isQueueRequired, recheckAdmission, seatQueries } from '../seats/queries.js';
 import { SeatGrid } from '../seats/SeatGrid.js';
 import { SeatLegend } from '../seats/SeatGlyph.js';
 import {
@@ -37,22 +38,28 @@ import {
   unavailableTickets,
 } from '../seats/selection.js';
 import { SelectionSummary } from '../seats/SelectionSummary.js';
+import { type Admission, queuePath, useAdmission } from '../waiting-room/admission.js';
 
 const LINK_CLASS = 'font-medium text-indigo-700 underline underline-offset-4';
 
 /**
  * `/events/:slug/seats`: the event's seat map. Seated sections are seat grids, GA sections quantity
  * steppers; the summary keeps a running total. A logged-in visitor holds the selection, and the hold
- * panel counts down to its expiry.
+ * panel counts down to its expiry. A ticket drop's map is only for customers its waiting room has
+ * let in: everyone else goes to the waiting room, and so do you once your admission ends.
  */
 export function ChooseSeatsPage() {
   const { slug = '' } = useParams();
   const event = useQuery(catalogueQueries.event(slug));
   const eventId = event.data?.id;
+  const admission = useAdmission(event.data);
   const seatMap = useQuery({
-    ...seatQueries.seatMap(eventId ?? ''),
-    enabled: eventId !== undefined,
+    ...seatQueries.seatMap(eventId ?? '', admission.token),
+    enabled:
+      eventId !== undefined && (admission.state === 'open' || admission.state === 'admitted'),
   });
+
+  if (admission.state === 'queue') return <Navigate to={queuePath(slug)} replace />;
 
   const error = event.error ?? seatMap.error;
   if (error !== null) {
@@ -84,7 +91,13 @@ export function ChooseSeatsPage() {
       </>
     );
   }
-  return <SeatPicker event={event.data} map={seatMap.data} />;
+  return (
+    <SeatPicker
+      event={event.data}
+      map={seatMap.data}
+      admission={admission.state === 'admitted' ? admission : null}
+    />
+  );
 }
 
 /**
@@ -108,7 +121,14 @@ interface HoldFailure {
 /** Which part of the sidebar gets the focus when it appears. */
 type SidebarFocus = 'hold' | 'selection' | null;
 
-function SeatPicker({ event, map }: { event: CatalogueEvent; map: SeatMap }) {
+interface SeatPickerProps {
+  event: CatalogueEvent;
+  map: SeatMap;
+  /** Your admission from a ticket drop's waiting room; null for other events. */
+  admission: Extract<Admission, { state: 'admitted' }> | null;
+}
+
+function SeatPicker({ event, map, admission }: SeatPickerProps) {
   const [selection, setSelection] = useState<Selection>(EMPTY_SELECTION);
   const [announcement, announce] = useAnnouncer();
   const queryClient = useQueryClient();
@@ -123,7 +143,7 @@ function SeatPicker({ event, map }: { event: CatalogueEvent; map: SeatMap }) {
   const sidebarRef = useRef<HTMLDivElement>(null);
 
   const refreshMap = () =>
-    queryClient.invalidateQueries({ queryKey: seatQueries.seatMap(map.eventId).queryKey });
+    queryClient.invalidateQueries({ queryKey: seatQueries.seatMapKey(map.eventId) });
   const setHold = (next: Hold | null) => {
     queryClient.setQueryData(seatQueries.currentHold(map.eventId).queryKey, next);
   };
@@ -139,7 +159,8 @@ function SeatPicker({ event, map }: { event: CatalogueEvent; map: SeatMap }) {
   });
 
   const create = useMutation({
-    mutationFn: (request: HoldRequest) => createHold(map.eventId, request),
+    mutationFn: (request: HoldRequest) =>
+      createHold(map.eventId, request, admission?.token ?? null),
     onSuccess: (created) => {
       release.reset();
       setHold(created);
@@ -162,6 +183,12 @@ function SeatPicker({ event, map }: { event: CatalogueEvent; map: SeatMap }) {
           taken: unavailableTickets(map, unavailable),
         });
         void refreshMap();
+        return;
+      }
+      if (isQueueRequired(error)) {
+        // Your admission ended (or the event became a drop): the page goes to the waiting room.
+        setHoldFailure({ message: errorMessage(error), taken: [] });
+        void recheckAdmission(queryClient, map.eventId);
         return;
       }
       if (error instanceof ApiError && error.status === 401) {
@@ -260,6 +287,13 @@ function SeatPicker({ event, map }: { event: CatalogueEvent; map: SeatMap }) {
         </time>{' '}
         · {event.venue.name}
       </p>
+      {admission !== null && (
+        <AdmissionNote
+          key={admission.expiresAt}
+          expiresAt={admission.expiresAt}
+          onEnd={() => void recheckAdmission(queryClient, map.eventId)}
+        />
+      )}
       {map.availability !== 'ON_SALE' && (
         <p className="mt-4 rounded-md border border-amber-300 bg-amber-50 p-4 text-amber-950">
           {NOT_ON_SALE_NOTES[map.availability]} The map shows each seat’s current status.
@@ -399,5 +433,29 @@ function SeatPicker({ event, map }: { event: CatalogueEvent; map: SeatMap }) {
         {announcement}
       </p>
     </>
+  );
+}
+
+/**
+ * A ticket drop's admission: the time left to hold tickets (browser clock, like the hold panel).
+ * When it runs out the queue entry is checked again, and once the API agrees it has ended the page
+ * goes to the waiting room. Keyed by `expiresAt`.
+ */
+function AdmissionNote({ expiresAt, onEnd }: { expiresAt: string; onEnd: () => void }) {
+  const left = useCountdown(expiresAt, { onExpire: onEnd });
+  return (
+    <section
+      aria-labelledby="admission-heading"
+      className="mt-4 flex max-w-2xl flex-col gap-3 rounded-md border border-sky-300 bg-sky-50 p-4 text-sky-950"
+    >
+      <h2 id="admission-heading" className="font-semibold">
+        It’s your turn
+      </h2>
+      <p>
+        The waiting room has let you in. Hold your tickets before your turn ends; once they’re held,
+        the hold’s own timer gives you time to check out.
+      </p>
+      <TimeLeft seconds={left} label="Your turn ends in" />
+    </section>
   );
 }
