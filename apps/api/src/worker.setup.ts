@@ -7,7 +7,8 @@ import { WorkerAppModule } from './worker-app.module.js';
 
 /**
  * The standalone worker (`src/worker.ts`), shared with the tests: the background jobs plus an HTTP
- * server with only `GET /health` and `GET /health/ready`, for container health checks. Call
+ * server with only `GET /health` and `GET /health/ready` (container health checks) and
+ * `GET /metrics` (Prometheus). Call
  * `listen()` (or `init()` in tests) on the result.
  */
 export async function createWorkerApp(

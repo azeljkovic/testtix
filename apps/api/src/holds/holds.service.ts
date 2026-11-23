@@ -13,6 +13,7 @@ import type { Prisma } from '../generated/prisma/client.js';
 import { PrismaService } from '../infra/prisma.service.js';
 import { uuidv7 } from '../infra/uuid.js';
 import { deleteHold, lockHoldUnits, lockUserEvent } from './hold-locks.js';
+import { HoldMetrics } from './hold-metrics.js';
 import type { Hold } from './holds.schemas.js';
 import { publishedEventNotFound } from './seat-map.service.js';
 
@@ -51,9 +52,21 @@ export class HoldsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly clock: ClockService,
+    private readonly metrics: HoldMetrics,
   ) {}
 
   async create(userId: string, eventId: string, input: HoldRequest): Promise<Hold> {
+    try {
+      const hold = await this.claim(userId, eventId, input);
+      this.metrics.record();
+      return hold;
+    } catch (err) {
+      this.metrics.record(err);
+      throw err;
+    }
+  }
+
+  private async claim(userId: string, eventId: string, input: HoldRequest): Promise<Hold> {
     const now = await this.clock.now();
     return this.prisma.$transaction(async (tx) => {
       const event = await shareLockPublishedEvent(tx, eventId);

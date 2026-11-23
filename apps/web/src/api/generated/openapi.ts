@@ -193,7 +193,7 @@ export interface paths {
         };
         /**
          * Prometheus metrics
-         * @description Default Node.js process metrics.
+         * @description Node.js process metrics, HTTP requests, holds, orders, waiting rooms, rate limits and, where the worker runs in this process, background jobs (`testtix_*`; see the testing guide).
          */
         get: operations["MetricsController_metrics"];
         put?: never;

@@ -220,6 +220,42 @@ describe('GET /metrics', () => {
     expect(res.text).toContain('# TYPE process_cpu_user_seconds_total counter');
     expect(res.text).toContain('nodejs_eventloop_lag_seconds');
   });
+
+  it('counts responses by route pattern, never by requested path', async () => {
+    const server = (await start()).getHttpServer();
+    await request(server).get('/health').expect(200);
+    await request(server).get('/health').expect(200);
+    await request(server).post('/__probe/echo').send({ name: 'x' }).expect(400);
+    await request(server).get('/no/such/path/123').expect(404);
+    await request(server).get('/events/not-a-uuid/seats').expect(400);
+
+    const res = await request(server).get('/metrics').expect(200);
+    expect(res.text).toContain(
+      'testtix_http_requests_total{method="GET",route="/health",status="200"} 2',
+    );
+    expect(res.text).toContain(
+      'testtix_http_requests_total{method="POST",route="/__probe/echo",status="400"} 1',
+    );
+    expect(res.text).toContain(
+      'testtix_http_requests_total{method="GET",route="(unmatched)",status="404"} 1',
+    );
+    expect(res.text).toContain(
+      'testtix_http_requests_total{method="GET",route="/events/:eventId/seats",status="400"} 1',
+    );
+    expect(res.text).not.toContain('/no/such/path');
+    expect(res.text).not.toContain('not-a-uuid');
+    expect(res.text).toMatch(
+      /testtix_http_request_duration_seconds_count\{method="GET",route="\/health"\} 2/,
+    );
+  });
+
+  it('still answers when the database is down, leaving out the figures it reads', async () => {
+    const res = await request((await start({ database: down })).getHttpServer()).get('/metrics');
+    expect(res.status).toBe(200);
+    expect(res.text).toContain('testtix_hold_requests_total{outcome="created"} 0');
+    expect(res.text).not.toMatch(/^testtix_orders\{/m);
+    expect(res.text).not.toMatch(/^testtix_held_tickets\{/m);
+  });
 });
 
 describe('headers', () => {
