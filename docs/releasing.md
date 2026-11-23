@@ -15,7 +15,7 @@ So a release is always a commit that passed CI, and its images are the ones CI t
 
 **Versions.** Before 1.0, `feat` commits bump the minor version and everything else the patch; breaking changes (`feat!:` or a `BREAKING CHANGE:` footer) also bump only the minor version (`bump-minor-pre-major`). The first release is `0.1.0` (`initial-version`). `0.x` releases are marked **pre-release** on GitHub; from `1.0.0` they aren't. To release 1.0 (C6.5), merge a commit with the footer `Release-As: 1.0.0`; release-please proposes that version next.
 
-**Changelog.** Sections for `feat`, `fix`, `perf`, `revert` and `docs` commits; `chore`, `ci`, `test`, `refactor`, `build` and `style` commits are left out. Merge commits aren't Conventional Commits and are skipped, so the PR's own commits are what counts. `CHANGELOG.md` is written by release-please only (Prettier ignores it). Configuration: `release-please-config.json`; the last released version: `.release-please-manifest.json`.
+**Changelog.** Sections for `feat`, `fix`, `perf`, `revert` and `docs` commits; `chore`, `ci`, `test`, `refactor`, `build` and `style` commits are left out. A merged PR counts twice: its own commits, and its title, which GitHub writes into the merge commit's body (release-please reads every Conventional Commit header that follows a blank line in a message). So give PRs Conventional titles, as the commits have. `CHANGELOG.md` is written by release-please only (Prettier ignores it). Configuration: `release-please-config.json`; the last released version: `.release-please-manifest.json`.
 
 ## Setting up
 
