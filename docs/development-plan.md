@@ -382,6 +382,10 @@ Claude's workspace has no Docker daemon, so Testcontainers can't run there. Beca
 - Compose `full` profile runs everything. API replicas sit behind Caddy.
 - CI builds the images and pushes to GHCR on `main` (SHA tag) and on tags (semver tag).
 - Verify: from a clean machine, `docker compose --profile full up` passes a smoke script (health checks, a test purchase through the API).
+- Also added: one api image for the API, the worker and the migrations (`prisma` is now a runtime dependency); a `migrate` service that also seeds an empty database (`seed --if-empty`); the standalone worker serves `/health` and `/health/ready` on `WORKER_PORT` (3001); Caddy serves the web app on `WEB_PORT` (5173) and the API on `PORT` (3000), the `pnpm dev` addresses; `pnpm full:up|check|down|reset`; CI pushes only images that passed the smoke test, after every other job (`ghcr.io/azeljkovic/testtix/{api,web,fake-payments}`, tags `sha-<7>`, `main`, semver, `latest`), linux/amd64 only.
+- For C6.2: scrape the API replicas (Prometheus' Docker or DNS discovery of `api`, port 3000, `/metrics`) and the worker on port 3001, where its metrics endpoint goes. The API logs every request, health checks included.
+- For C6.3: the demo can run the `full` profile with registry images (`TESTTIX_IMAGE_REGISTRY`, `TESTTIX_IMAGE_TAG`) behind a TLS-terminating Caddy in front of `web`; set `COOKIE_SECURE=true` there (the profile defaults it to false), `TEST_API_KEY`, `LOAD_TEST_KEY`, and real secrets for `PAYMENTS_*` and `POSTGRES_PASSWORD`. GHCR packages start private: make them public (package settings) so the tests repo and the VPS can pull without a token.
+- For C6.4: release tags `v*` already publish semver image tags; the dispatch to the tests repo can send `sha-<7>` or the version.
 
 **C6.2 Observability**
 

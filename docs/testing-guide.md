@@ -2,7 +2,7 @@
 
 How to test TestTix from the outside: what the API promises, and the hooks it gives testers: [test mode](#test-mode) with its [test API](#test-api-reference), the [server clock](#the-server-clock), [seed scenarios](#seed-scenarios), [test cards](#test-cards), the [polling contract](#polling-retryafterms) and [ways to keep tests independent](#keeping-tests-independent).
 
-**The examples run as written.** Every `sh` block in this guide works against a local API in test mode (`cp .env.example .env`, `pnpm infra:up`, `pnpm db:deploy`, `pnpm --filter @testtix/api dev`), with `curl` 7.82 or later and `jq`. CI runs them all, each after a [`POST /__test/reset`](#resetting-the-data): `pnpm docs:examples` does the same against your local API (it resets the data).
+**The examples run as written.** Every `sh` block in this guide works against a local API in test mode (`cp .env.example .env`, `pnpm infra:up`, `pnpm db:deploy`, `pnpm --filter @testtix/api dev`), with `curl` 7.82 or later and `jq`. CI runs them all, each after a [`POST /__test/reset`](#resetting-the-data): `pnpm docs:examples` does the same against your local API (it resets the data). They work the same against the app in containers (`pnpm full:up`, see the [README](../README.md#running-everything-in-containers)), which serves the API at the same address.
 
 ## Web app basics
 
