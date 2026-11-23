@@ -159,6 +159,25 @@ Admins only (log in as `admin@testtix.test`, see [Seeded accounts](#seeded-accou
 - Test-only endpoints live under `/__test/*` and are tagged `test` in the spec; see [Test mode](#test-mode).
 - Requests are [rate limited](#rate-limits) per client address; a 429 says how long to wait in `Retry-After`.
 
+## Hosted demo
+
+The public demo runs the same images as `pnpm full:up`, with test mode on, over HTTPS. Its domain is announced in the README once it is live; below it is `DEMO_DOMAIN`.
+
+| Address                    | What                                                                                          |
+| -------------------------- | --------------------------------------------------------------------------------------------- |
+| `https://DEMO_DOMAIN`      | the web app (the API under `/api`, as locally)                                                |
+| `https://api.DEMO_DOMAIN`  | the API, at the same paths as `http://localhost:3000` (`/openapi.json`, `/docs`, `/__test/*`) |
+| `https://pay.DEMO_DOMAIN`  | the [payment page](#payment-page)                                                             |
+| `https://mail.DEMO_DOMAIN` | Mailpit, behind a login: ask the maintainer for it                                            |
+
+It is shared, so it differs from a local instance in a few ways:
+
+- [`POST /__test/reset`](#resetting-the-data) and [`POST /__test/clock`](#the-server-clock) need the [`X-Test-Key`](#test-api-key) header, and the key isn't public. Build your data with [seed scenarios](#seed-scenarios) and [test sessions](#logging-in-through-the-test-api), which only add rows (see [Keeping tests independent](#keeping-tests-independent)), and don't rely on the clock. For the same reason, this guide's examples (each starts with a reset) don't run there as written.
+- [Rate limits](#rate-limits) are on, with the defaults. Authorised load runs send `X-Load-Test-Key`.
+- Cookies are `Secure` (HTTPS only).
+- The data is reset every night at about 03:17 UTC: accounts, orders and sessions you created are gone, and Mailpit is emptied. The seed data comes back relative to the new day.
+- `/metrics` isn't public.
+
 ## Request IDs
 
 Every response has an `X-Request-Id` header. Send your own (1–128 characters from `A-Z a-z 0-9 . _ : -`) to correlate a test step with server logs; anything else is replaced with a generated UUID. The ID appears as `req.id` in the API's JSON log lines and as `requestId` in error bodies.

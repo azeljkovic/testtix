@@ -1,0 +1,58 @@
+# Edge of the hosted demo (docker/demo/compose.yml): the only public entry point. It gets TLS
+# certificates for four names under DEMO_DOMAIN (automatic HTTPS, kept in the `caddy-data` volume),
+# redirects HTTP to HTTPS and forwards to the containers:
+#
+#   DEMO_DOMAIN        the web app, with the API under /api   → web:8080
+#   api.DEMO_DOMAIN    the API itself (like :3000 locally)    → web:3000 (spread over the replicas)
+#   pay.DEMO_DOMAIN    the fake provider's payment page       → fake-payments:4000
+#   mail.DEMO_DOMAIN   Mailpit's UI and API (basic auth)      → mailpit:8025
+#
+# Caddy writes the client address it saw into X-Forwarded-For, replacing anything the client sent,
+# and the web Caddy behind it keeps that value (TRUSTED_PROXIES), so rate limits count per client.
+{
+	admin off
+	log {
+		output stdout
+		format json
+	}
+}
+
+# Prometheus metrics stay private (Prometheus scrapes the replicas directly), and so does every
+# other path but the payment page on the provider. `path` matching is case-insensitive and
+# Caddy cleans the path first (`//metrics`, `/./metrics`); the regexp covers `/metrics/…`.
+(no-metrics) {
+	@metrics path_regexp ^{args[0]}/+metrics(/.*)?$
+	respond @metrics 404
+}
+
+{$DEMO_DOMAIN} {
+	import no-metrics /api
+	reverse_proxy web:8080
+}
+
+api.{$DEMO_DOMAIN} {
+	import no-metrics ""
+	reverse_proxy web:3000
+}
+
+pay.{$DEMO_DOMAIN} {
+	# The payment page and its stylesheet. The rest (sessions, health) is for the API only.
+	@page path /pay/* /assets/*
+	handle @page {
+		reverse_proxy fake-payments:4000
+	}
+	handle {
+		respond 404
+	}
+}
+
+mail.{$DEMO_DOMAIN} {
+	# Mailpit asks for the MAILPIT_UI_AUTH credentials itself (UI and API).
+	reverse_proxy mailpit:8025
+}
+
+# The container's health check, inside the container only.
+:8081 {
+	bind 127.0.0.1
+	respond /health 200
+}

@@ -17,6 +17,8 @@
 #                  (`pnpm observability:up`, next to `full` or `pnpm dev`; see the README)
 # Services without a profile (postgres, redis, mailpit, fake-payments) always start.
 #
+# The hosted demo layers docker/demo/compose.yml over this file (docs/hosted-demo.md).
+#
 # Images are built from the Dockerfiles, or pulled from a registry instead (`full:up` without
 # `--build`): TESTTIX_IMAGE_REGISTRY=ghcr.io/azeljkovic/testtix TESTTIX_IMAGE_TAG=<tag>.
 

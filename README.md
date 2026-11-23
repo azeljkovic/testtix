@@ -185,6 +185,10 @@ Grafana opens on the dashboard, without a login (anyone who reaches the port is 
 
 The dashboard is `docker/observability/grafana/dashboards/ticket-drop.json`. Change it there (Grafana reloads it within 10 s); edits made in the UI can't be saved over it, only as a copy. The metrics themselves are listed in the [testing guide](docs/testing-guide.md#metrics).
 
+## Hosted demo
+
+A public demo runs the published images on one server behind Caddy with automatic TLS: the shop, the API on its own host name, the payment page and Mailpit (behind a login), with test mode on and the data reset every night. The **Demo deploy** workflow deploys every commit on `main` once CI has pushed its images, and `pnpm demo:check` smoke-tests it from anywhere. Setup, deploys, rollbacks and the nightly reset are in [docs/hosted-demo.md](docs/hosted-demo.md); what testers need to know is in the [testing guide](docs/testing-guide.md#hosted-demo).
+
 ## Scripts
 
 | Command                    | What it does                                                |
@@ -217,6 +221,7 @@ The dashboard is `docker/observability/grafana/dashboards/ticket-drop.json`. Cha
 | `pnpm observability:check` | Smoke-tests them, with a short drop (adds data)             |
 | `pnpm observability:load`  | Runs a short drop against the API to fill the dashboard     |
 | `pnpm observability:down`  | Stops Prometheus and Grafana, keeping their data            |
+| `pnpm demo:check`          | Smoke-tests the hosted demo over HTTPS (adds data)          |
 
 ## Tech stack
 
