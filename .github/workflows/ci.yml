@@ -2,10 +2,10 @@ name: CI
 
 on:
   pull_request:
+  # Release tags aren't built here: the Release workflow gives the tested `sha-<7>` images of the
+  # release commit their version tags.
   push:
     branches: [main]
-    # Release tags (C6.4): the images get semver tags too.
-    tags: ['v*']
 
 permissions:
   contents: read
@@ -314,8 +314,8 @@ jobs:
       - name: Load the images
         run: zstd -dc images.tar.zst | docker load
 
-      # ghcr.io/<owner>/testtix/{api,web,fake-payments}: `sha-<commit>` always, `main` from main,
-      # and `<major>.<minor>.<patch>`, `<major>.<minor>` and `latest` from release tags.
+      # ghcr.io/<owner>/testtix/{api,web,fake-payments}: `sha-<commit>` and `main`. Releases add
+      # `<major>.<minor>.<patch>`, `<major>.<minor>` and `latest` (release.yml).
       - name: Image tags
         id: meta
         uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
@@ -327,8 +327,6 @@ jobs:
           tags: |
             type=sha
             type=ref,event=branch
-            type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
 
       - name: Log in to GHCR
         uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4.8.0

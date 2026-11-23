@@ -2,7 +2,7 @@
   "name": "testtix",
   "version": "0.0.0",
   "private": true,
-  "description": "TestTix \u2014 a sample event ticket shop built as a realistic target for software testing practice.",
+  "description": "TestTix — a sample event ticket shop built as a realistic target for software testing practice.",
   "license": "MIT",
   "type": "module",
   "packageManager": "pnpm@10.34.9",

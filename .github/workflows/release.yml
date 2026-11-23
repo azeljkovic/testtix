@@ -1,0 +1,187 @@
+name: Release
+
+# Releases (docs/releasing.md). After CI passes on a `main` push, release-please opens or updates
+# the release PR: the next version and CHANGELOG.md from the Conventional Commits since the last
+# release. Merging that PR runs CI again; when it passes, release-please tags the merge commit
+# `v<version>` and creates the GitHub Release. `publish` then gives that commit's images, which CI
+# tested and pushed as `sha-<7>`, the release's tags, attaches openapi.json and sends a
+# `repository_dispatch` to the tests repo. Run it by hand with a tag to repeat `publish` for an
+# existing release (say, after CI had failed on the release commit and was re-run).
+
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing release tag to publish again (images, openapi.json, tests repo), e.g. v0.1.0
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  release-please:
+    name: Release PR or release
+    if: >-
+      github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'push'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: write
+      issues: write
+      pull-requests: write
+    outputs:
+      created: ${{ steps.release.outputs.release_created }}
+      tag: ${{ steps.release.outputs.tag_name }}
+    steps:
+      # Reads the config and the commits through the API; no checkout needed. With GITHUB_TOKEN, the
+      # release PR doesn't start CI (GitHub's rule against workflow loops); the merge commit's CI
+      # run gates the release instead.
+      - name: Release PR or release
+        id: release
+        uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7 # v5.0.0
+        with:
+          config-file: release-please-config.json
+          manifest-file: .release-please-manifest.json
+          target-branch: main
+
+  publish:
+    name: Publish the release
+    needs: release-please
+    if: >-
+      !cancelled() && (github.event_name == 'workflow_dispatch' ||
+      (needs.release-please.result == 'success' && needs.release-please.outputs.created == 'true'))
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: write
+      packages: write
+    env:
+      TAG: ${{ inputs.tag || needs.release-please.outputs.tag }}
+      IMAGES: ghcr.io/${{ github.repository }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Find the release
+        id: release
+        run: |
+          if [[ ! "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::Not a release tag: '$TAG' (expected v<major>.<minor>.<patch>)" >&2
+            exit 1
+          fi
+          gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json url,isPrerelease > release.json
+          sha="$(gh api "repos/$GITHUB_REPOSITORY/commits/$TAG" --jq .sha)"
+          version="${TAG#v}"
+          # `<major>.<minor>` and `latest` follow the highest release, so re-publishing an older
+          # one never moves them back.
+          highest="$(gh release list --repo "$GITHUB_REPOSITORY" --limit 1000 --json tagName \
+            --jq '.[].tagName' | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -n 1)"
+          {
+            echo "sha=$sha"
+            echo "version=$version"
+            echo "minor=${version%.*}"
+            echo "highest=$([[ "$highest" == "$TAG" ]] && echo true || echo false)"
+            echo "url=$(jq -r .url release.json)"
+            echo "prerelease=$(jq -r .isPrerelease release.json)"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Check out the release commit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ steps.release.outputs.sha }}
+
+      - name: Log in to GHCR
+        uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4.8.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # No rebuild: the release images are the ones CI tested for this commit, tagged in the
+      # registry. All three are checked before any gets a tag.
+      - name: Tag the images
+        env:
+          SHA: ${{ steps.release.outputs.sha }}
+          VERSION: ${{ steps.release.outputs.version }}
+          MINOR: ${{ steps.release.outputs.minor }}
+          HIGHEST: ${{ steps.release.outputs.highest }}
+        run: |
+          names=(api web fake-payments)
+          for name in "${names[@]}"; do
+            if ! docker buildx imagetools inspect "$IMAGES/$name:sha-${SHA::7}" > /dev/null; then
+              echo "::error::$IMAGES/$name:sha-${SHA::7} is missing: CI hasn't pushed the images of $SHA. Re-run CI for that commit, then run this workflow by hand with tag $TAG." >&2
+              exit 1
+            fi
+          done
+          for name in "${names[@]}"; do
+            tags=(--tag "$IMAGES/$name:$VERSION")
+            if [[ "$HIGHEST" == true ]]; then
+              tags+=(--tag "$IMAGES/$name:$MINOR" --tag "$IMAGES/$name:latest")
+            fi
+            docker buildx imagetools create "${tags[@]}" "$IMAGES/$name:sha-${SHA::7}"
+            echo "Tagged $IMAGES/$name:sha-${SHA::7} as: ${tags[*]}"
+          done
+
+      # The committed spec, which CI checked against the code; its version must be the release's.
+      - name: Attach openapi.json
+        env:
+          VERSION: ${{ steps.release.outputs.version }}
+        run: |
+          spec_version="$(jq -r .info.version apps/api/openapi.json)"
+          if [[ "$spec_version" != "$VERSION" ]]; then
+            echo "::error::apps/api/openapi.json says version $spec_version, the release is $VERSION." >&2
+            exit 1
+          fi
+          gh release upload "$TAG" apps/api/openapi.json --repo "$GITHUB_REPOSITORY" --clobber
+
+      # Contract for the tests repo: docs/releasing.md#tests-repo-dispatch. Skipped until the
+      # repository variable TESTS_REPO is set.
+      - name: Tell the tests repo
+        env:
+          TESTS_REPO: ${{ vars.TESTS_REPO }}
+          DISPATCH_TOKEN: ${{ secrets.TESTS_REPO_DISPATCH_TOKEN }}
+          SHA: ${{ steps.release.outputs.sha }}
+          VERSION: ${{ steps.release.outputs.version }}
+          PRERELEASE: ${{ steps.release.outputs.prerelease }}
+          RELEASE_URL: ${{ steps.release.outputs.url }}
+        run: |
+          if [[ -z "$TESTS_REPO" ]]; then
+            echo "::notice::Repository variable TESTS_REPO isn't set; no dispatch sent."
+            exit 0
+          fi
+          if [[ -z "$DISPATCH_TOKEN" ]]; then
+            echo "::error::TESTS_REPO is $TESTS_REPO, but the secret TESTS_REPO_DISPATCH_TOKEN is missing." >&2
+            exit 1
+          fi
+          jq -n \
+            --arg version "$VERSION" --arg tag "$TAG" --arg sha "$SHA" \
+            --argjson prerelease "$PRERELEASE" --arg registry "$IMAGES" \
+            --arg release_url "$RELEASE_URL" \
+            --arg openapi_url "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/releases/download/$TAG/openapi.json" \
+            '{event_type: "testtix-release", client_payload: {
+              version: $version, tag: $tag, sha: $sha, prerelease: $prerelease,
+              image_registry: $registry, image_tag: $version,
+              release_url: $release_url, openapi_url: $openapi_url}}' > dispatch.json
+          cat dispatch.json
+          GH_TOKEN="$DISPATCH_TOKEN" gh api "repos/$TESTS_REPO/dispatches" --input dispatch.json
+          echo "Sent testtix-release for $TAG to $TESTS_REPO."
+
+      - name: Summary
+        env:
+          VERSION: ${{ steps.release.outputs.version }}
+          RELEASE_URL: ${{ steps.release.outputs.url }}
+        run: |
+          {
+            echo "### Released $TAG"
+            echo
+            echo "- Release: $RELEASE_URL"
+            echo "- Images: \`$IMAGES/{api,web,fake-payments}:$VERSION\`"
+          } >> "$GITHUB_STEP_SUMMARY"
