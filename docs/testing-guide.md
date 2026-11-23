@@ -18,21 +18,24 @@ How to test TestTix from the outside: what the API promises, and the hooks it gi
 | `/login`                | anyone    | Email, Password. Goes to `redirectTo` (or `/`) afterwards                                                   |
 | `/verify-email?token=…` | anyone    | The landing page of the [verification email](#email-verification): verifies the token and shows the outcome |
 | `/account`              | logged in | Name, email, verification status and account type; unverified users get "Send a new verification email"     |
+| `/orders`               | logged in | [Your orders](#checkout-and-order-pages), newest first                                                      |
+| `/orders/<order id>`    | logged in | [One order](#order-page): its status, and its tickets once confirmed                                        |
 | `/admin`                | admins    | The [admin area](#admin-pages); redirects to `/admin/events`                                                |
 
-- **Header.** Visitors see "Log in" and "Register" links, which return to the current page. A logged-in user gets a menu button named `<name>, account menu` with "Account", "Admin" (admins only) and "Log out". Logging out goes to the home page.
-- **Guards.** A visitor opening `/account` or any `/admin/…` page is sent to `/login?redirectTo=<path>`. A customer opening an admin page stays on the URL and sees "Access denied". `redirectTo` must be a path on the same site; anything else (`https://…`, `//host`) is ignored and the login goes to `/`.
+- **Header.** Visitors see "Log in" and "Register" links, which return to the current page. A logged-in user gets a menu button named `<name>, account menu` with "Account", "Your orders", "Admin" (admins only) and "Log out". Logging out goes to the home page.
+- **Guards.** A visitor opening `/account`, a checkout or order page, or any `/admin/…` page is sent to `/login?redirectTo=<path>`. A customer opening an admin page stays on the URL and sees "Access denied". `redirectTo` must be a path on the same site; anything else (`https://…`, `//host`) is ignored and the login goes to `/`.
 - **Validation.** The forms check the same rules as the API before sending anything (see [Accounts and sessions](#accounts-and-sessions)) and show the API's own messages, such as "Password must be at least 8 characters", under the field. The field gets `aria-invalid="true"`, the message is its accessible description, and the first invalid field gets focus. Errors the API reports for a field (a taken email) go to that field; others (wrong password, server or network errors) appear in an alert above the form.
 - **Verification page outcomes:** "Email verified", "Verification link expired", "Verification link not valid" (unknown or replaced token), "Verification link incomplete" (no token) and an error with "Try again". The expired and invalid pages offer "Send a new verification email" to the logged-in owner, or a "Log in" link to anyone else.
 - The page checks the session with `GET /api/auth/me` on load. For visitors that is a 401, which the browser console lists as a failed request; it isn't an app error.
 
 ### Event pages
 
-| Path                   | What it shows                                                                                        |
-| ---------------------- | ---------------------------------------------------------------------------------------------------- |
-| `/events`              | The [public catalogue](#public-catalogue): search, filters, sort and pages                           |
-| `/events/<slug>`       | One event: when and where, prices, sales details, ticket availability per section and the way to buy |
-| `/events/<slug>/seats` | The [seat map page](#seat-map-page): seat grids, GA steppers, the selection summary and the hold     |
+| Path                      | What it shows                                                                                        |
+| ------------------------- | ---------------------------------------------------------------------------------------------------- |
+| `/events`                 | The [public catalogue](#public-catalogue): search, filters, sort and pages                           |
+| `/events/<slug>`          | One event: when and where, prices, sales details, ticket availability per section and the way to buy |
+| `/events/<slug>/seats`    | The [seat map page](#seat-map-page): seat grids, GA steppers, the selection summary and the hold     |
+| `/events/<slug>/checkout` | The [checkout](#checkout-page): your held tickets, the time left and the way to the payment page     |
 
 - **The URL holds the whole list state**, with the API's parameter names: `q`, `category`, `venue`, `seating`, `availability`, `sort`, `order`, `page`, plus `from` / `to` as calendar days (`2026-12-01`). So `/events?category=TALK&sort=price&order=desc&page=2` opens exactly that list, and every change (a filter, a search, a page) is a history entry the back button undoes. Defaults are left out (the plain list is `/events`). A value the API wouldn't accept (`category=PARTY`, `page=0`, `from=2026-02-30`) is ignored.
 - **Debounced search.** The "Search" box (role `searchbox`, inside a `search` landmark named "Events") searches title and performer **300 ms** after the last keystroke (`SEARCH_DEBOUNCE_MS` in `packages/shared`), with one request for the whole pause. Enter searches at once. The URL gets `q` when the search runs, not while typing.
@@ -58,11 +61,50 @@ How to test TestTix from the outside: what the API promises, and the hooks it gi
 #### Hold flow
 
 - **Hold button.** Below "Your selection", while the event is on sale: "Hold seats" ("Hold tickets" for general-admission-only events), disabled until something is chosen. A visitor who isn't logged in gets a "Log in to hold tickets" link instead, which returns to the page after login. Pressing it sends [`POST /events/{eventId}/holds`](#holding-tickets) with the selection; while the request runs the button reads "Holding…" and ignores presses (`aria-disabled="true"`).
-- **The hold.** On success the summary is replaced by a region named "Your tickets are held", which gets the focus: a `timer` with the time left ("10:00", then "9:59", …), the "Held tickets" list ("Stalls, row B, seat 12 $89.00", "Floor, 2 tickets $20.00"), "Tickets" and "Total", and a "Release hold" button. The live region says "2 tickets held for 10 minutes." The map is refetched (your seats now show as `held`) and is read-only while the hold lasts: to change the tickets, release the hold and choose again. An existing hold (`GET /holds/current?eventId=…`) is shown the same way when the page loads, e.g. after a reload or in a second tab.
+- **The hold.** On success the summary is replaced by a region named "Your tickets are held", which gets the focus: a `timer` named "Time left" ("10:00", then "9:59", …), the "Held tickets" list ("Stalls, row B, seat 12 $89.00", "Floor, 2 tickets $20.00"), "Tickets" and "Total", a "Check out" link to the [checkout](#checkout-page) and a "Release hold" button. The live region says "2 tickets held for 10 minutes." The map is refetched (your seats now show as `held`) and is read-only while the hold lasts: to change the tickets, release the hold and choose again. An existing hold (`GET /holds/current?eventId=…`) is shown the same way when the page loads, e.g. after a reload or in a second tab.
 - **Countdown.** The time left is the hold's `expiresAt` minus the **browser's** clock (`Date.now()`), worked out again on every tick, with one `setTimeout` to the next whole second. So Playwright's `page.clock` controls it completely (`await page.clock.install({ time })`, then `fastForward('09:00')` / `runFor()`), and a tab whose timers were throttled shows the right time as soon as it wakes. The server's clock decides when the hold really ends: if you move the [server clock](#the-server-clock), move the browser's to match. At "1:00" the live region says "Less than a minute left on your hold." once, and the panel turns red ("Less than a minute left. When the timer runs out, the tickets are released.").
 - **Expiry.** At "0:00" the hold panel goes, an `alert` banner says "Your hold expired" ("The tickets were released, and the map now shows what’s available. …"), the selection is empty and the map is refetched. If the focus was in the hold panel it moves to the "Your selection" heading. A hold that had already expired when the page loaded expires at once.
 - **Release.** "Release hold" sends `DELETE /holds/{holdId}`; the summary comes back (focused), the live region says "Hold released. The tickets are available to others again." and the map is refetched. A hold that was already gone counts as released; any other failure shows an alert in the panel and keeps the hold.
 - **Conflicts.** A 409 `tickets-unavailable` shows an `alert` above the button ("Someone else got some of these tickets first, so nothing was held. …") with a list named "Tickets no longer available": the taken seats ("Stalls, row B, seat 1") and GA sections without enough places ("Floor: 1 left (you asked for 3)", or "none left"). The map is refetched, the taken seats drop out of the selection and GA quantities shrink to what's left, so pressing the button again holds the rest. Other failures show the API's message in the same place; a 409 `event-not-on-sale` also refetches the map (which then turns read-only), and a 401 says "Your session has ended. Log in again to hold tickets." and shows the login link.
+
+### Checkout and order pages
+
+The web side of [checkout and orders](#checkout-and-orders). Every page here needs a login.
+
+#### Checkout page
+
+`/events/<slug>/checkout` (heading "Check out") shows your [current hold](#holding-tickets) for the event:
+
+- **"Your tickets"** (a region) lists them as the hold panel does, in a list named "Tickets in this order", with "Tickets" and "Total". "‹ Back to the seat map" returns to the seat map, where the hold is still shown.
+- **"Payment"** (a region) has a `timer` named by its label "Time left to pay", with the same countdown rules as the [hold panel](#hold-flow) (browser clock; "Less than a minute left on your hold." in the page's `status` at 1:00), and a **"Pay $50.00"** button (the total). Pressing it sends [`POST /orders`](#checkout-and-orders) `{ holdId }`; the button reads "Checking out…", then "Opening the payment page…" and ignores presses while the browser goes to the order's `paymentUrl` on the [payment page](#payment-page). Checking out the same hold again (e.g. after the browser's Back button) gets the same order and payment page.
+- **Free tickets** (total $0.00): the region is named "Confirm your order" and the button "Confirm order". There is no payment page: the customer goes straight to the [order page](#order-page), which shows "Processing your payment" until the order is confirmed.
+- **Unverified email.** Instead of the button: "Verify your email address", with "Send a new verification email". A 403 `email-not-verified` from the API (the session was out of date) shows "Verify your email address before you check out." and the same section.
+- **Errors** appear in an `alert` above the button. A 503 `payment-provider-unavailable` says "We couldn’t reach the payment provider. Your tickets are still held: try again in a moment."; press the button again. A 409 `event-not-on-sale` says the event is no longer on sale.
+- **No hold.** Without a hold for the event (none yet, released, or already paid for, including a 404 from `POST /orders`) the page says "You have no tickets on hold for this event." with links "Choose tickets" and "Your orders".
+- **Expiry.** At "0:00", or on a 409 `hold-expired`, an `alert` says "Your hold expired" with "Choose tickets again"; the pay button goes.
+
+#### Order page
+
+`/orders/<order id>` is where the payment page returns the customer (its `returnUrl`, also behind its "Cancel and return to the shop" link), and where the [e-ticket email](#e-ticket-email) links. It shows the order's status in one `status` region holding the level-1 heading (also the page title) and a message, so screen readers announce every change:
+
+| Status            | Heading                      | What else the page shows                                                                                                       |
+| ----------------- | ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| `PENDING_PAYMENT` | "Waiting for your payment"   | `timer` "Time left to pay" (to `expiresAt`), "Continue to payment" (the `paymentUrl`, while there is one) and "Change tickets" |
+| `PROCESSING`      | "Processing your payment"    | Nothing to do: the page updates by itself                                                                                      |
+| `CONFIRMED`       | "Your tickets are confirmed" | "N tickets for <event>. We’ve emailed them to <email>." and the "Your tickets" list                                            |
+| `FAILED`          | "Payment failed"             | "Choose tickets again" (the seat map) and "Back to the event"                                                                  |
+| `EXPIRED`         | "Order expired"              | "Choose tickets again" and "Back to the event"                                                                                 |
+
+- **Polling.** The page polls `GET /orders/{orderId}`, waiting each response's `retryAfterMs` before the next request, and stops once that is null (a final status). Polling pauses while the tab is hidden and resumes when it is shown. A failed poll keeps the last status on screen with "We couldn’t check for updates: … We’ll keep trying." An unpaid order whose timer reaches 0:00 is fetched again at once.
+- **What you see after paying** depends on the [test card](#test-cards): with `4242…` the page may show "Waiting for your payment" or "Processing your payment" for a moment, then "Your tickets are confirmed"; the delayed-webhook card shows "Waiting for your payment" until the webhook arrives (`DELAYED_WEBHOOK_MS`); the decline cards end on "Payment failed", with the seats on sale again; the no-webhook card stays waiting until the order expires.
+- **"Order summary"** (a region): the event (a link), its time in the venue's time zone, the venue, the order number (its ID) and when it was ordered (in the browser's time zone). Until the order is confirmed it lists the tickets like the checkout page ("Tickets in this order").
+- **Tickets.** A confirmed order lists every ticket on its own line in "Your tickets": the place ("Stalls, row B, seat 12" or "General admission – Floor"), the price, "Ticket code <code>" and a "Download PDF" link named "Download PDF: <place>". The link is `/api/tickets/<ticket id>/pdf` ([`GET /tickets/{ticketId}/pdf`](#tickets)): a plain download that sends the session cookie.
+- **Refunds.** When the order has `refundDue` (a payment arrived after the order expired or failed), a note says the payment will be refunded and no tickets were sold for it.
+- An unknown order, someone else's order and an address that isn't an order ID all show "Order not found" with a link to "Your orders".
+
+#### Your orders
+
+`/orders` (heading "Your orders") is a table (caption "Your orders, newest first") with one row per order: the event (a link to the order page) and venue, the event's date (venue time zone), when it was ordered, the ticket count, the total and the status ("Awaiting payment", "Processing", "Confirmed", "Payment failed", "Expired"). 20 orders per page, with the same [pagination](#event-pages) links as the event list and `?page=N` in the URL. Without orders it says "You haven’t ordered any tickets yet." with "Browse events". The `confirmed-order` [scenario](#seed-scenarios) gives a customer with one confirmed order of three tickets.
 
 ### Admin pages
 
