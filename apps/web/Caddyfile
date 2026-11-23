@@ -8,8 +8,14 @@
 # requests over every address it has, one per replica of the compose `api` service.
 {
 	admin off
-	# Plain HTTP: TLS is the job of whatever runs in front (the hosted demo, C6.3).
+	# Plain HTTP: TLS is the job of whatever runs in front (the hosted demo's edge, docker/demo/).
 	auto_https off
+	servers {
+		# Proxies in front whose X-Forwarded-For is kept (Caddy appends to it): none by default, so
+		# Caddy replaces the header with the address it saw. The hosted demo sets `private_ranges`
+		# for its edge Caddy, which writes the real client address there.
+		trusted_proxies static {$TRUSTED_PROXIES}
+	}
 	# Logs as JSON lines on stdout, like the other services.
 	log {
 		output stdout
@@ -18,8 +24,8 @@
 }
 
 (api) {
-	# Without trusted_proxies, Caddy replaces any X-Forwarded-For from the client with the address
-	# it saw, so the API (TRUST_PROXY=true) counts rate limits per real client.
+	# Caddy replaces any X-Forwarded-For from an untrusted client with the address it saw (see
+	# trusted_proxies above), so the API (TRUST_PROXY=true) counts rate limits per real client.
 	reverse_proxy {
 		dynamic a {
 			name api

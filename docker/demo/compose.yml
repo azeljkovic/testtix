@@ -1,0 +1,82 @@
+# Hosted demo (C6.3): the `full` profile of docker/compose.yml with registry images, behind an edge
+# Caddy with automatic TLS (docker/demo/Caddyfile). Layered over the base file, so only the
+# differences are here. On the server, run it through docker/demo/compose.sh, which reads the
+# server's `.env` (written by the deploy workflow). See docs/hosted-demo.md.
+#
+# Every value without a default must be set: compose refuses to start without it.
+
+x-demo-api-environment: &demo-api-environment
+  WEB_BASE_URL: https://${DEMO_DOMAIN:?set DEMO_DOMAIN}
+  # Served over HTTPS only.
+  COOKIE_SECURE: 'true'
+  # Reset and clock affect every visitor, so they need the key on a shared instance.
+  TEST_API_KEY: ${TEST_API_KEY:?set TEST_API_KEY}
+  LOAD_TEST_KEY: ${LOAD_TEST_KEY:?set LOAD_TEST_KEY}
+  PAYMENTS_API_KEY: ${PAYMENTS_API_KEY:?set PAYMENTS_API_KEY}
+  PAYMENTS_WEBHOOK_SECRET: ${PAYMENTS_WEBHOOK_SECRET:?set PAYMENTS_WEBHOOK_SECRET}
+  MAIL_FROM: ${MAIL_FROM:-TestTix demo <no-reply@${DEMO_DOMAIN}>}
+
+services:
+  postgres:
+    environment:
+      # Read by Postgres only when it creates the database (the first start). base's DATABASE_URL
+      # uses the same variable, so it must stay URL-safe (letters and digits).
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}
+
+  mailpit:
+    environment:
+      # `user:password` pairs (space-separated) for the UI and its API.
+      MP_UI_AUTH: ${MAILPIT_UI_AUTH:?set MAILPIT_UI_AUTH}
+
+  fake-payments:
+    environment:
+      PUBLIC_BASE_URL: https://pay.${DEMO_DOMAIN}
+      PAYMENTS_API_KEY: ${PAYMENTS_API_KEY:?set PAYMENTS_API_KEY}
+      PAYMENTS_WEBHOOK_SECRET: ${PAYMENTS_WEBHOOK_SECRET:?set PAYMENTS_WEBHOOK_SECRET}
+
+  migrate:
+    environment: *demo-api-environment
+
+  api:
+    environment: *demo-api-environment
+
+  worker:
+    environment: *demo-api-environment
+
+  web:
+    environment:
+      # Keep the X-Forwarded-For that `edge` (on the compose network) writes.
+      TRUSTED_PROXIES: private_ranges
+
+  edge:
+    image: caddy:2.11.9-alpine
+    profiles: [full]
+    environment:
+      DEMO_DOMAIN: ${DEMO_DOMAIN:?set DEMO_DOMAIN}
+    ports:
+      - 80:80
+      - 443:443
+      - 443:443/udp
+    volumes:
+      - ./docker/demo/Caddyfile:/etc/caddy/Caddyfile:ro
+      # Certificates and the ACME account: keep them, or every restart asks Let's Encrypt again.
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on:
+      web:
+        condition: service_healthy
+      fake-payments:
+        condition: service_healthy
+      mailpit:
+        condition: service_healthy
+    healthcheck:
+      test: ['CMD', 'wget', '-q', '--spider', 'http://127.0.0.1:8081/health']
+      interval: 5s
+      timeout: 3s
+      retries: 30
+      start_period: 5s
+    restart: unless-stopped
+
+volumes:
+  caddy-data:
+  caddy-config:
