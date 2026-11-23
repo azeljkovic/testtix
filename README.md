@@ -58,7 +58,7 @@ Configuration comes from environment variables (see the API section of `.env.exa
 
 ### Background jobs
 
-Background jobs (BullMQ on Redis) run inside the API process by default, so `pnpm dev` needs nothing extra. Today that is the hold sweeper, which deletes expired holds every `HOLD_SWEEPER_INTERVAL_MS`, and order processing, which confirms or fails orders after their payment webhook (`JOB_PROCESSING_DELAY_MS`); without a worker, paid orders stay `PROCESSING`. To run the worker as its own process, so it can scale apart from the API, set `WORKER_IN_PROCESS=false` for the API and start the worker with the same environment:
+Background jobs (BullMQ on Redis) run inside the API process by default, so `pnpm dev` needs nothing extra. Today that is the hold sweeper, which deletes expired holds every `HOLD_SWEEPER_INTERVAL_MS`, order processing, which confirms or fails orders after their payment webhook (`JOB_PROCESSING_DELAY_MS`), and the waiting-room admission job, which lets customers of ticket drops in every `QUEUE_ADMISSION_INTERVAL_MS`; without a worker, paid orders stay `PROCESSING` and nobody leaves a waiting room. To run the worker as its own process, so it can scale apart from the API, set `WORKER_IN_PROCESS=false` for the API and start the worker with the same environment:
 
 ```sh
 pnpm --filter @testtix/api build

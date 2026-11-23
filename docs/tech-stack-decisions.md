@@ -194,7 +194,7 @@ Notes:
 - **Slugs** are generated from the name or title (`slugify()` in `packages/shared`) and numbered when taken (`-2`, `-3`); `insertWithSlug()` (`src/infra/slugs.ts`) retries a generated slug on a unique violation, and maps a violation on a client-chosen slug to 409 `slug-taken`.
 - **Ticket counts** are one grouped SQL query (`countUnits()`), counting `HELD` units with an expired `heldUntil` as available, matching the lazy hold expiry of C3.1.
 - **Pagination** helpers (`PageQuerySchema`, `pageSchema()`, `toPage()`) live in `packages/shared`, so C2.2 reuses the same `page` / `pageSize` / `total` / `totalPages` shape.
-- Not in C2.1: editing or deleting batches, and the drop settings (`waitingRoomEnabled`, admission rate), which arrive with C5.1.
+- Not in C2.1: editing or deleting batches, and the drop settings (`waitingRoomEnabled`, admission rate), which arrived with C5.1 (§3.4).
 
 **Public catalogue (C2.2)**
 
@@ -285,6 +285,19 @@ Order lifecycle: `PENDING_PAYMENT → PROCESSING → CONFIRMED | FAILED | EXPIRE
 - Redis sorted set per drop. Users get a queue token and are admitted at a configurable rate (N per second).
 - Admitted users get a short-lived admission token that is required to reach the seat map for that event.
 - Admin can schedule a drop (`sales_open_at`) and set the admission rate.
+
+**Waiting room API and admission job (C5.1)**
+
+- Drop settings are event fields the admin API sets: `waitingRoomEnabled` (default false), `admissionRatePerSec` (1–1000, default 10) and `admissionTokenTtlSec` (60–3600, default 600), next to `salesOpenAt`. `GET /events/{slug}` exposes `waitingRoomEnabled`.
+- `WaitingRoomModule` (`src/waiting-room/`): `POST /events/{eventId}/queue` and `GET /queue/{token}` (session required; other customers' tokens are 404). Statuses `PRE_SALE → WAITING → ADMITTED → EXPIRED` (`QUEUE_STATUSES` in `packages/shared`); `retryAfterMs` is capped at `QUEUE_POLL_INTERVAL_MS` (default 2000) and null for `ADMITTED` / `EXPIRED`.
+- **Redis layout** (`QueueStore`, keys `testtix:queue:*`): per event a sorted set of waiting user IDs, a sorted set of admitted user IDs scored by admission expiry, a hash user → "queue token, admission token, joined at", and a meta hash (`nextBatchAt`, admitted count, last rate); globally, token → owner lookups and the set of events with someone waiting. Joining and admitting are Lua scripts, so concurrent joins of one customer get one entry and concurrent admission runs never let a batch in twice. Times are server-clock values passed in; Redis key expiry (real time) is never used, so the test clock rules everything.
+- **Order:** the score of a customer who joins before `salesOpenAt` is random in `[0, 2^40)`; later ones get `2^42 + join time`. So pre-sale joiners are let in in a random order (equivalent to shuffling them at the opening), ahead of everyone after, who go in join order. Before the opening `position` is null, since later pre-sale joiners can still land ahead.
+- **Admission job:** queue `waiting-room` (`QueueAdmissionModule`, in `WorkerModule`), scheduler `admit-from-waiting-rooms` every `QUEUE_ADMISSION_INTERVAL_MS` (default 1000, real time). Each run reads the clock once and, per event with someone waiting, lets in `rate × batches due`: batch _i_ is due at `nextBatchAt + i` seconds, the first at the opening (or, for an idle queue, at its first joiner's join time). Without anyone waiting the cursor is dropped, so idle time saves up nothing. A frozen clock admits nobody new; `advanceBy` lets the due batches in at once. Events whose waiting room was turned off (or that are no longer published) let everyone in.
+- **Gate:** `WaitingRoomService.requireAdmission()` runs in `HoldsController` before the seat map and hold creation: for a published event with a waiting room it needs `X-Admission-Token` with an unexpired admission to that event (403 `queue-required`). The seat map is public, so it doesn't check whose token it is; holds do. Holds, orders and checkout after that don't need the token. It is a check before the service's transaction (one indexed event read plus Redis), so no locks are held across Redis.
+- **Rejoining** after the admission expired replaces the entry (new tokens at the back of the queue); joining while waiting or admitted returns the entry (200).
+- **Metrics** (`QueueMetrics`): `testtix_waiting_room_queue_length`, `testtix_waiting_room_admitted_total` and `testtix_waiting_room_admission_rate` with an `event_id` label, read from Redis at scrape time (one read per scrape), so every API replica reports the same values wherever the job runs.
+- `POST /__test/reset` empties the waiting rooms (`QueueStore.clear()`, after the data swap). Redis errors while Redis is down become 503 in the waiting-room paths.
+- Tests: `waiting-room.int.test.ts` runs the job body (`QueueAdmissionService.admit()`) directly with a frozen clock (worker off), plus one run with the worker on.
 
 ### 3.5 Real-time updates
 
@@ -379,7 +392,7 @@ Enabled when `TESTTIX_TEST_MODE=true`.
 
 **Implementation notes (C1.3)**
 
-- `POST /__test/reset` resets the clock first (or freezes it at an optional `freezeAt`), then truncates every table except `_prisma_migrations` and inserts the baseline seed for the clock's UTC day, all in **one transaction** (`resetAndSeedDatabase`). Other requests never see an empty database, a failure changes nothing, and the seed's advisory lock serializes concurrent resets and seeds. The body is optional, so `curl -X POST …/__test/reset` works; the optional `freezeAt` makes a reset fully reproducible (identical data hash). Later chunks clear their Redis state (queues, waiting rooms, rate limits) in `TestResetService` too.
+- `POST /__test/reset` resets the clock first (or freezes it at an optional `freezeAt`), then truncates every table except `_prisma_migrations` and inserts the baseline seed for the clock's UTC day, all in **one transaction** (`resetAndSeedDatabase`). Other requests never see an empty database, a failure changes nothing, and the seed's advisory lock serializes concurrent resets and seeds. The body is optional, so `curl -X POST …/__test/reset` works; the optional `freezeAt` makes a reset fully reproducible (identical data hash). It also empties the waiting rooms (C5.1); later chunks clear their Redis state (rate limits) in `TestResetService` too.
 - `POST /__test/seed/{scenario}` is **one route per scenario** (not a path parameter), so each documents its own response in OpenAPI and an unknown name is a plain 404. Scenarios are pure builders (`src/test-api/scenarios/scenarios.ts`) that reuse the seed's `buildCatalogue` and return the rows plus the response body; the service inserts the rows in one transaction.
 - Scenarios are additive and isolated: each run creates its own small venue, events and buyer, with random UUIDv7 IDs (`uuidv7(now)`, timestamp from `ClockService`) and a random 8-hex suffix in every slug, title and email. They don't depend on the baseline, so they also work on an empty database.
 - Sold inventory is backed by real data, as checkout will create it (C4): `CONFIRMED` orders of a scenario buyer (at most `maxTicketsPerOrder` items each), one order item and one ticket per unit. Buyers have the password hash `!locked`, which is not an argon2 hash, so nobody can log in as them; C1.4's login must treat a hash that doesn't parse as a wrong password, not a 500.
