@@ -333,10 +333,12 @@ Claude's workspace has no Docker daemon, so Testcontainers can't run there. Beca
 - The seat map and holds of drop events require a valid admission token. Without one you get 403 with the code `QUEUE_REQUIRED`.
 - Queue length and admission rate are exported to `/metrics`.
 - Verify: integration tests with a frozen clock (before open → advance → admitted in batches of N), an expired admission token, and joining twice returning the same token.
+- Also added: `GET /events/{slug}` has `waitingRoomEnabled`; turning the waiting room off lets everyone waiting in; joining again after an admission expired queues at the back with new tokens.
 
 **C5.2 Web: waiting room**
 
 - Pre-sale countdown, queue page with position and estimated wait (polling), a live region for position changes, and an automatic move to the seat map when admitted.
+- From C5.1: the event page knows a drop by `waitingRoomEnabled` (`GET /events/{slug}`). Join with `POST /events/{eventId}/queue` (201 new, 200 existing), poll `GET /queue/{token}` with `retryAfterMs` (null stops), statuses `PRE_SALE` / `WAITING` / `ADMITTED` / `EXPIRED` (`QUEUE_STATUSES`). Send `admission.token` in `X-Admission-Token` (`ADMISSION_TOKEN_HEADER`) on the seat map and hold requests; a 403 `queue-required` (expired admission included) means back to the queue. The admin event form doesn't have the drop settings yet (`waitingRoomEnabled`, `admissionRatePerSec`, `admissionTokenTtlSec`); add them here.
 - Verify: component tests for every queue state, plus axe checks.
 
 **C5.3 Rate limiting**
@@ -350,6 +352,7 @@ Claude's workspace has no Docker daemon, so Testcontainers can't run there. Beca
 **C5.4 Drop scenarios + testing guide**
 
 - Scenarios: `drop-in-5-min`, `drop-open-now`, `large-venue-drop` (sized for k6).
+- From C5.1: scenario events set `waitingRoomEnabled`, `admissionRatePerSec` and `admissionTokenTtlSec` on the event row; queues live in Redis, so a scenario can't pre-fill one (customers join through the API).
 - `docs/testing-guide.md` is completed: test mode, test API reference, all scenarios, test cards, the clock, data-isolation patterns and the polling contract (`retryAfterMs`).
 - Verify: each scenario runs from a clean reset, and the guide examples run as written (a script runs the curl examples in CI).
 

@@ -80,6 +80,7 @@ export const concertDetail: EventDetail = {
   venue: { ...riversideHall, address: '1 River Road' },
   description: 'A late-night set.\nDoors open at 11 PM.',
   maxTicketsPerOrder: 6,
+  waitingRoomEnabled: false,
   tickets: { total: 200, available: 180, held: 5, sold: 15 },
   sections: [
     {
@@ -108,6 +109,7 @@ export const meetupDetail: EventDetail = {
   venue: { ...loft23, address: '23 Mill Street' },
   description: 'Bring your flakiest test.',
   maxTicketsPerOrder: 4,
+  waitingRoomEnabled: false,
   tickets: { total: 60, available: 60, held: 0, sold: 0 },
   sections: [
     {

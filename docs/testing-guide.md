@@ -175,31 +175,33 @@ Branch on `type`, never on `title` or `detail`. App-specific types end in an err
 
 Problem types so far:
 
-| `type`                                             | Status | When                                                                                                                                                                   |
-| -------------------------------------------------- | ------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `about:blank`                                      | any    | Unknown route (404), malformed JSON (400), not logged in or session expired (401), missing or wrong `X-Test-Key` (401), logged in without the required role (403), 5xx |
-| `urn:testtix:problem:validation-error`             | 400    | Body, query or path parameters fail validation                                                                                                                         |
-| `urn:testtix:problem:invalid-credentials`          | 401    | Login with a wrong email or password                                                                                                                                   |
-| `urn:testtix:problem:csrf-token-invalid`           | 403    | A POST, PUT, PATCH or DELETE without a valid `X-CSRF-Token` header (see [CSRF](#csrf-tokens))                                                                          |
-| `urn:testtix:problem:email-already-registered`     | 409    | Registering an email that already has an account (`errors[0].path` is `email`)                                                                                         |
-| `urn:testtix:problem:verification-token-invalid`   | 400    | [Verifying an email](#email-verification) with an unknown or malformed token, or one replaced by a newer email                                                         |
-| `urn:testtix:problem:verification-token-expired`   | 400    | Verifying an email with an unused link past its expiry                                                                                                                 |
-| `urn:testtix:problem:email-already-verified`       | 409    | Asking for a new verification email when the address is already verified                                                                                               |
-| `urn:testtix:problem:slug-taken`                   | 409    | Creating or renaming a venue or event with a `slug` that is taken (`errors[0].path` is `slug`)                                                                         |
-| `urn:testtix:problem:venue-in-use`                 | 409    | Deleting a venue that an event uses                                                                                                                                    |
-| `urn:testtix:problem:layout-locked`                | 409    | Replacing a venue's `sections`, or changing an event's `venueId`, after tickets were released                                                                          |
-| `urn:testtix:problem:event-status-conflict`        | 409    | An [event action](#event-lifecycle) its status doesn't allow, e.g. publishing a published event or changing a cancelled one                                            |
-| `urn:testtix:problem:event-has-no-batches`         | 409    | Publishing an event without a ticket batch                                                                                                                             |
-| `urn:testtix:problem:event-already-started`        | 409    | Publishing an event whose `startsAt` has passed                                                                                                                        |
-| `urn:testtix:problem:event-has-sales`              | 409    | Unpublishing or deleting an event with tickets sold or held (or, for deleting, with orders)                                                                            |
-| `urn:testtix:problem:inventory-already-released`   | 409    | A batch lists a seat, or a whole section, that earlier batches already released (`errors` names each)                                                                  |
-| `urn:testtix:problem:ga-capacity-exceeded`         | 409    | A batch asks for more GA places than the section has left to release                                                                                                   |
-| `urn:testtix:problem:event-not-on-sale`            | 409    | [Holding tickets](#seat-maps-and-holds) before `salesOpenAt` or once the event has started; checking out once it is unpublished, cancelled or started                  |
-| `urn:testtix:problem:tickets-unavailable`          | 409    | A hold asks for a seat that is sold, held or not on sale, or for more GA places than are left. Extra members `unavailableSeatIds` and `gaShortfalls` say which         |
-| `urn:testtix:problem:email-not-verified`           | 403    | [Checking out](#checkout-and-orders) before verifying your email address                                                                                               |
-| `urn:testtix:problem:hold-expired`                 | 409    | Checking out a hold that has expired (or has no tickets left)                                                                                                          |
-| `urn:testtix:problem:payment-provider-unavailable` | 503    | Checking out while the payment provider is down, slow or answering errors. The order is kept: retry the same request                                                   |
-| `urn:testtix:problem:webhook-signature-invalid`    | 400    | A [payment webhook](#payment-webhooks) without valid signature headers, with a signature that doesn't match, or with a timestamp outside the replay window             |
+| `type`                                             | Status | When                                                                                                                                                                                |
+| -------------------------------------------------- | ------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `about:blank`                                      | any    | Unknown route (404), malformed JSON (400), not logged in or session expired (401), missing or wrong `X-Test-Key` (401), logged in without the required role (403), 5xx              |
+| `urn:testtix:problem:validation-error`             | 400    | Body, query or path parameters fail validation                                                                                                                                      |
+| `urn:testtix:problem:invalid-credentials`          | 401    | Login with a wrong email or password                                                                                                                                                |
+| `urn:testtix:problem:csrf-token-invalid`           | 403    | A POST, PUT, PATCH or DELETE without a valid `X-CSRF-Token` header (see [CSRF](#csrf-tokens))                                                                                       |
+| `urn:testtix:problem:email-already-registered`     | 409    | Registering an email that already has an account (`errors[0].path` is `email`)                                                                                                      |
+| `urn:testtix:problem:verification-token-invalid`   | 400    | [Verifying an email](#email-verification) with an unknown or malformed token, or one replaced by a newer email                                                                      |
+| `urn:testtix:problem:verification-token-expired`   | 400    | Verifying an email with an unused link past its expiry                                                                                                                              |
+| `urn:testtix:problem:email-already-verified`       | 409    | Asking for a new verification email when the address is already verified                                                                                                            |
+| `urn:testtix:problem:slug-taken`                   | 409    | Creating or renaming a venue or event with a `slug` that is taken (`errors[0].path` is `slug`)                                                                                      |
+| `urn:testtix:problem:venue-in-use`                 | 409    | Deleting a venue that an event uses                                                                                                                                                 |
+| `urn:testtix:problem:layout-locked`                | 409    | Replacing a venue's `sections`, or changing an event's `venueId`, after tickets were released                                                                                       |
+| `urn:testtix:problem:event-status-conflict`        | 409    | An [event action](#event-lifecycle) its status doesn't allow, e.g. publishing a published event or changing a cancelled one                                                         |
+| `urn:testtix:problem:event-has-no-batches`         | 409    | Publishing an event without a ticket batch                                                                                                                                          |
+| `urn:testtix:problem:event-already-started`        | 409    | Publishing an event whose `startsAt` has passed                                                                                                                                     |
+| `urn:testtix:problem:event-has-sales`              | 409    | Unpublishing or deleting an event with tickets sold or held (or, for deleting, with orders)                                                                                         |
+| `urn:testtix:problem:inventory-already-released`   | 409    | A batch lists a seat, or a whole section, that earlier batches already released (`errors` names each)                                                                               |
+| `urn:testtix:problem:ga-capacity-exceeded`         | 409    | A batch asks for more GA places than the section has left to release                                                                                                                |
+| `urn:testtix:problem:event-not-on-sale`            | 409    | [Holding tickets](#seat-maps-and-holds) before `salesOpenAt` or once the event has started; checking out once it is unpublished, cancelled or started; queueing once it has started |
+| `urn:testtix:problem:tickets-unavailable`          | 409    | A hold asks for a seat that is sold, held or not on sale, or for more GA places than are left. Extra members `unavailableSeatIds` and `gaShortfalls` say which                      |
+| `urn:testtix:problem:email-not-verified`           | 403    | [Checking out](#checkout-and-orders) before verifying your email address                                                                                                            |
+| `urn:testtix:problem:hold-expired`                 | 409    | Checking out a hold that has expired (or has no tickets left)                                                                                                                       |
+| `urn:testtix:problem:payment-provider-unavailable` | 503    | Checking out while the payment provider is down, slow or answering errors. The order is kept: retry the same request                                                                |
+| `urn:testtix:problem:webhook-signature-invalid`    | 400    | A [payment webhook](#payment-webhooks) without valid signature headers, with a signature that doesn't match, or with a timestamp outside the replay window                          |
+| `urn:testtix:problem:queue-required`               | 403    | The seat map or a hold of a [ticket drop](#ticket-drops-and-the-waiting-room) without a valid, unexpired admission token in `X-Admission-Token`                                     |
+| `urn:testtix:problem:no-waiting-room`              | 409    | Joining the queue of an event without a waiting room                                                                                                                                |
 
 ## Accounts and sessions
 
@@ -331,7 +333,7 @@ The routes take the event's **ID**, not its slug (`GET /events/{slug}` returns t
 
 ### Seat map
 
-`GET /events/{eventId}/seats` answers 404 unless the event is published. It has the event's `availability` (holds are only possible while it is `ON_SALE`), `maxTicketsPerOrder`, `holdDurationSec`, and **every section of the venue** in the venue's order:
+`GET /events/{eventId}/seats` answers 404 unless the event is published, and 403 `queue-required` for a [ticket drop](#ticket-drops-and-the-waiting-room) without an admission token. It has the event's `availability` (holds are only possible while it is `ON_SALE`), `maxTicketsPerOrder`, `holdDurationSec`, and **every section of the venue** in the venue's order:
 
 - **Seated sections** (`type: "SEATED"`) have `rows` (front first, each with its `label` and `index`) of `seats` (by number), each with its `id`, `number`, `priceCents` and `status`, and `available`, the number of `AVAILABLE` seats.
 - **GA sections** (`type: "GA"`) have their `capacity`, `available` (the most a hold can ask for there) and `prices`: available places by price, cheapest first. A hold takes the cheapest places, so the running total of _n_ places is the sum of the first _n_ from `prices`.
@@ -361,9 +363,10 @@ Rules, checked in this order:
 
 1. **400 `validation-error`** for an invalid body: no tickets, a seat or section listed twice, a quantity below 1, more than 20 tickets, unknown fields.
 2. **404** unless the event is published.
-3. **409 `event-not-on-sale`** before `salesOpenAt` or once the event has started.
-4. **400 `validation-error`** for more tickets (seats plus GA places) than the event's `maxTicketsPerOrder` (6 by default; `errors[0]` has `path: ""`, `code: "too_big"`), and for seats or sections that aren't at the event's venue (`seats.<i>` / `ga.<i>.sectionId`, `code: "not_found"`; a seated section in `ga` counts as not found).
-5. **409 `tickets-unavailable`** when any requested seat is sold, in an unexpired hold or not on sale, or a GA section has fewer claimable places than asked for. **Nothing is held**: a mixed request whose GA part fails doesn't hold its seats either. The body says what failed:
+3. **403 `queue-required`** for a [ticket drop](#ticket-drops-and-the-waiting-room) without your unexpired admission token in `X-Admission-Token`.
+4. **409 `event-not-on-sale`** before `salesOpenAt` or once the event has started.
+5. **400 `validation-error`** for more tickets (seats plus GA places) than the event's `maxTicketsPerOrder` (6 by default; `errors[0]` has `path: ""`, `code: "too_big"`), and for seats or sections that aren't at the event's venue (`seats.<i>` / `ga.<i>.sectionId`, `code: "not_found"`; a seated section in `ga` counts as not found).
+6. **409 `tickets-unavailable`** when any requested seat is sold, in an unexpired hold or not on sale, or a GA section has fewer claimable places than asked for. **Nothing is held**: a mixed request whose GA part fails doesn't hold its seats either. The body says what failed:
 
 ```json
 {
@@ -390,6 +393,71 @@ curl -s -X POST http://localhost:3000/__test/clock -H 'Content-Type: application
 `DELETE /holds/{holdId}` works on an expired hold too (204); it never takes back tickets someone else has held since.
 
 **Cleanup.** A background job, the hold sweeper, deletes expired holds and frees the tickets they still have, every `HOLD_SWEEPER_INTERVAL_MS` (default 60 seconds) by the server clock: after `advanceBy`, the next sweep picks them up. It is cleanup only, so no response above changes because of it, with two exceptions: once a hold has been swept, `DELETE /holds/{holdId}` and `POST /orders` with its ID answer 404 instead of 204 and 409 `hold-expired`. `HOLD_SWEEPER_ENABLED=false` turns it off (expired holds then stay in the database, with their tickets still available). The job runs inside the API by default; see [background jobs](../README.md#background-jobs) to run it as a separate worker.
+
+## Ticket drops and the waiting room
+
+An event with `waitingRoomEnabled` (set through the [admin API](#events)) is a **ticket drop**: customers queue in a waiting room and are let in a few at a time. Only customers let in can see its seat map and hold tickets; once they have a hold, checkout works as usual.
+
+| Endpoint                       | Session | What it does                                                                                |
+| ------------------------------ | ------- | ------------------------------------------------------------------------------------------- |
+| `POST /events/{eventId}/queue` | yes     | Joins the queue (201), or returns your current entry (200)                                  |
+| `GET /queue/{token}`           | yes     | Your entry: status, position, estimated wait, `retryAfterMs`, and the admission once let in |
+
+`POST` needs the [CSRF header](#csrf-tokens). Both answer the same body:
+
+```json
+{
+  "token": "pY3vS0wV2m9n1x8C4k7Q6d5b",
+  "eventId": "019ac6b2-…",
+  "status": "WAITING",
+  "joinedAt": "2026-12-01T09:59:12.000Z",
+  "salesOpenAt": "2026-12-01T10:00:00.000Z",
+  "position": 37,
+  "queueLength": 412,
+  "estimatedWaitMs": 3000,
+  "retryAfterMs": 2000,
+  "admission": null
+}
+```
+
+| `status`   | Meaning                                                                                                                    |
+| ---------- | -------------------------------------------------------------------------------------------------------------------------- |
+| `PRE_SALE` | Joined before `salesOpenAt`. `position` and `estimatedWaitMs` are null: the order is only fixed at the opening (see below) |
+| `WAITING`  | Sales are open. `position` 1 is next in; `estimatedWaitMs` comes from the position and the event's admission rate          |
+| `ADMITTED` | Let in. `admission` has the `token` and its `expiresAt`                                                                    |
+| `EXPIRED`  | The admission ran out. Join again to queue at the back                                                                     |
+
+**Rules**
+
+- **Joining** needs a published event with a waiting room (else 404, or 409 `no-waiting-room`) that hasn't started (409 `event-not-on-sale`). You can join any time before that, long before sales open too.
+- **One entry per customer and event.** Joining again while you wait or are admitted returns the same entry with 200, even for concurrent requests. Once your admission has expired, joining again gives a **new** entry at the back of the queue with new tokens (201); the old queue token then answers 404.
+- **Order.** Everyone who joins **before `salesOpenAt`** is let in in a **random order** once sales open (so arriving early doesn't help, but it puts you ahead of everyone who comes later). After the opening, customers are let in in **join order**, behind everyone who joined before it.
+- **Rate.** A background job lets in at most `admissionRatePerSec` customers per second of [server time](#the-server-clock): the first batch at the opening, the next one a second later, and so on. Customers who join an empty queue after the opening go in with the next run. An idle queue saves nothing up: a minute without anyone waiting doesn't let 60 batches in at once later.
+- **Admission tokens** last `admissionTokenTtlSec` (default 600 s) from the moment you are let in. Send yours in the **`X-Admission-Token`** header to `GET /events/{eventId}/seats` and `POST /events/{eventId}/holds`. Without one, with an expired one ("Your admission has expired. Join the queue again."), one for another event or, on holds, another customer's token, both answer **403 `queue-required`**. The seat map is public, so it only checks the token belongs to the event; holds also check it is yours. Holds you already have and checkout don't need the token, so an admission running out while you pay changes nothing.
+- **Turning the waiting room off** lets everyone still waiting in at the job's next run, and the seat map and holds stop asking for tokens. Turning it on mid-sale makes the seat map and new holds require a token from then on; existing holds are kept.
+- `GET /events/{slug}` has `waitingRoomEnabled`, so clients know to queue first.
+
+**Polling.** Wait `retryAfterMs` between polls of `GET /queue/{token}` (at most `QUEUE_POLL_INTERVAL_MS`, default 2000; before the opening, no later than the opening; at least 250 ms), and stop when it is null (`ADMITTED` or `EXPIRED`). `GET /queue/{token}` answers 404 for unknown tokens and other customers' tokens.
+
+**Time.** Everything follows the server clock, so a drop is testable without waiting. With a **frozen** clock nobody new is let in; every `advanceBy` lets in the batches that fell due (advance by 1 s for one batch, by 10 s for ten at once). The job itself runs every `QUEUE_ADMISSION_INTERVAL_MS` (default 1000 ms) of real time, so allow up to about a second after moving the clock (poll, don't sleep). It runs in the worker (inside the API by default; see [background jobs](../README.md#background-jobs)); without a worker, nobody is let in.
+
+```sh
+API=http://localhost:3000
+session=$(curl -s -X POST $API/__test/sessions -H 'Content-Type: application/json' -d '{"role":"CUSTOMER"}')
+auth=(-H "Cookie: $(echo "$session" | jq -r .cookie)" -H "X-CSRF-Token: $(echo "$session" | jq -r .csrfToken)")
+# Freeze the clock a minute before sales open, then queue
+curl -s -X POST $API/__test/clock -H 'Content-Type: application/json' -d '{"freezeAt":"<salesOpenAt minus 60 s>"}'
+token=$(curl -s -X POST "$API/events/$EVENT_ID/queue" "${auth[@]}" | jq -r .token)   # → status PRE_SALE
+# Open sales: the first batch goes in with the job's next run
+curl -s -X POST $API/__test/clock -H 'Content-Type: application/json' -d '{"advanceBy":60000}'
+curl -s "$API/queue/$token" "${auth[@]}" | jq '{status, position, admission}'
+# Once ADMITTED: the seat map with the admission token
+curl -s "$API/events/$EVENT_ID/seats" -H "X-Admission-Token: <admission.token>"
+```
+
+**Metrics.** `GET /metrics` has, per event that has had a queue (label `event_id`): `testtix_waiting_room_queue_length` (customers waiting), `testtix_waiting_room_admitted_total` (customers let in; `rate()` of it is the actual admission rate) and `testtix_waiting_room_admission_rate` (the configured rate the job last applied; 0 while the waiting room is off). Every API instance reports the same numbers, read from Redis.
+
+**Storage.** Waiting rooms live in Redis (`testtix:queue:*`), not Postgres. [`POST /__test/reset`](#resetting-the-data) empties them. While Redis is down, joining, polling and the token check answer 503 (500 in test mode, where the server clock itself lives in Redis).
 
 ## Payments
 
@@ -666,7 +734,7 @@ Responses list each section's `capacity` (its seats, or its GA capacity), the ve
 
 ### Events
 
-`POST /admin/events` takes `title` (1–200 characters), `performer` (1–200), `description` (1–5000), `category` (`CONCERT`, `TALK`, `MEETUP`), `venueId`, `startsAt`, `endsAt`, `salesOpenAt` (ISO 8601 date-times with `Z` or an offset), and optionally `slug`, `holdDurationSec` (60–3600, default 600) and `maxTicketsPerOrder` (1–20, default 6). Rules, checked against the [server clock](#the-server-clock):
+`POST /admin/events` takes `title` (1–200 characters), `performer` (1–200), `description` (1–5000), `category` (`CONCERT`, `TALK`, `MEETUP`), `venueId`, `startsAt`, `endsAt`, `salesOpenAt` (ISO 8601 date-times with `Z` or an offset), and optionally `slug`, `holdDurationSec` (60–3600, default 600), `maxTicketsPerOrder` (1–20, default 6) and the [drop settings](#ticket-drops-and-the-waiting-room) `waitingRoomEnabled` (default false), `admissionRatePerSec` (1–1000, default 10) and `admissionTokenTtlSec` (60–3600, default 600). Rules, checked against the [server clock](#the-server-clock):
 
 | Rule                               | Error (400 `validation-error`, `errors[].path`) |
 | ---------------------------------- | ----------------------------------------------- |
@@ -910,6 +978,7 @@ Unless noted, sales opened at D−30 15:00, and every batch puts all seats (or G
 
 1. It resets the server clock to the real time, or freezes it at `freezeAt` if the body has one.
 2. It deletes every row (users, sessions, holds, orders and scenario data included) and inserts the [baseline seed](#seed-data) for the clock's UTC date.
+3. It empties every [waiting room](#ticket-drops-and-the-waiting-room): queue and admission tokens stop working.
 
 The data swap is one database transaction: while it runs, other requests wait or see the old data, never an empty or half-seeded database. Concurrent resets run one after the other. On a server with a [test API key](#test-api-key) it needs `X-Test-Key`.
 

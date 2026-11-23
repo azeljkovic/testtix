@@ -109,6 +109,9 @@ export const draftEvent: AdminEvent = {
   salesOpenAt: '2026-12-01T15:00:00.000Z',
   holdDurationSec: 600,
   maxTicketsPerOrder: 6,
+  waitingRoomEnabled: false,
+  admissionRatePerSec: 10,
+  admissionTokenTtlSec: 600,
   tickets: counts(0),
   createdAt: '2026-11-20T10:00:00.000Z',
   updatedAt: '2026-11-20T10:00:00.000Z',
@@ -173,6 +176,9 @@ export function eventSummary(event: AdminEvent): AdminEventSummary {
     description: _description,
     holdDurationSec: _hold,
     maxTicketsPerOrder: _max,
+    waitingRoomEnabled: _waitingRoom,
+    admissionRatePerSec: _rate,
+    admissionTokenTtlSec: _ttl,
     batches: _batches,
     ...summary
   } = event;

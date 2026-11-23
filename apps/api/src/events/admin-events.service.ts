@@ -1,5 +1,7 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import {
+  ADMISSION_RATE_PER_SEC,
+  ADMISSION_TOKEN_TTL_SEC,
   type CreateEventRequest,
   EVENT_SCHEDULE_MESSAGES,
   eventScheduleIssues,
@@ -102,6 +104,9 @@ export class AdminEventsService {
               salesOpenAt: new Date(input.salesOpenAt),
               holdDurationSec: input.holdDurationSec ?? HOLD_DURATION_SEC.default,
               maxTicketsPerOrder: input.maxTicketsPerOrder ?? MAX_TICKETS_PER_ORDER.default,
+              waitingRoomEnabled: input.waitingRoomEnabled ?? false,
+              admissionRatePerSec: input.admissionRatePerSec ?? ADMISSION_RATE_PER_SEC.default,
+              admissionTokenTtlSec: input.admissionTokenTtlSec ?? ADMISSION_TOKEN_TTL_SEC.default,
               createdAt: now,
               updatedAt: now,
             },
@@ -179,6 +184,9 @@ export class AdminEventsService {
             salesOpenAt,
             holdDurationSec: input.holdDurationSec,
             maxTicketsPerOrder: input.maxTicketsPerOrder,
+            waitingRoomEnabled: input.waitingRoomEnabled,
+            admissionRatePerSec: input.admissionRatePerSec,
+            admissionTokenTtlSec: input.admissionTokenTtlSec,
             updatedAt: now,
           },
         });

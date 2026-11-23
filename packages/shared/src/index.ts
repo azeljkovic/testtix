@@ -12,3 +12,4 @@ export * from './problems.js';
 export * from './roles.js';
 export * from './slugs.js';
 export * from './venues.js';
+export * from './waiting-room.js';

@@ -19,6 +19,7 @@ import { OrdersModule } from './orders/orders.module.js';
 import { TestApiModule } from './test-api/test-api.module.js';
 import { TicketsModule } from './tickets/tickets.module.js';
 import { VenuesModule } from './venues/venues.module.js';
+import { WaitingRoomModule } from './waiting-room/waiting-room.module.js';
 
 @Module({})
 export class AppModule {
@@ -37,6 +38,7 @@ export class AppModule {
         MetricsModule,
         VenuesModule,
         EventsModule,
+        WaitingRoomModule,
         HoldsModule,
         OrdersModule,
         TicketsModule,

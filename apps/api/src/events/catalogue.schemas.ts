@@ -67,6 +67,11 @@ export const CatalogueEventSchema = z
       id: 'CatalogueEventVenue',
     }),
     maxTicketsPerOrder: count.describe('Most tickets in one hold or order'),
+    waitingRoomEnabled: z
+      .boolean()
+      .describe(
+        'A ticket drop: join the waiting room (`POST /events/{eventId}/queue`) before choosing seats',
+      ),
     tickets: TicketCountsSchema.describe('Released tickets by state, across all sections'),
     sections: z
       .array(CatalogueSectionSchema)

@@ -59,6 +59,7 @@ describe('parseConfig', () => {
       },
       orderPollIntervalMs: 2000,
       orderProcessingDelayMs: 1000,
+      waitingRoom: { admissionIntervalMs: 1000, pollIntervalMs: 2000 },
     });
   });
 
@@ -90,6 +91,8 @@ describe('parseConfig', () => {
       PAYMENTS_WEBHOOK_TOLERANCE_SEC: '60',
       ORDER_POLL_INTERVAL_MS: '500',
       JOB_PROCESSING_DELAY_MS: '0',
+      QUEUE_ADMISSION_INTERVAL_MS: '250',
+      QUEUE_POLL_INTERVAL_MS: '3000',
     });
     expect(config).toEqual({
       nodeEnv: 'production',
@@ -119,6 +122,7 @@ describe('parseConfig', () => {
       },
       orderPollIntervalMs: 500,
       orderProcessingDelayMs: 0,
+      waitingRoom: { admissionIntervalMs: 250, pollIntervalMs: 3000 },
     });
   });
 
@@ -138,6 +142,8 @@ describe('parseConfig', () => {
     ['PAYMENTS_WEBHOOK_TOLERANCE_SEC', '0'],
     ['JOB_PROCESSING_DELAY_MS', '-1'],
     ['JOB_PROCESSING_DELAY_MS', '600001'],
+    ['QUEUE_ADMISSION_INTERVAL_MS', '99'],
+    ['QUEUE_POLL_INTERVAL_MS', '60001'],
   ])('rejects %s=%s', (key, value) => {
     expect(parseError({ [key]: value }).issues[0]?.path).toEqual([key]);
   });

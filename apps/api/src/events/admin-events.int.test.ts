@@ -175,6 +175,9 @@ describe('full lifecycle', () => {
       status: 'DRAFT',
       holdDurationSec: 300,
       maxTicketsPerOrder: 6,
+      waitingRoomEnabled: false,
+      admissionRatePerSec: 10,
+      admissionTokenTtlSec: 600,
       venue: { id: venue.id, slug: venue.slug, timezone: 'America/New_York' },
       tickets: { total: 0, available: 0, held: 0, sold: 0 },
       batches: [],
@@ -276,6 +279,12 @@ describe('POST /admin/events validation', () => {
     [{ venueId: MISSING_ID }, 'venueId'],
     [{ category: 'PARTY' }, 'category'],
     [{ maxTicketsPerOrder: 0 }, 'maxTicketsPerOrder'],
+    [{ waitingRoomEnabled: 'yes' }, 'waitingRoomEnabled'],
+    [{ admissionRatePerSec: 0 }, 'admissionRatePerSec'],
+    [{ admissionRatePerSec: 1001 }, 'admissionRatePerSec'],
+    [{ admissionRatePerSec: 2.5 }, 'admissionRatePerSec'],
+    [{ admissionTokenTtlSec: 59 }, 'admissionTokenTtlSec'],
+    [{ admissionTokenTtlSec: 3601 }, 'admissionTokenTtlSec'],
     [{ status: 'PUBLISHED' }, ''],
   ])('rejects %j at %j', async (overrides, path) => {
     const res = await admin.post('/admin/events', eventBody(overrides));
@@ -313,6 +322,31 @@ describe('PATCH /admin/events/:eventId', () => {
       startsAt: event.startsAt,
       createdAt: event.createdAt,
       updatedAt: at(60_000),
+    });
+  });
+
+  it('sets the drop settings on create and changes them on their own', async () => {
+    const event = await createEvent({
+      waitingRoomEnabled: true,
+      admissionRatePerSec: 50,
+      admissionTokenTtlSec: 300,
+    });
+    expect(event).toMatchObject({
+      waitingRoomEnabled: true,
+      admissionRatePerSec: 50,
+      admissionTokenTtlSec: 300,
+    });
+    const res = await admin.patch(`/admin/events/${event.id}`, { admissionRatePerSec: 5 });
+    expect(res.status).toBe(200);
+    expect(AdminEventSchema.parse(res.body)).toMatchObject({
+      waitingRoomEnabled: true,
+      admissionRatePerSec: 5,
+      admissionTokenTtlSec: 300,
+    });
+    const off = await admin.patch(`/admin/events/${event.id}`, { waitingRoomEnabled: false });
+    expect(AdminEventSchema.parse(off.body)).toMatchObject({
+      waitingRoomEnabled: false,
+      admissionRatePerSec: 5,
     });
   });
 

@@ -93,6 +93,11 @@ export const envSchema = z
     JOB_PROCESSING_DELAY_MS: z.coerce.number().int().min(0).max(600_000).default(1000),
     // `retryAfterMs` of an order that is still changing: how long clients wait between polls.
     ORDER_POLL_INTERVAL_MS: z.coerce.number().int().min(100).max(60_000).default(2000),
+    // How often the admission job lets customers in from waiting rooms (real time). The number let
+    // in follows each event's admission rate and the server clock, not this interval.
+    QUEUE_ADMISSION_INTERVAL_MS: z.coerce.number().int().min(100).max(60_000).default(1000),
+    // Longest `retryAfterMs` of a waiting queue entry: how long clients wait between polls.
+    QUEUE_POLL_INTERVAL_MS: z.coerce.number().int().min(100).max(60_000).default(2000),
   })
   .superRefine((env, ctx) => {
     // Dev defaults carry well-known credentials or point at localhost, so production must set
@@ -150,6 +155,10 @@ export const envSchema = z
     },
     orderPollIntervalMs: env.ORDER_POLL_INTERVAL_MS,
     orderProcessingDelayMs: env.JOB_PROCESSING_DELAY_MS,
+    waitingRoom: {
+      admissionIntervalMs: env.QUEUE_ADMISSION_INTERVAL_MS,
+      pollIntervalMs: env.QUEUE_POLL_INTERVAL_MS,
+    },
   }));
 
 export type AppConfig = Readonly<z.output<typeof envSchema>>;
