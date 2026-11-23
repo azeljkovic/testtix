@@ -40,7 +40,8 @@ When a decision changes, update the docs in the same PR so they stay accurate.
 - ✅ C4.5 Web: checkout, order status, my tickets
 - ✅ C5.1 Waiting room API + admission job
 - ✅ C5.2 Web: waiting room
-- ⏭️ Next: **C5.3 Rate limiting + test API limits** (see plan)
+- ✅ C5.3 Rate limiting + test API limits
+- ⏭️ Next: **C5.4 Drop scenarios + testing guide pass** (see plan)
 
 Update this list when a chunk is merged.
 
@@ -113,6 +114,7 @@ Run one package: `pnpm --filter @testtix/api <script>`.
 - Tickets + e-ticket email (`src/tickets/`): `finalize()` issues tickets in its confirming transaction (`issueTickets()`), then enqueues `send-tickets` (`TicketEmailService.send()`, at least once, guarded by `orders.tickets_emailed_at`; the `recover` schedule catches up). Ticket text comes from `loadTicketDetails()` / `placeLabel()`; PDFs from `renderTicketsPdf()` (standard Helvetica, so pass text through `pdfText()`). Scenario orders set `ticketsEmailedAt` so they never email. In tests, construct `TicketEmailService` directly (worker off), read attachments with `emailPart()` (`mailpit.ts`), and check documents with `pdfPageCount()` / `qrCodesInPdf()` / `decodeQrPng()` (`src/testing/documents.ts`); fetch binary responses with `.buffer(true).parse(binaryBody)`.
 - Background jobs (`src/jobs/`): register processors and job schedules in `WorkerModule`, which runs in the API (`WORKER_IN_PROCESS=true`, default) or alone via `src/worker.ts` (`WorkerAppModule`); so never rely on API-only providers in a processor. Use job schedulers (`upsertJobScheduler`, via a `JobSchedule` subclass), not the old repeatable-job API. Hold changes outside `HoldsService` reuse `src/holds/hold-locks.ts`. Test harnesses run with the worker off; pass `env: { WORKER_IN_PROCESS: 'true' }` to `createIntegrationApp()` to turn it on (and empty the queue first).
 - Waiting room (`src/waiting-room/`): queue state lives in Redis only (`QueueStore`, `testtix:queue:*`); atomic changes are Lua scripts there, and times are server-clock values passed in (never Redis TTLs). The seat map and new holds of a drop event go through `WaitingRoomService.requireAdmission()` in `HoldsController` (header `ADMISSION_TOKEN_HEADER`, 403 `QUEUE_REQUIRED`). Admission is `QueueAdmissionService.admit()` (worker job `waiting-room`, `QUEUE_ADMISSION_INTERVAL_MS`): rate × batches due by the server clock. In tests with the worker off, build `new QueueAdmissionService(prisma, clock, app.get(QueueStore, { strict: false }))` and call `admit()` after moving the clock.
+- Rate limits (`src/rate-limit/`): every route counts towards the `default` group; add one to another with `@RateLimit(group)` (groups and their env vars in `rate-limit-groups.ts`; `testApi` replaces `default`, `verificationResend` is per user and needs a session), and take health-style routes out with `@NoRateLimit()`. The global guard runs before `AuthGuard` (keep `RateLimitModule` before `AuthModule` in `AppModule`). Counters are Redis keys `testtix:ratelimit:*`, cleared by `POST /__test/reset`. Both test harnesses turn limits off; pass `env: { RATE_LIMIT_ENABLED: 'true', RATE_LIMIT_DEFAULT: '3/1m' }` to `createIntegrationApp()` to test them.
 - List endpoints paginate with `PageQuerySchema` / `pageSchema()` / `toPage()` from `packages/shared`. Generated slugs use `slugify()` + `insertWithSlug()` (`src/infra/slugs.ts`).
 - Prefer accessible names over `data-testid` in the UI; use `data-testid` only where no good accessible locator exists.
 - Every list endpoint sorts with a stable tiebreaker (`id`).
