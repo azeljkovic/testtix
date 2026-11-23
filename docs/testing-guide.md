@@ -1,6 +1,8 @@
 # TestTix testing guide
 
-How to test TestTix from the outside: what the API promises, and the hooks it gives testers. This guide grows with each milestone; the test API, seed scenarios, test cards and the clock are added in M1–M5.
+How to test TestTix from the outside: what the API promises, and the hooks it gives testers: [test mode](#test-mode) with its [test API](#test-api-reference), the [server clock](#the-server-clock), [seed scenarios](#seed-scenarios), [test cards](#test-cards), the [polling contract](#polling-retryafterms) and [ways to keep tests independent](#keeping-tests-independent).
+
+**The examples run as written.** Every `sh` block in this guide works against a local API in test mode (`cp .env.example .env`, `pnpm infra:up`, `pnpm db:deploy`, `pnpm --filter @testtix/api dev`), with `curl` 7.82 or later and `jq`. CI runs them all, each after a [`POST /__test/reset`](#resetting-the-data): `pnpm docs:examples` does the same against your local API (it resets the data).
 
 ## Web app basics
 
@@ -259,6 +261,8 @@ Things to know when testing:
 - **Behind a proxy** (a load balancer, the web container), set `TRUST_PROXY` (`true`, or the proxies' addresses / CIDR ranges) so the API counts the client address from `X-Forwarded-For`, not the proxy's. Without it, `X-Forwarded-For` is ignored, so it can't be used to get a fresh budget. IPv6 clients are counted by their /64 subnet.
 - If Redis is down, requests aren't limited (the API logs a warning once).
 
+<!-- example: http-errors -->
+
 ```sh
 # The sixth request within 10 s gets a 429 (with RATE_LIMIT_DEFAULT=5/10s on the server)
 for i in 1 2 3 4 5 6; do curl -s -o /dev/null -w '%{http_code} ' http://localhost:3000/events; done
@@ -413,11 +417,17 @@ Statuses don't depend on who asks: your own held seats show as `HELD` too (use `
 ### Holding tickets
 
 ```sh
-session=$(curl -s -X POST http://localhost:3000/__test/sessions -H 'Content-Type: application/json' -d '{"role":"CUSTOMER"}')
-curl -s -X POST "http://localhost:3000/events/$EVENT_ID/holds" \
-  -H "Cookie: $(echo "$session" | jq -r .cookie)" -H "X-CSRF-Token: $(echo "$session" | jq -r .csrfToken)" \
-  -H 'Content-Type: application/json' \
-  -d '{"seats":["<seat id>"],"ga":[{"sectionId":"<GA section id>","quantity":2}]}'
+API=http://localhost:3000
+session=$(curl -s -X POST $API/__test/sessions -H 'Content-Type: application/json' -d '{"role":"CUSTOMER"}')
+auth=(-H "Cookie: $(echo "$session" | jq -r .cookie)" -H "X-CSRF-Token: $(echo "$session" | jq -r .csrfToken)")
+# A concert with seats and a standing area (a seed scenario), and its seat map
+event=$(curl -s -X POST $API/__test/seed/basic-catalogue | jq -r .events.concert.id)
+map=$(curl -s "$API/events/$event/seats")
+seat=$(echo "$map" | jq -r '.sections[] | select(.type == "SEATED") | .rows[0].seats[0].id')
+standing=$(echo "$map" | jq -r '.sections[] | select(.type == "GA") | .id')
+# Row A seat 1 and two standing places
+curl -s -X POST "$API/events/$event/holds" "${auth[@]}" -H 'Content-Type: application/json' \
+  -d "{\"seats\":[\"$seat\"],\"ga\":[{\"sectionId\":\"$standing\",\"quantity\":2}]}"
 ```
 
 The body has `seats` (seat IDs from the seat map) and `ga` (`sectionId` and `quantity` per GA section); either may be left out, but not both. The answer is the hold: its `id`, `eventId`, `createdAt`, `expiresAt` (now + the event's hold duration, [server clock](#the-server-clock)), `totalCents` and `items`, one per ticket, in the venue's section order, then row and seat (GA places by price), each with its `inventoryUnitId`, `section`, `seat` (null for GA) and `priceCents`.
@@ -459,7 +469,7 @@ curl -s -X POST http://localhost:3000/__test/clock -H 'Content-Type: application
 
 ## Ticket drops and the waiting room
 
-An event with `waitingRoomEnabled` (set through the [admin API](#events)) is a **ticket drop**: customers queue in a waiting room and are let in a few at a time. Only customers let in can see its seat map and hold tickets; once they have a hold, checkout works as usual.
+An event with `waitingRoomEnabled` (set through the [admin API](#events)) is a **ticket drop**: customers queue in a waiting room and are let in a few at a time. Only customers let in can see its seat map and hold tickets; once they have a hold, checkout works as usual. The [drop scenarios](#drop-scenarios) give you a ready-made drop that opens in 5 minutes, now, or (sized for load tests) when you say.
 
 | Endpoint                       | Session | What it does                                                                                |
 | ------------------------------ | ------- | ------------------------------------------------------------------------------------------- |
@@ -494,7 +504,7 @@ An event with `waitingRoomEnabled` (set through the [admin API](#events)) is a *
 
 - **Joining** needs a published event with a waiting room (else 404, or 409 `no-waiting-room`) that hasn't started (409 `event-not-on-sale`). You can join any time before that, long before sales open too.
 - **One entry per customer and event.** Joining again while you wait or are admitted returns the same entry with 200, even for concurrent requests. Once your admission has expired, joining again gives a **new** entry at the back of the queue with new tokens (201); the old queue token then answers 404.
-- **Order.** Everyone who joins **before `salesOpenAt`** is let in in a **random order** once sales open (so arriving early doesn't help, but it puts you ahead of everyone who comes later). After the opening, customers are let in in **join order**, behind everyone who joined before it.
+- **Order.** Everyone who joins **before `salesOpenAt`** is let in in a **random order** once sales open (so arriving early doesn't help, but it puts you ahead of everyone who comes later). After the opening, customers are let in in **join order**, behind everyone who joined before it; that holds with a frozen clock too, where every join has the same time.
 - **Rate.** A background job lets in at most `admissionRatePerSec` customers per second of [server time](#the-server-clock): the first batch at the opening, the next one a second later, and so on. Customers who join an empty queue after the opening go in with the next run. An idle queue saves nothing up: a minute without anyone waiting doesn't let 60 batches in at once later.
 - **Admission tokens** last `admissionTokenTtlSec` (default 600 s) from the moment you are let in. Send yours in the **`X-Admission-Token`** header to `GET /events/{eventId}/seats` and `POST /events/{eventId}/holds`. Without one, with an expired one ("Your admission has expired. Join the queue again."), one for another event or, on holds, another customer's token, both answer **403 `queue-required`**. The seat map is public, so it only checks the token belongs to the event; holds also check it is yours. Holds you already have and checkout don't need the token, so an admission running out while you pay changes nothing.
 - **Turning the waiting room off** lets everyone still waiting in at the job's next run, and the seat map and holds stop asking for tokens. Turning it on mid-sale makes the seat map and new holds require a token from then on; existing holds are kept.
@@ -508,14 +518,19 @@ An event with `waitingRoomEnabled` (set through the [admin API](#events)) is a *
 API=http://localhost:3000
 session=$(curl -s -X POST $API/__test/sessions -H 'Content-Type: application/json' -d '{"role":"CUSTOMER"}')
 auth=(-H "Cookie: $(echo "$session" | jq -r .cookie)" -H "X-CSRF-Token: $(echo "$session" | jq -r .csrfToken)")
-# Freeze the clock a minute before sales open, then queue
-curl -s -X POST $API/__test/clock -H 'Content-Type: application/json' -d '{"freezeAt":"<salesOpenAt minus 60 s>"}'
-token=$(curl -s -X POST "$API/events/$EVENT_ID/queue" "${auth[@]}" | jq -r .token)   # → status PRE_SALE
-# Open sales: the first batch goes in with the job's next run
-curl -s -X POST $API/__test/clock -H 'Content-Type: application/json' -d '{"advanceBy":60000}'
-curl -s "$API/queue/$token" "${auth[@]}" | jq '{status, position, admission}'
-# Once ADMITTED: the seat map with the admission token
-curl -s "$API/events/$EVENT_ID/seats" -H "X-Admission-Token: <admission.token>"
+# Freeze the clock, then add a drop whose sales open 5 minutes later, and queue
+curl -s -X POST $API/__test/clock -H 'Content-Type: application/json' \
+  -d "{\"freezeAt\":\"$(curl -s $API/__test/clock | jq -r .now)\"}"
+event=$(curl -s -X POST $API/__test/seed/drop-in-5-min | jq -r .event.id)
+token=$(curl -s -X POST "$API/events/$event/queue" "${auth[@]}" | jq -r .token)   # → status PRE_SALE
+# Open sales. The first batch goes in with the job's next run: poll until let in
+curl -s -X POST $API/__test/clock -H 'Content-Type: application/json' -d '{"advanceBy":300000}'
+until entry=$(curl -s "$API/queue/$token" "${auth[@]}") && [ "$(echo "$entry" | jq -r .status)" = ADMITTED ]; do
+  sleep "$(echo "$entry" | jq '.retryAfterMs / 1000')"
+done
+# The seat map with the admission token, then the clock back to real time
+curl -s "$API/events/$event/seats" -H "X-Admission-Token: $(echo "$entry" | jq -r .admission.token)" | jq .availability
+curl -s -X POST $API/__test/clock -H 'Content-Type: application/json' -d '{"reset":true}'
 ```
 
 **Metrics.** `GET /metrics` has, per event that has had a queue (label `event_id`): `testtix_waiting_room_queue_length` (customers waiting), `testtix_waiting_room_admitted_total` (customers let in; `rate()` of it is the actual admission rate) and `testtix_waiting_room_admission_rate` (the configured rate the job last applied; 0 while the waiting room is off). Every API instance reports the same numbers, read from Redis.
@@ -623,12 +638,18 @@ Checking out turns your hold into an **order** and a payment page. The order goe
 | `GET /orders/{orderId}` | yes     | One of your orders, with its items. 404 for unknown orders and other customers' orders        |
 | `GET /orders`           | yes     | Your orders, newest first, [paginated](#pagination) (`page`, `pageSize`)                      |
 
-`POST` needs the [CSRF header](#csrf-tokens). Continuing the [hold example](#holding-tickets):
+`POST` needs the [CSRF header](#csrf-tokens). The [`hold-about-to-expire`](#seed-scenarios) scenario gives you a logged-in customer with a hold to check out:
+
+<!-- example: group=checkout -->
 
 ```sh
-curl -s -X POST http://localhost:3000/orders \
-  -H "Cookie: $(echo "$session" | jq -r .cookie)" -H "X-CSRF-Token: $(echo "$session" | jq -r .csrfToken)" \
-  -H 'Content-Type: application/json' -d '{"holdId":"<hold id>"}'
+API=http://localhost:3000
+# A customer holding two seats for 10 minutes
+seed=$(curl -s -X POST $API/__test/seed/hold-about-to-expire -H 'Content-Type: application/json' -d '{"expiresInSec":600}')
+auth=(-H "Cookie: $(echo "$seed" | jq -r .holder.cookie)" -H "X-CSRF-Token: $(echo "$seed" | jq -r .holder.csrfToken)")
+order=$(curl -s -X POST $API/orders "${auth[@]}" -H 'Content-Type: application/json' \
+  -d "{\"holdId\":\"$(echo "$seed" | jq -r .hold.id)\"}")
+echo "$order" | jq '{id, status, totalCents, paymentUrl}'   # → PENDING_PAYMENT, $90.00
 ```
 
 The order has its `id`, `status`, `event` (`id`, `slug`, `title`, `startsAt`, `venue.name`, `venue.timezone`), `totalCents`, `ticketCount`, `items` (the hold's items: `inventoryUnitId`, `section`, `seat`, `priceCents`, and `ticket`: `{ id, code }` once the order is confirmed, else `null`; see [tickets](#tickets)), `expiresAt`, `createdAt`, `updatedAt`, `paymentUrl`, `retryAfterMs` and `refundDue` (see [late payments](#late-and-out-of-order-payments)). Send the customer to `paymentUrl`, the [payment page](#payment-page); afterwards the provider returns them to `<WEB_BASE_URL>/orders/<order id>?session_id=…`. List items (`GET /orders`) have the same fields without `items`, `paymentUrl`, `updatedAt`, `retryAfterMs` and `refundDue`.
@@ -694,14 +715,24 @@ The delay is real time, not the server clock: freezing the clock does not hold o
 - **Duplicates** (the `4000 0000 0000 0887` card, or provider retries): one transition; the rest are `duplicate: true`.
 - **No webhook** (the `4000 0000 0000 0077` card): the order stays `PENDING_PAYMENT` and expires with its hold, like an unpaid order.
 
-To send a webhook by hand, sign the exact bytes you send (see [Signature](#webhooks)):
+To send a webhook by hand, sign the exact bytes you send (see [Signature](#webhooks)). Continuing the [checkout example](#checkout-and-orders), this reports its payment as the provider would (the payment session ID is the last part of `paymentUrl`), then polls the order until it is final:
+
+<!-- example: group=checkout -->
 
 ```sh
-body='{"id":"evt_manual_1","type":"payment.succeeded","createdAt":"2026-12-01T10:00:00.000Z","data":{"sessionId":"<ps_… of the order>","status":"SUCCEEDED","amountCents":<order total>,"currency":"USD","failureCode":null,"metadata":{"orderId":"<order id>"}}}'
+orderId=$(echo "$order" | jq -r .id)
+body=$(echo "$order" | jq -c '{id: "evt_manual_\(.id)", type: "payment.succeeded", createdAt: (now | todate),
+  data: {sessionId: (.paymentUrl | split("/") | last), status: "SUCCEEDED", amountCents: .totalCents,
+         currency: "USD", failureCode: null, metadata: {orderId: .id}}}')
 ts=$(date +%s)
 sig=$(printf '%s' "$ts.$body" | openssl dgst -sha256 -hmac 'whsec_testtix_local_only' | awk '{print $NF}')
 curl -s -X POST http://localhost:3000/webhooks/payments -H 'Content-Type: application/json' \
   -H "X-Payments-Timestamp: $ts" -H "X-Payments-Signature: v1=$sig" --data-raw "$body"
+# → {"eventId":"evt_manual_…","outcome":"APPLIED","duplicate":false}
+while order=$(curl -s "$API/orders/$orderId" "${auth[@]}") && [ "$(echo "$order" | jq .retryAfterMs)" != null ]; do
+  sleep "$(echo "$order" | jq '.retryAfterMs / 1000')"
+done
+echo "$order" | jq -r .status   # → CONFIRMED
 ```
 
 ### Tickets
@@ -715,10 +746,13 @@ When the [processing job](#processing) confirms an order (paid or free), it issu
 | `GET /tickets/{ticketId}/pdf` | yes     | One of your tickets as a one-page PDF (`application/pdf`, download). 404 for anyone else's ticket |
 
 ```sh
-curl -s -o ticket.pdf http://localhost:3000/tickets/<ticket id>/pdf -H "Cookie: $(echo "$session" | jq -r .cookie)"
+# A customer with a confirmed order (a seed scenario); download its first ticket
+seed=$(curl -s -X POST http://localhost:3000/__test/seed/confirmed-order)
+ticket=$(echo "$seed" | jq -r '.order.tickets[0].id')
+curl -s -o ticket.pdf "http://localhost:3000/tickets/$ticket/pdf" -H "Cookie: $(echo "$seed" | jq -r .customer.cookie)"
 ```
 
-The answer has `Content-Disposition: attachment; filename="testtix-ticket-<ticket id>.pdf"` and `Cache-Control: private, no-store`. A malformed ID is a 400 `validation-error`, an unknown ticket or another customer's a 404 (so nobody learns which IDs exist), and no session a 401. The [`confirmed-order`](#seed-scenarios) scenario gives you a logged-in customer with three tickets to download.
+The answer has `Content-Disposition: attachment; filename="testtix-ticket-<ticket id>.pdf"` and `Cache-Control: private, no-store`. A malformed ID is a 400 `validation-error`, an unknown ticket or another customer's a 404 (so nobody learns which IDs exist), and no session a 401. The [`confirmed-order`](#seed-scenarios) scenario, used above, gives you a logged-in customer with three tickets to download.
 
 **A ticket page** (A4) shows "TestTix e-ticket", "Ticket n of m", the event title and performer, its start in the venue's time zone (e.g. "Wednesday, March 10, 2027 at 8:00 PM EST"), the venue with its address, the place (**"Seats · Row A · Seat 1"**, or **"General admission – Floor"** for a GA place), the price, the QR with the code printed under it, and the order ID. The PDF uses the standard Helvetica font, so text outside Latin-1 (plus `€ – — “ ” …`) is simplified on the page: accents it can't show are dropped ("Ő" → "O", "Đ" → "D") and other characters print as "?" (emoji, CJK). The email shows the original text.
 
@@ -858,10 +892,15 @@ The API sends email over SMTP (`SMTP_URL`). Locally that is [Mailpit](https://ma
 - The verification email is sent while the request is handled: when the request returns, Mailpit has the message. The [e-ticket email](#e-ticket-email) comes from a background job and arrives later, so poll for email instead of reading once.
 
 ```sh
-# The newest verification email to an address (needs jq)
-curl -s 'http://localhost:8025/api/v1/search?query=to:"ada@example.com" subject:"Verify your email address"' \
-  | jq -r '.messages[0].ID' \
-  | xargs -I{} curl -s http://localhost:8025/api/v1/message/{} | jq -r .Text
+# Register (with a CSRF token, as in the login example), then read the verification email
+jar=$(mktemp)
+csrf=$(curl -s -c "$jar" http://localhost:3000/auth/csrf | jq -r .csrfToken)
+curl -s -b "$jar" -c "$jar" -X POST http://localhost:3000/auth/register -H 'Content-Type: application/json' \
+  -H "X-CSRF-Token: $csrf" -d '{"email":"ada@example.com","password":"Lovelace-1815","name":"Ada"}' > /dev/null
+# The newest verification email to an address: -G with --data-urlencode encodes the query
+id=$(curl -s -G http://localhost:8025/api/v1/search \
+  --data-urlencode 'query=to:"ada@example.com" subject:"Verify your email address"' | jq -r '.messages[0].ID')
+curl -s "http://localhost:8025/api/v1/message/$id" | jq -r .Text
 ```
 
 Mailpit's search matches substrings and returns the newest message first. Use a unique recipient per test (Mailpit is shared, and old messages stay until it drops them at 1000), and check the exact address and subject in the result.
@@ -899,9 +938,17 @@ Once an order is `CONFIRMED`, the worker sends the customer **Your tickets for {
 - It arrives shortly after the order is confirmed, and at most once per order in normal operation. If sending fails (SMTP down) the job retries with backoff, and a recovery job queues it again for any `CONFIRMED` order whose email hasn't gone out 60 seconds (server clock) after confirmation. A crash right after the SMTP server accepted the message can send it twice (at least once), never zero times.
 - Orders from [seed scenarios](#seed-scenarios) send no email.
 
+Continuing the [checkout example](#checkout-and-orders) after its [webhook](#late-and-out-of-order-payments), this waits for its customer's ticket email and saves the PDF:
+
+<!-- example: group=checkout -->
+
 ```sh
-# The PDF of the newest ticket email to an address (needs jq)
-id=$(curl -s 'http://localhost:8025/api/v1/search?query=to:"ada@example.com" subject:"Your tickets for"' | jq -r '.messages[0].ID')
+email=$(echo "$seed" | jq -r .holder.user.email)
+# The newest ticket email to an address. It comes from a job: poll until it is there
+until id=$(curl -s -G http://localhost:8025/api/v1/search \
+  --data-urlencode "query=to:\"$email\" subject:\"Your tickets for\"" | jq -er '.messages[0].ID'); do
+  sleep 1
+done
 part=$(curl -s "http://localhost:8025/api/v1/message/$id" | jq -r '.Attachments[0].PartID')
 curl -s -o tickets.pdf "http://localhost:8025/api/v1/message/$id/part/$part"
 ```
@@ -933,19 +980,25 @@ Test mode gives testers hooks that a real shop would never expose: the test API 
 
 On startup the API logs a `TestMode` warning saying whether test mode is on and whether the test API is key-protected.
 
+### Test API reference
+
+Every endpoint is tagged `test` in the [OpenAPI spec](#api-basics), which documents its body and response in full. None needs a session or a CSRF token.
+
+| Endpoint                       | Needs `X-Test-Key` (when configured) | What it does                                                                                     |
+| ------------------------------ | ------------------------------------ | ------------------------------------------------------------------------------------------------ |
+| `GET /__test/clock`            | no                                   | Reads the [server clock](#the-server-clock)                                                      |
+| `POST /__test/clock`           | yes                                  | Freezes, moves forward or resets the server clock                                                |
+| `POST /__test/reset`           | yes                                  | Puts back the [baseline data](#seed-data), empties waiting rooms and rate-limit counters         |
+| `POST /__test/seed/{scenario}` | no (it only adds data)               | Adds a [seed scenario](#seed-scenarios): ready-made events, holds and orders with fresh IDs      |
+| `POST /__test/sessions`        | no (it only adds data)               | Creates a user and [logs it in](#logging-in-through-the-test-api), returning a ready-made cookie |
+
+Scenarios: `basic-catalogue`, `sold-out-event`, `one-seat-left`, `hold-about-to-expire`, `ga-meetup`, `ga-last-ticket`, `confirmed-order`, and the [ticket drops](#drop-scenarios) `drop-in-5-min`, `drop-open-now` and `large-venue-drop`.
+
 The test API has its own [rate limit](#rate-limits) (`testApi` group, 300 per minute per client address by default; it doesn't use up the `default` budget). Every call to `/__test/*`, rejected ones included (401, 429, 404 for an unknown scenario under `/__test/seed/`), writes an audit line to the API log: message `Test API call`, context `TestApiAudit`, with `testApi: { method, path, status, ip, testKeySent, requestId, durationMs }`. The `X-Test-Key` value is never logged.
 
 ### Test API key
 
-Some test endpoints affect everyone using the server: freezing the clock or wiping the data breaks every other tester's session on a shared instance such as the hosted demo. When the server sets `TEST_API_KEY` (at least 16 characters), those endpoints require the same value in an `X-Test-Key` header and answer 401 without it (with a `WWW-Authenticate` header). When `TEST_API_KEY` is unset, as it is locally, they are open.
-
-| Endpoint                       | Needs `X-Test-Key` (when configured) |
-| ------------------------------ | ------------------------------------ |
-| `GET /__test/clock`            | no                                   |
-| `POST /__test/clock`           | yes                                  |
-| `POST /__test/reset`           | yes                                  |
-| `POST /__test/seed/{scenario}` | no (it only adds data)               |
-| `POST /__test/sessions`        | no (it only adds data)               |
+Some test endpoints affect everyone using the server: freezing the clock or wiping the data breaks every other tester's session on a shared instance such as the hosted demo. When the server sets `TEST_API_KEY` (at least 16 characters), those endpoints require the same value in an `X-Test-Key` header and answer 401 without it (with a `WWW-Authenticate` header). When `TEST_API_KEY` is unset, as it is locally, they are open. The [reference](#test-api-reference) above says which endpoints need it.
 
 ### The server clock
 
@@ -1083,7 +1136,7 @@ Run it before a test suite (or each test that needs the baseline), not in parall
 
 Scenario data stays until the next reset. It is real data: scenario events are published and appear in the public catalogue next to the baseline. To find just your run's events, search for its suffix.
 
-Dates are relative to the clock's UTC day (`D`), like the baseline: every scenario event has been on sale since D−1 15:00 and starts at D+7 to D+14, at 23:00 UTC. Rows get `createdAt` = the server clock. Unknown scenario names answer 404.
+Dates are relative to the clock's UTC day (`D`), like the baseline: every scenario event starts at D+7 to D+14, at 23:00 UTC, and has been on sale since D−1 15:00, except the [drops](#drop-scenarios), whose sales open at a time relative to now. Rows get `createdAt` = the server clock. Unknown scenario names answer 404; a body a scenario doesn't accept is a 400 `validation-error`.
 
 | Scenario               | Creates                                                                                                                                                                                                                                         |
 | ---------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -1094,6 +1147,9 @@ Dates are relative to the clock's UTC day (`D`), like the baseline: every scenar
 | `ga-meetup`            | A published GA-only meetup on sale with Floor (40 places: 20 at $10.00, then 20 at $15.00) and Balcony (10 places at $20.00)                                                                                                                    |
 | `ga-last-ticket`       | A published GA meetup on sale whose Floor (10 places, $8.00) has one place left; the other nine are sold through confirmed orders                                                                                                               |
 | `confirmed-order`      | A published concert on sale (Seats rows A–B × 4 at $45.00, Standing GA of 10 at $25.00); a new customer has a `CONFIRMED` order ($115.00) for row A seats 1–2 and one Standing place, with its three tickets. The response logs the customer in |
+| `drop-in-5-min`        | A [ticket drop](#drop-scenarios) of 100 tickets (Seats rows A–E × 10 at $60.00, Standing GA of 50 at $35.00) whose sales open 5 minutes from now                                                                                                |
+| `drop-open-now`        | The same drop with sales open from now                                                                                                                                                                                                          |
+| `large-venue-drop`     | A drop of 10 000 tickets for load tests (Stalls rows A–AN × 50 at $75.00, Floor GA of 8 000 at $50.00), opening in 5 minutes unless the body says otherwise                                                                                     |
 
 Buyers are customers with a verified email `buyer-<suffix>@scenario.testtix.test` and no usable password: nobody can log in as them. The holder of `hold-about-to-expire` (`holder-<suffix>@scenario.testtix.test`) has no password either, but the response includes a session for them (`holder`, the same shape as [`POST /__test/sessions`](#logging-in-through-the-test-api)), so a test can act as the holder at once, e.g. watch the countdown and the expiry. The same goes for the customer of `confirmed-order` (`customer-<suffix>@scenario.testtix.test`, session in `customer`), whose response also lists the order's tickets (`id`, `code`, section, seat, price) for [downloading](#tickets). Scenario orders are `CONFIRMED`, every sold ticket has a ticket code, and no [e-ticket email](#e-ticket-email) is sent for them.
 
@@ -1101,7 +1157,7 @@ Buyers are customers with a verified email `buyer-<suffix>@scenario.testtix.test
 curl -s -X POST http://localhost:3000/__test/seed/one-seat-left
 ```
 
-Every response has a `venue` (ID, slug, name and sections with their IDs) and the events, each with its ID, slug, title, category, status, `startsAt`, `salesOpenAt`, `holdDurationSec`, `maxTicketsPerOrder` and a ticket count by status:
+Every response has a `venue` (ID, slug, name and sections with their IDs) and the events, each with its ID, slug, title, category, status, `startsAt`, `salesOpenAt`, `holdDurationSec`, `maxTicketsPerOrder`, its [waiting-room](#ticket-drops-and-the-waiting-room) settings and a ticket count by status:
 
 ```json
 {
@@ -1122,6 +1178,9 @@ Every response has a `venue` (ID, slug, name and sections with their IDs) and th
     "salesOpenAt": "2026-11-20T15:00:00.000Z",
     "holdDurationSec": 600,
     "maxTicketsPerOrder": 6,
+    "waitingRoomEnabled": false,
+    "admissionRatePerSec": 10,
+    "admissionTokenTtlSec": 600,
     "tickets": { "total": 8, "available": 1, "held": 0, "sold": 7 }
   },
   "buyer": { "id": "019ac6b2-…", "email": "buyer-3f9a1c2b@scenario.testtix.test" },
@@ -1146,8 +1205,33 @@ Every response has a `venue` (ID, slug, name and sections with their IDs) and th
 | `hold-about-to-expire` | `venue`, `event`, `holder` (user, session, `csrfToken`, `cookie`), `hold` (`id`, `createdAt`, `expiresAt`, `totalCents`, `seats`) |
 | `ga-meetup`            | `venue`, `event`, `sections.floor`, `sections.balcony` (each with `capacity`, `available` and `prices`)                           |
 | `ga-last-ticket`       | `venue`, `event`, `buyer`, `orderIds`, `section` (the Floor, `available: 1`)                                                      |
+| `confirmed-order`      | `venue`, `event`, `customer` (like `holder`), `order` (`id`, `status`, `totalCents`, `tickets`)                                   |
+| the three drops        | `venue`, `event`                                                                                                                  |
 
-The OpenAPI spec documents each response in full. Later milestones add scenarios (confirmed orders, ticket drops).
+The OpenAPI spec documents each response in full.
+
+### Drop scenarios
+
+`drop-in-5-min`, `drop-open-now` and `large-venue-drop` each add one published concert with a [waiting room](#ticket-drops-and-the-waiting-room) (`waitingRoomEnabled: true`) at a new venue. Its `salesOpenAt` is relative to **now** on the server clock, in whole seconds (milliseconds dropped), and every batch is released at that moment, as an admin preparing a drop would set it. The event starts at D+14 23:00.
+
+| Scenario           | Sales open                           | Tickets | `admissionRatePerSec` | `admissionTokenTtlSec` |
+| ------------------ | ------------------------------------ | ------- | --------------------- | ---------------------- |
+| `drop-in-5-min`    | now + 5 minutes                      | 100     | 5                     | 600                    |
+| `drop-open-now`    | now                                  | 100     | 5                     | 600                    |
+| `large-venue-drop` | now + `salesOpenInSec` (default 300) | 10 000  | 100                   | 600                    |
+
+The body is optional. Every drop accepts `admissionRatePerSec` (1–1000) and `admissionTokenTtlSec` (60–3600) to override the defaults above; `large-venue-drop` also takes `salesOpenInSec` (0–86 400, 0 opens sales at once). Unknown fields are a 400.
+
+- **Queues start empty.** Waiting rooms live in Redis, so a scenario can't fill one: customers join through `POST /events/{eventId}/queue`, each with its own session (for example from [`POST /__test/sessions`](#logging-in-through-the-test-api)).
+- **Before or after the opening.** Customers who join `drop-in-5-min` (or `large-venue-drop` with a `salesOpenInSec`) before its opening are let in in a random order at the opening; customers of `drop-open-now` go in in join order, from the admission job's next run. Move the [clock](#the-server-clock) to the opening instead of waiting, as in the [waiting room example](#ticket-drops-and-the-waiting-room).
+- **Watching one customer.** A UI test can queue many customers through the API and follow one of them in the browser: create the drop, queue the others, then log the watched customer in (with its session cookie) and open the event page.
+- **Load runs** (`large-venue-drop`, sized for k6) create their customers with `POST /__test/sessions` and send [`X-Load-Test-Key`](#rate-limits) on every call, so the server's rate limits don't throttle them. With the default rate of 100 per second, 3 000 queued customers are all in after 30 seconds; at most 6 tickets per hold, 10 000 tickets last at least 1 667 holds.
+
+```sh
+# A large drop that opens in a minute and lets 50 customers in per second
+curl -s -X POST http://localhost:3000/__test/seed/large-venue-drop -H 'Content-Type: application/json' \
+  -d '{"salesOpenInSec":60,"admissionRatePerSec":50}' | jq '.event | {id, salesOpenAt, admissionRatePerSec, tickets}'
+```
 
 ## Logging in through the test API
 
@@ -1186,3 +1270,55 @@ curl -s http://localhost:3000/auth/me -H "Cookie: $(echo "$session" | jq -r .coo
 ```
 
 On state-changing requests, send `cookie` as the `Cookie` header and `csrfToken` as `X-CSRF-Token`. The session behaves like any other: it expires with the [server clock](#session-cookie), and `POST /auth/logout` ends it.
+
+## Polling (`retryAfterMs`)
+
+Two resources change on their own after you ask for them: an [order](#checkout-and-orders) (payment, processing, expiry) and a [queue entry](#ticket-drops-and-the-waiting-room) (position, admission). Both answer with **`retryAfterMs`**, and clients poll by it instead of a fixed interval:
+
+1. Read the resource (`GET /orders/{orderId}`, `GET /queue/{token}`).
+2. If `retryAfterMs` is a number, wait that many milliseconds and read it again.
+3. If it is `null`, the resource is final for this purpose: stop.
+
+| Resource                | `retryAfterMs` while it can change                                                               | `null` when                        |
+| ----------------------- | ------------------------------------------------------------------------------------------------ | ---------------------------------- |
+| `GET /orders/{orderId}` | `ORDER_POLL_INTERVAL_MS` (default 2000); while unpaid, never past `expiresAt`                    | `CONFIRMED`, `FAILED` or `EXPIRED` |
+| `GET /queue/{token}`    | At most `QUEUE_POLL_INTERVAL_MS` (default 2000), at least 250; before the opening, never past it | `ADMITTED` or `EXPIRED`            |
+
+What follows from it, for tests:
+
+- **Don't poll faster.** The value already lands a poll on the next interesting moment (an expiry, the opening), and every poll counts towards the [rate limit](#rate-limits).
+- **Don't sleep a fixed time** for something a job does (processing an order, sending the e-ticket email, letting a queue in): poll with a timeout. Jobs run on real time, a second or so after the trigger.
+- **The web app polls the same way**, so a UI test with a fake browser clock moves it by `retryAfterMs` to get the next request. `retryAfterMs` follows the server clock: after `advanceBy`, the next answer reflects the new time.
+- The values are server configuration: assert that they are positive and at most the configured interval, not exact numbers, unless you set the interval yourself.
+
+```sh
+# Poll until final (a confirmed order is final at once, so this reads it once)
+API=http://localhost:3000
+seed=$(curl -s -X POST $API/__test/seed/confirmed-order)
+cookie=$(echo "$seed" | jq -r .customer.cookie); url="$API/orders/$(echo "$seed" | jq -r .order.id)"
+while body=$(curl -s "$url" -H "Cookie: $cookie") && wait=$(echo "$body" | jq .retryAfterMs) && [ "$wait" != null ]; do
+  sleep "$(jq -n "$wait / 1000")"
+done
+echo "$body" | jq -r .status   # → CONFIRMED
+```
+
+## Keeping tests independent
+
+A TestTix server is often shared: by parallel workers of one suite, by several suites, or by everyone on the hosted demo. These patterns keep tests from seeing each other's data:
+
+| You need                            | Use                                                                                                                                   |
+| ----------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
+| A logged-in user                    | [`POST /__test/sessions`](#logging-in-through-the-test-api): a new user per test, not the [seeded accounts](#seeded-accounts)         |
+| An event in a given state           | A [seed scenario](#seed-scenarios): fresh IDs and a random suffix every call, so parallel tests never share an event                  |
+| Your events in the catalogue        | Search for your run's suffix: `GET /events?q=<suffix>` (scenario titles end in it)                                                    |
+| An email to read                    | A unique recipient per test (`ada+<run id>@example.com`): Mailpit is never emptied, so search by recipient and subject                |
+| A waiting room                      | A drop scenario per test: queue positions are per event, so sharing a drop makes positions depend on other tests                      |
+| Something expired, or a drop opened | Scenario parameters first (`expiresInSec`, `drop-open-now`, `salesOpenInSec`); moving the [clock](#the-server-clock) affects everyone |
+| The baseline, or an exact data set  | [`POST /__test/reset`](#resetting-the-data), once before a suite that runs alone: it logs everyone out and removes all data           |
+
+Rules of thumb:
+
+- **Global state is serial.** The clock, `POST /__test/reset`, and the [baseline fixtures](#fixture-events) (holding or buying their seats) are shared by everyone. Run tests that change them one at a time, not in parallel with other tests against the same server, and reset the clock when done.
+- **Assert on your own data.** Never count all events, orders or queue entries on a shared server; count those of your scenario (its IDs, its suffix).
+- **Rate limits count per client address.** Parallel workers on one machine share one budget. Prefer test sessions to UI logins, and send `X-Load-Test-Key` from load runs; `POST /__test/reset` clears the counters.
+- **Scenario data stays until the next reset.** That's harmless (nothing else uses it), so tests don't need to clean up after themselves.
