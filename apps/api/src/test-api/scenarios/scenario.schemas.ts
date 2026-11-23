@@ -1,4 +1,6 @@
 import {
+  ADMISSION_RATE_PER_SEC,
+  ADMISSION_TOKEN_TTL_SEC,
   EventCategorySchema,
   EventStatusSchema,
   HOLD_DURATION_SEC,
@@ -39,6 +41,14 @@ export const ScenarioEventSchema = z
     salesOpenAt: z.iso.datetime(),
     holdDurationSec: z.number().int().describe('How long a hold lasts'),
     maxTicketsPerOrder: z.number().int().describe('Most tickets in one hold or order'),
+    waitingRoomEnabled: z
+      .boolean()
+      .describe('A ticket drop: customers queue first (`POST /events/{eventId}/queue`)'),
+    admissionRatePerSec: z
+      .number()
+      .int()
+      .describe('Customers the waiting room lets in per second of server time'),
+    admissionTokenTtlSec: z.number().int().describe('How long an admission lasts'),
     tickets: z
       .object({
         total: z.number().int(),
@@ -183,6 +193,70 @@ export const ConfirmedOrderResultSchema = z.object({
   }),
 });
 
+const admissionRate = (fallback: number) =>
+  z
+    .number()
+    .int()
+    .min(ADMISSION_RATE_PER_SEC.min)
+    .max(ADMISSION_RATE_PER_SEC.max)
+    .optional()
+    .describe(
+      `Customers let in per second of server time, ${String(ADMISSION_RATE_PER_SEC.min)}–${String(ADMISSION_RATE_PER_SEC.max)}. Default ${String(fallback)}.`,
+    );
+
+const admissionTokenTtl = z
+  .number()
+  .int()
+  .min(ADMISSION_TOKEN_TTL_SEC.min)
+  .max(ADMISSION_TOKEN_TTL_SEC.max)
+  .optional()
+  .describe(
+    `How long an admission lasts, in seconds, ${String(ADMISSION_TOKEN_TTL_SEC.min)}–${String(ADMISSION_TOKEN_TTL_SEC.max)}. Default ${String(ADMISSION_TOKEN_TTL_SEC.default)}.`,
+  );
+
+/** Admission rate of `drop-in-5-min` and `drop-open-now` unless the body sets one. */
+export const SMALL_DROP_ADMISSION_RATE = 5;
+/** Admission rate of `large-venue-drop` unless the body sets one. */
+export const LARGE_DROP_ADMISSION_RATE = 100;
+/** Seconds until `large-venue-drop` opens unless the body sets it. */
+export const LARGE_DROP_SALES_OPEN_IN_SEC = 300;
+/** Latest opening of `large-venue-drop`: a day ahead (its event starts days later). */
+const MAX_SALES_OPEN_IN_SEC = 86_400;
+
+export const DropRequestSchema = z
+  .strictObject({
+    admissionRatePerSec: admissionRate(SMALL_DROP_ADMISSION_RATE),
+    admissionTokenTtlSec: admissionTokenTtl,
+  })
+  .describe('Optional. Send no body (or `{}`) for the defaults.');
+
+export const OptionalDropRequestSchema = DropRequestSchema.optional();
+
+export const LargeVenueDropRequestSchema = z
+  .strictObject({
+    salesOpenInSec: z
+      .number()
+      .int()
+      .min(0)
+      .max(MAX_SALES_OPEN_IN_SEC)
+      .optional()
+      .describe(
+        `Seconds from now (server clock) until sales open, 0–${String(MAX_SALES_OPEN_IN_SEC)}. 0 opens them at once. Default ${String(LARGE_DROP_SALES_OPEN_IN_SEC)}.`,
+      ),
+    admissionRatePerSec: admissionRate(LARGE_DROP_ADMISSION_RATE),
+    admissionTokenTtlSec: admissionTokenTtl,
+  })
+  .describe('Optional. Send no body (or `{}`) for the defaults.');
+
+export const OptionalLargeVenueDropRequestSchema = LargeVenueDropRequestSchema.optional();
+
+export const DropResultSchema = z.object({
+  venue: ScenarioVenueSchema,
+  event: ScenarioEventSchema.describe(
+    'The drop: `waitingRoomEnabled`, with every ticket released when sales open',
+  ),
+});
+
 export type ScenarioVenue = z.infer<typeof ScenarioVenueSchema>;
 export type ScenarioEvent = z.infer<typeof ScenarioEventSchema>;
 export type BasicCatalogueResult = z.infer<typeof BasicCatalogueResultSchema>;
@@ -209,6 +283,9 @@ export type ConfirmedOrderScenario = Omit<
   customerId: string;
 };
 export type ConfirmedOrderResult = z.infer<typeof ConfirmedOrderResultSchema>;
+export type DropRequest = z.infer<typeof DropRequestSchema>;
+export type LargeVenueDropRequest = z.infer<typeof LargeVenueDropRequestSchema>;
+export type DropResult = z.infer<typeof DropResultSchema>;
 
 export class BasicCatalogueResultDto extends createZodDto(BasicCatalogueResultSchema) {}
 export class SoldOutEventResultDto extends createZodDto(SoldOutEventResultSchema) {}
@@ -218,3 +295,6 @@ export class HoldAboutToExpireResultDto extends createZodDto(HoldAboutToExpireRe
 export class GaMeetupResultDto extends createZodDto(GaMeetupResultSchema) {}
 export class GaLastTicketResultDto extends createZodDto(GaLastTicketResultSchema) {}
 export class ConfirmedOrderResultDto extends createZodDto(ConfirmedOrderResultSchema) {}
+export class DropRequestDto extends createZodDto(DropRequestSchema) {}
+export class LargeVenueDropRequestDto extends createZodDto(LargeVenueDropRequestSchema) {}
+export class DropResultDto extends createZodDto(DropResultSchema) {}

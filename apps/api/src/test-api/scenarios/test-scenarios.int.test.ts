@@ -267,6 +267,9 @@ describe('every scenario', () => {
     'ga-meetup',
     'ga-last-ticket',
     'confirmed-order',
+    'drop-in-5-min',
+    'drop-open-now',
+    'large-venue-drop',
   ];
 
   it.each(scenarios)('%s creates new rows on every call', async (scenario) => {
@@ -309,7 +312,7 @@ describe('every scenario', () => {
   it('works on an empty database (no baseline needed)', async () => {
     expect(await prisma.venue.count()).toBe(0);
     for (const scenario of scenarios) await seed(scenario);
-    expect(await prisma.event.count()).toBe(9);
+    expect(await prisma.event.count()).toBe(12);
   });
 
   it.each(scenarios)('%s stays open when the server has a test API key', async (scenario) => {

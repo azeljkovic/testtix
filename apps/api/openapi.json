@@ -3855,6 +3855,192 @@
         ]
       }
     },
+    "/__test/seed/drop-in-5-min": {
+      "post": {
+        "description": "A ticket drop at a new venue: a published concert with a waiting room (`waitingRoomEnabled`), Seats rows A–E × 10 at $60.00 and Standing GA of 50 at $35.00, all released when sales open. Customers join its queue through `POST /events/{eventId}/queue`; the body may set `admissionRatePerSec` (default 5) and `admissionTokenTtlSec` (default 600). Sales open 5 minutes from now (server clock, whole seconds): everyone who joins before then is let in in a random order at the opening. Test mode only. Adds a new venue, events (and orders) with fresh IDs on every call; the slugs and titles end in a random suffix, so calls never collide and existing data is not touched. Open even when the server has a test API key, since it only adds data.",
+        "operationId": "TestScenariosController_dropInFiveMin",
+        "parameters": [],
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DropRequestDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "What was created.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DropResultDto_Output"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limited (type `rate-limited`): too many requests in the rate-limit group `testApi` (per client address, `RATE_LIMIT_TEST_API`). Wait `Retry-After` seconds. Requests with the server's `X-Load-Test-Key` skip every limit.",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds until the limit resets.",
+                "schema": {
+                  "type": "integer",
+                  "minimum": 1
+                }
+              }
+            },
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error. The body is an RFC 9457 problem details object.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Seed scenario: a ticket drop opening in 5 minutes",
+        "tags": [
+          "test"
+        ]
+      }
+    },
+    "/__test/seed/drop-open-now": {
+      "post": {
+        "description": "A ticket drop at a new venue: a published concert with a waiting room (`waitingRoomEnabled`), Seats rows A–E × 10 at $60.00 and Standing GA of 50 at $35.00, all released when sales open. Customers join its queue through `POST /events/{eventId}/queue`; the body may set `admissionRatePerSec` (default 5) and `admissionTokenTtlSec` (default 600). Sales open now (server clock, whole seconds): customers are let in in join order, from the admission job's next run. Test mode only. Adds a new venue, events (and orders) with fresh IDs on every call; the slugs and titles end in a random suffix, so calls never collide and existing data is not touched. Open even when the server has a test API key, since it only adds data.",
+        "operationId": "TestScenariosController_dropOpenNow",
+        "parameters": [],
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DropRequestDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "What was created.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DropResultDto_Output"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limited (type `rate-limited`): too many requests in the rate-limit group `testApi` (per client address, `RATE_LIMIT_TEST_API`). Wait `Retry-After` seconds. Requests with the server's `X-Load-Test-Key` skip every limit.",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds until the limit resets.",
+                "schema": {
+                  "type": "integer",
+                  "minimum": 1
+                }
+              }
+            },
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error. The body is an RFC 9457 problem details object.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Seed scenario: a ticket drop that has just opened",
+        "tags": [
+          "test"
+        ]
+      }
+    },
+    "/__test/seed/large-venue-drop": {
+      "post": {
+        "description": "A ticket drop sized for load tests at a new venue: a published concert with a waiting room and 10 000 tickets (Stalls rows A–AN × 50 seats at $75.00, Floor GA of 8 000 at $50.00), all released when sales open. Sales open `salesOpenInSec` from now (default 300; 0 opens them at once), and the waiting room lets in `admissionRatePerSec` customers per second (default 100). Load runs create their customers with `POST /__test/sessions` and send `X-Load-Test-Key`. Test mode only. Adds a new venue, events (and orders) with fresh IDs on every call; the slugs and titles end in a random suffix, so calls never collide and existing data is not touched. Open even when the server has a test API key, since it only adds data.",
+        "operationId": "TestScenariosController_largeVenueDrop",
+        "parameters": [],
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LargeVenueDropRequestDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "What was created.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DropResultDto_Output"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limited (type `rate-limited`): too many requests in the rate-limit group `testApi` (per client address, `RATE_LIMIT_TEST_API`). Wait `Retry-After` seconds. Requests with the server's `X-Load-Test-Key` skip every limit.",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds until the limit resets.",
+                "schema": {
+                  "type": "integer",
+                  "minimum": 1
+                }
+              }
+            },
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error. The body is an RFC 9457 problem details object.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Seed scenario: a large ticket drop for load tests",
+        "tags": [
+          "test"
+        ]
+      }
+    },
     "/__test/sessions": {
       "post": {
         "description": "Test mode only. Skips registration and login for API-based test setup: creates a new user (ADMIN or CUSTOMER, email verified unless `emailVerified` is false) and a session, sets the session and CSRF cookies, and returns the same tokens in the body. Send both cookies plus the `X-CSRF-Token` header on state-changing requests. Open even when the server has a test API key, since it only adds data.",
@@ -6907,6 +7093,22 @@
             "maximum": 9007199254740991,
             "description": "Most tickets in one hold or order"
           },
+          "waitingRoomEnabled": {
+            "type": "boolean",
+            "description": "A ticket drop: customers queue first (`POST /events/{eventId}/queue`)"
+          },
+          "admissionRatePerSec": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991,
+            "description": "Customers the waiting room lets in per second of server time"
+          },
+          "admissionTokenTtlSec": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991,
+            "description": "How long an admission lasts"
+          },
           "tickets": {
             "type": "object",
             "properties": {
@@ -6952,6 +7154,9 @@
           "salesOpenAt",
           "holdDurationSec",
           "maxTicketsPerOrder",
+          "waitingRoomEnabled",
+          "admissionRatePerSec",
+          "admissionTokenTtlSec",
           "tickets"
         ],
         "additionalProperties": false
@@ -7537,6 +7742,67 @@
           "customer",
           "order"
         ],
+        "additionalProperties": false
+      },
+      "DropRequestDto": {
+        "type": "object",
+        "properties": {
+          "admissionRatePerSec": {
+            "description": "Customers let in per second of server time, 1–1000. Default 5.",
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 1000
+          },
+          "admissionTokenTtlSec": {
+            "description": "How long an admission lasts, in seconds, 60–3600. Default 600.",
+            "type": "integer",
+            "minimum": 60,
+            "maximum": 3600
+          }
+        },
+        "description": "Optional. Send no body (or `{}`) for the defaults.",
+        "additionalProperties": false
+      },
+      "DropResultDto_Output": {
+        "type": "object",
+        "properties": {
+          "venue": {
+            "$ref": "#/components/schemas/ScenarioVenue_Output"
+          },
+          "event": {
+            "description": "The drop: `waitingRoomEnabled`, with every ticket released when sales open",
+            "$ref": "#/components/schemas/ScenarioEvent_Output"
+          }
+        },
+        "required": [
+          "venue",
+          "event"
+        ],
+        "additionalProperties": false
+      },
+      "LargeVenueDropRequestDto": {
+        "type": "object",
+        "properties": {
+          "salesOpenInSec": {
+            "description": "Seconds from now (server clock) until sales open, 0–86400. 0 opens them at once. Default 300.",
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 86400
+          },
+          "admissionRatePerSec": {
+            "description": "Customers let in per second of server time, 1–1000. Default 100.",
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 1000
+          },
+          "admissionTokenTtlSec": {
+            "description": "How long an admission lasts, in seconds, 60–3600. Default 600.",
+            "type": "integer",
+            "minimum": 60,
+            "maximum": 3600
+          }
+        },
+        "description": "Optional. Send no body (or `{}`) for the defaults.",
         "additionalProperties": false
       },
       "Role": {
