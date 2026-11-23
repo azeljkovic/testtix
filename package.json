@@ -34,6 +34,7 @@
     "observability:check": "bash docker/observability-smoke-test.sh",
     "observability:load": "node scripts/drop-load.mjs",
     "observability:down": "docker compose --project-directory . -f docker/compose.yml --profile observability rm --stop --force prometheus grafana",
+    "demo:check": "bash docker/demo-smoke-test.sh",
     "db:migrate": "pnpm --filter @testtix/api db:migrate",
     "db:deploy": "pnpm --filter @testtix/api db:deploy",
     "db:reset": "pnpm --filter @testtix/api db:reset",

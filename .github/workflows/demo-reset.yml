@@ -1,0 +1,39 @@
+name: Demo nightly reset
+
+# Every night: the public smoke test against the hosted demo (docs/hosted-demo.md), then a data
+# reset (POST /__test/reset with the test API key) and an empty Mailpit. The run's log is the
+# reset's record: seed day and rows inserted. Skipped until the repository variable DEMO_DOMAIN is
+# set. GitHub pauses scheduled workflows after 60 days without repository activity.
+
+on:
+  schedule:
+    # 03:17 UTC: a quiet hour, off the top of the hour when scheduled runs queue up.
+    - cron: '17 3 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# Shared with the deploy, so they never overlap.
+concurrency:
+  group: demo
+  cancel-in-progress: false
+
+jobs:
+  reset:
+    name: Smoke test and reset
+    if: vars.DEMO_DOMAIN != ''
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    environment: demo
+    steps:
+      - name: Check out code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Smoke test, then reset the data
+        env:
+          DEMO_DOMAIN: ${{ vars.DEMO_DOMAIN }}
+          MAILPIT_UI_AUTH: ${{ secrets.MAILPIT_UI_AUTH }}
+          LOAD_TEST_KEY: ${{ secrets.LOAD_TEST_KEY }}
+          TEST_API_KEY: ${{ secrets.TEST_API_KEY }}
+        run: bash docker/demo-smoke-test.sh --reset

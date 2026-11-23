@@ -1,0 +1,143 @@
+name: Demo deploy
+
+# Deploys to the hosted demo (docs/hosted-demo.md): after CI has pushed a commit's images from
+# `main`, or by hand for any branch or tag whose images are on GHCR. It writes the server's
+# settings from the `demo` environment's secrets, copies the compose files, pulls the images,
+# restarts what changed and runs the public smoke test. Skipped until the repository variable
+# DEMO_DOMAIN is set.
+
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      image-tag:
+        description: Image tag to run (empty = sha-<commit> of the chosen branch or tag)
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+# Shared with the nightly reset, so they never overlap.
+concurrency:
+  group: demo
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Deploy and smoke-test
+    if: >-
+      vars.DEMO_DOMAIN != '' && (github.event_name == 'workflow_dispatch' ||
+      (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push'))
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    environment:
+      name: demo
+      url: https://${{ vars.DEMO_DOMAIN }}
+    env:
+      DEMO_DOMAIN: ${{ vars.DEMO_DOMAIN }}
+      # On the server, relative to the SSH user's home.
+      DEMO_DIR: testtix
+      COMMIT: ${{ github.event.workflow_run.head_sha || github.sha }}
+    steps:
+      # The compose files and the smoke test of the commit whose images are deployed.
+      - name: Check out code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ env.COMMIT }}
+
+      - name: Image tag
+        id: image
+        env:
+          IMAGE_TAG: ${{ inputs.image-tag }}
+        run: echo "tag=${IMAGE_TAG:-sha-${COMMIT::7}}" >> "$GITHUB_OUTPUT"
+
+      # The host key is pinned (DEMO_SSH_KNOWN_HOSTS): a server that answers with another key is
+      # refused, never trusted on first use.
+      - name: Set up SSH
+        env:
+          SSH_HOST: ${{ secrets.DEMO_SSH_HOST }}
+          SSH_USER: ${{ secrets.DEMO_SSH_USER }}
+          SSH_PRIVATE_KEY: ${{ secrets.DEMO_SSH_PRIVATE_KEY }}
+          SSH_KNOWN_HOSTS: ${{ secrets.DEMO_SSH_KNOWN_HOSTS }}
+        run: |
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$SSH_PRIVATE_KEY" > ~/.ssh/demo_key
+          chmod 600 ~/.ssh/demo_key
+          printf '%s\n' "$SSH_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          cat > ~/.ssh/config <<EOF
+          Host demo
+            HostName $SSH_HOST
+            User $SSH_USER
+            IdentityFile ~/.ssh/demo_key
+            IdentitiesOnly yes
+            StrictHostKeyChecking yes
+            ServerAliveInterval 30
+          EOF
+
+      # Single quotes: compose takes the values literally (no `$` interpolation).
+      - name: Write the server's settings
+        env:
+          IMAGE_TAG: ${{ steps.image.outputs.tag }}
+          API_REPLICAS: ${{ vars.DEMO_API_REPLICAS || '2' }}
+          POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
+          TEST_API_KEY: ${{ secrets.TEST_API_KEY }}
+          LOAD_TEST_KEY: ${{ secrets.LOAD_TEST_KEY }}
+          PAYMENTS_API_KEY: ${{ secrets.PAYMENTS_API_KEY }}
+          PAYMENTS_WEBHOOK_SECRET: ${{ secrets.PAYMENTS_WEBHOOK_SECRET }}
+          MAILPIT_UI_AUTH: ${{ secrets.MAILPIT_UI_AUTH }}
+        run: |
+          umask 077
+          cat > demo.env <<EOF
+          # Written by the Demo deploy workflow; changes here are overwritten on the next deploy.
+          TESTTIX_IMAGE_REGISTRY='ghcr.io/${{ github.repository }}'
+          TESTTIX_IMAGE_TAG='$IMAGE_TAG'
+          DEMO_DOMAIN='$DEMO_DOMAIN'
+          API_REPLICAS='$API_REPLICAS'
+          POSTGRES_PASSWORD='$POSTGRES_PASSWORD'
+          TEST_API_KEY='$TEST_API_KEY'
+          LOAD_TEST_KEY='$LOAD_TEST_KEY'
+          PAYMENTS_API_KEY='$PAYMENTS_API_KEY'
+          PAYMENTS_WEBHOOK_SECRET='$PAYMENTS_WEBHOOK_SECRET'
+          MAILPIT_UI_AUTH='$MAILPIT_UI_AUTH'
+          EOF
+          ssh demo "mkdir -p '$DEMO_DIR' && umask 077 && cat > '$DEMO_DIR/.env'" < demo.env
+          rm demo.env
+
+      # Notes whether the edge's Caddyfile changed: compose doesn't restart a container when a
+      # bind-mounted file changes.
+      - name: Copy the compose files
+        id: files
+        run: |
+          caddyfile="$DEMO_DIR/docker/demo/Caddyfile"
+          before="$(ssh demo "cat '$caddyfile' 2>/dev/null | sha256sum")"
+          tar -cz docker/compose.yml docker/demo | ssh demo "tar -xz -C '$DEMO_DIR'"
+          after="$(ssh demo "sha256sum < '$caddyfile'")"
+          echo "caddyfile-changed=$([[ "$before" == "$after" ]] && echo false || echo true)" >> "$GITHUB_OUTPUT"
+
+      # Containers whose image or settings changed are recreated; `migrate` applies new migrations
+      # before the API replicas start.
+      - name: Pull the images and start
+        env:
+          RESTART_EDGE: ${{ steps.files.outputs.caddyfile-changed }}
+        run: |
+          ssh demo "set -e
+            '$DEMO_DIR/docker/demo/compose.sh' pull --quiet
+            '$DEMO_DIR/docker/demo/compose.sh' up -d --wait --wait-timeout 300 --no-build --remove-orphans
+            if [ '$RESTART_EDGE' = true ]; then '$DEMO_DIR/docker/demo/compose.sh' restart edge; fi
+            docker image prune --force"
+
+      - name: Smoke test
+        env:
+          MAILPIT_UI_AUTH: ${{ secrets.MAILPIT_UI_AUTH }}
+          LOAD_TEST_KEY: ${{ secrets.LOAD_TEST_KEY }}
+        run: bash docker/demo-smoke-test.sh
+
+      - name: Show service state and logs
+        if: failure()
+        run: |
+          ssh demo "'$DEMO_DIR/docker/demo/compose.sh' ps --all
+            '$DEMO_DIR/docker/demo/compose.sh' logs --no-color --tail 200" || true

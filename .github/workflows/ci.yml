@@ -247,6 +247,40 @@ jobs:
         if: always()
         run: pnpm full:reset
 
+      # The hosted demo's overlay (docker/demo/) on the same images, with DEMO_DOMAIN=localhost:
+      # `edge` serves the four names with certificates from Caddy's local CA.
+      - name: Start the demo setup
+        run: |
+          cat > .env.demo <<'EOF'
+          DEMO_DOMAIN=localhost
+          TEST_API_KEY=ci-demo-test-api-key
+          LOAD_TEST_KEY=ci-demo-load-test-key
+          PAYMENTS_API_KEY=ci-demo-payments-api-key
+          PAYMENTS_WEBHOOK_SECRET=ci-demo-webhook-secret
+          POSTGRES_PASSWORD=cidemo
+          MAILPIT_UI_AUTH=ci:ci-demo-mail
+          EOF
+          docker compose -p testtix-demo --project-directory . --env-file .env.demo \
+            -f docker/compose.yml -f docker/demo/compose.yml --profile full up -d --wait --no-build
+
+      # HTTPS, what stays private, a purchase, then the nightly reset.
+      - name: Demo smoke test
+        env:
+          DEMO_DOMAIN: localhost
+          DEMO_INSECURE: 'true'
+          MAILPIT_UI_AUTH: ci:ci-demo-mail
+          TEST_API_KEY: ci-demo-test-api-key
+          LOAD_TEST_KEY: ci-demo-load-test-key
+        run: pnpm demo:check --reset
+
+      - name: Show demo service logs
+        if: failure() && hashFiles('.env.demo') != ''
+        run: docker compose -p testtix-demo --project-directory . --env-file .env.demo -f docker/compose.yml -f docker/demo/compose.yml --profile full logs --no-color
+
+      - name: Stop the demo setup
+        if: always() && hashFiles('.env.demo') != ''
+        run: docker compose -p testtix-demo --project-directory . --env-file .env.demo -f docker/compose.yml -f docker/demo/compose.yml --profile full down --volumes
+
       # `publish` pushes exactly these images, once every other job has passed.
       - name: Save the images
         if: github.event_name == 'push'
