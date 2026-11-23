@@ -23,7 +23,7 @@ export class OrdersController {
   @ApiOperation({
     summary: 'Check out a hold',
     description:
-      'Creates a `PENDING_PAYMENT` order for the tickets of your hold and a payment session: send the customer to `paymentUrl`. The order expires with the hold (`expiresAt`); releasing or replacing the hold expires it too. A hold has at most one order: checking it out again returns that order with 200. Free orders get no `paymentUrl`. 403 `email-not-verified` until you verify your email. 404 for unknown holds and other users’ holds. 409 `hold-expired` once the hold has expired; 409 `event-not-on-sale` when the event was unpublished, cancelled or has started. 503 `payment-provider-unavailable` when the provider fails: the order is kept without a `paymentUrl` and the hold stays, so retry the same request.',
+      'Creates a `PENDING_PAYMENT` order for the tickets of your hold and a payment session: send the customer to `paymentUrl`. The order expires with the hold (`expiresAt`); releasing or replacing the hold expires it too. A hold has at most one order: checking it out again returns that order with 200. Once the payment result arrives the order is `PROCESSING` and the hold is used up (checking it out again answers 404). Free orders get no `paymentUrl`: they are `PROCESSING` at once and confirmed by the processing job. 403 `email-not-verified` until you verify your email. 404 for unknown holds and other users’ holds. 409 `hold-expired` once the hold has expired; 409 `event-not-on-sale` when the event was unpublished, cancelled or has started. 503 `payment-provider-unavailable` when the provider fails: the order is kept without a `paymentUrl` and the hold stays, so retry the same request.',
   })
   @ZodResponse({ status: 201, type: OrderDto, description: 'The new order.' })
   @ApiResponse({ status: 200, type: OrderDto.Output, description: 'The hold’s existing order.' })
@@ -51,7 +51,7 @@ export class OrdersController {
   @ApiOperation({
     summary: 'Get one of your orders',
     description:
-      'Poll it after payment: wait `retryAfterMs` between requests and stop once it is null (final status). 404 for unknown orders and other users’ orders.',
+      'Poll it after payment: wait `retryAfterMs` between requests and stop once it is null (final status). `PENDING_PAYMENT` → `PROCESSING` (the provider reported the payment; tickets are off sale) → `CONFIRMED` or `FAILED` (tickets released). 404 for unknown orders and other users’ orders.',
   })
   @ZodResponse({ status: 200, type: OrderDto, description: 'The order.' })
   get(@CurrentUser() user: User, @Param() { orderId }: OrderIdParamDto) {

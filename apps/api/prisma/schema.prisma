@@ -79,6 +79,15 @@ enum OrderStatus {
   @@map("order_status")
 }
 
+/// `PAYMENT_EVENT_OUTCOMES` in @testtix/shared.
+enum PaymentEventOutcome {
+  APPLIED
+  IGNORED
+  REFUND_DUE
+
+  @@map("payment_event_outcome")
+}
+
 // --- Accounts ------------------------------------------------------------------------------
 
 model User {
@@ -373,15 +382,21 @@ model Ticket {
 /// A webhook received from the payment provider (C4.3). The unique provider event ID makes
 /// duplicate deliveries a no-op.
 model PaymentEvent {
-  id              String   @id @default(uuid(7)) @db.Uuid
-  providerEventId String   @unique @map("provider_event_id")
-  orderId         String?  @map("order_id") @db.Uuid
+  id              String              @id @default(uuid(7)) @db.Uuid
+  providerEventId String              @unique @map("provider_event_id")
+  /// The order named by `metadata.orderId`. Null when no such order exists.
+  orderId         String?             @map("order_id") @db.Uuid
   type            String
+  /// What receiving it did. `REFUND_DUE` rows are payments no order could use.
+  outcome         PaymentEventOutcome
+  /// The webhook body as received (after signature and schema checks).
   payload         Json
-  receivedAt      DateTime @map("received_at") @db.Timestamptz(3)
+  receivedAt      DateTime            @map("received_at") @db.Timestamptz(3)
 
   order Order? @relation(fields: [orderId], references: [id], onDelete: SetNull)
 
   @@index([orderId])
+  // Payments due a refund, oldest first.
+  @@index([outcome, receivedAt])
   @@map("payment_events")
 }

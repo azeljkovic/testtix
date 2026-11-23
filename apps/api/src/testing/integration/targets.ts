@@ -35,6 +35,12 @@ export function checkTestSmtpUrl(value: string): string {
   return value;
 }
 
+/** A running fake payment provider. It holds nothing worth protecting (sessions are in memory). */
+export function checkTestPaymentsUrl(value: string): string {
+  parseUrl('TEST_PAYMENTS_URL', value, ['http:', 'https:']);
+  return value.replace(/\/+$/, '');
+}
+
 export function checkTestMailpitUrl(value: string): string {
   parseUrl('TEST_MAILPIT_URL', value, ['http:', 'https:']);
   return value.replace(/\/+$/, '');

@@ -4,7 +4,7 @@ import { Test, type TestingModule } from '@nestjs/testing';
 import { createTransport } from 'nodemailer';
 
 import { AppModule } from '../app.module.js';
-import { configureApp, createHttpAdapter } from '../app.setup.js';
+import { APP_OPTIONS, configureApp, createHttpAdapter } from '../app.setup.js';
 import { type AppConfig, parseConfig } from '../config/config.schema.js';
 import { PrismaService } from '../infra/prisma.service.js';
 import { REDIS } from '../infra/redis.module.js';
@@ -58,7 +58,11 @@ export async function createTestApp(options: TestAppOptions = {}): Promise<NestF
 
 /** Creates and initialises the HTTP app the way `main.ts` does, without listening on a port. */
 export async function startTestingApp(moduleRef: TestingModule): Promise<NestFastifyApplication> {
-  const app = moduleRef.createNestApplication<NestFastifyApplication>(createHttpAdapter());
+  const app = moduleRef.createNestApplication<NestFastifyApplication>(
+    createHttpAdapter(),
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-class-instance-assignment -- Nest declares its options type as a class; a literal is the documented usage.
+    { ...APP_OPTIONS },
+  );
   configureApp(app);
   await app.init();
   await app.getHttpAdapter().getInstance().ready();

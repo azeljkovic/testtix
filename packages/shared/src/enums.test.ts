@@ -13,6 +13,7 @@ import {
   SectionTypeSchema,
 } from './inventory.js';
 import { ORDER_STATUSES, OrderStatusSchema } from './orders.js';
+import { PAYMENT_EVENT_OUTCOMES, PaymentEventOutcomeSchema } from './payments.js';
 import { RoleSchema, ROLES } from './roles.js';
 
 describe.each([
@@ -22,6 +23,7 @@ describe.each([
   ['EventStatusSchema', EventStatusSchema, EVENT_STATUSES],
   ['SectionTypeSchema', SectionTypeSchema, SECTION_TYPES],
   ['InventoryStatusSchema', InventoryStatusSchema, INVENTORY_STATUSES],
+  ['PaymentEventOutcomeSchema', PaymentEventOutcomeSchema, PAYMENT_EVENT_OUTCOMES],
 ] as const)('%s', (_name, schema, values) => {
   it.each(values)('accepts %s', (value) => {
     expect(schema.parse(value)).toBe(value);

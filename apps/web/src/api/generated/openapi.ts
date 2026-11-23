@@ -537,7 +537,7 @@ export interface paths {
         put?: never;
         /**
          * Check out a hold
-         * @description Creates a `PENDING_PAYMENT` order for the tickets of your hold and a payment session: send the customer to `paymentUrl`. The order expires with the hold (`expiresAt`); releasing or replacing the hold expires it too. A hold has at most one order: checking it out again returns that order with 200. Free orders get no `paymentUrl`. 403 `email-not-verified` until you verify your email. 404 for unknown holds and other users’ holds. 409 `hold-expired` once the hold has expired; 409 `event-not-on-sale` when the event was unpublished, cancelled or has started. 503 `payment-provider-unavailable` when the provider fails: the order is kept without a `paymentUrl` and the hold stays, so retry the same request.
+         * @description Creates a `PENDING_PAYMENT` order for the tickets of your hold and a payment session: send the customer to `paymentUrl`. The order expires with the hold (`expiresAt`); releasing or replacing the hold expires it too. A hold has at most one order: checking it out again returns that order with 200. Once the payment result arrives the order is `PROCESSING` and the hold is used up (checking it out again answers 404). Free orders get no `paymentUrl`: they are `PROCESSING` at once and confirmed by the processing job. 403 `email-not-verified` until you verify your email. 404 for unknown holds and other users’ holds. 409 `hold-expired` once the hold has expired; 409 `event-not-on-sale` when the event was unpublished, cancelled or has started. 503 `payment-provider-unavailable` when the provider fails: the order is kept without a `paymentUrl` and the hold stays, so retry the same request.
          */
         post: operations["OrdersController_create"];
         delete?: never;
@@ -555,11 +555,31 @@ export interface paths {
         };
         /**
          * Get one of your orders
-         * @description Poll it after payment: wait `retryAfterMs` between requests and stop once it is null (final status). 404 for unknown orders and other users’ orders.
+         * @description Poll it after payment: wait `retryAfterMs` between requests and stop once it is null (final status). `PENDING_PAYMENT` → `PROCESSING` (the provider reported the payment; tickets are off sale) → `CONFIRMED` or `FAILED` (tickets released). 404 for unknown orders and other users’ orders.
          */
         get: operations["OrdersController_get"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/webhooks/payments": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Receive a payment provider webhook
+         * @description Called by the payment provider (`apps/fake-payments`), not by clients. The signature (`X-Payments-Signature: v1=<hex HMAC-SHA256 of "<timestamp>.<raw body>">`, keyed with `PAYMENTS_WEBHOOK_SECRET`) and `X-Payments-Timestamp` (Unix seconds, within `PAYMENTS_WEBHOOK_TOLERANCE_SEC` of the real time, not the test clock) are checked first: 400 `webhook-signature-invalid` otherwise. A valid body is recorded once per event `id`; deliveries of an event already received answer 200 with `duplicate: true` and change nothing. The first result for an unpaid, unexpired order moves it to `PROCESSING` (its tickets are off sale), and a job confirms (`payment.succeeded`) or fails it (`payment.failed`, tickets released) after `JOB_PROCESSING_DELAY_MS`. A success for an expired order, or for an order that already has a result, is recorded as `REFUND_DUE` and never sells tickets.
+         */
+        post: operations["PaymentWebhooksController_receive"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1421,6 +1441,8 @@ export interface components {
             updatedAt: string;
             /** @description While the order can still change: wait this long before polling it again (never past `expiresAt` while it is unpaid). Null once the status is final (`CONFIRMED`, `FAILED`, `EXPIRED`). */
             retryAfterMs: number | null;
+            /** @description True when a payment for this order arrived that it could not use (e.g. after the order expired, or after its payment had failed): the payment is recorded and due a refund, and sold no tickets. */
+            refundDue: boolean;
         };
         OrderSummary_Output: {
             /** Format: uuid */
@@ -1449,6 +1471,36 @@ export interface components {
             total: number;
             /** @description Number of pages; 0 when the list is empty */
             totalPages: number;
+        };
+        PaymentWebhookEvent: {
+            id: string;
+            /** @enum {string} */
+            type: "payment.succeeded" | "payment.failed";
+            /** Format: date-time */
+            createdAt: string;
+            data: {
+                sessionId: string;
+                /** @enum {string} */
+                status: "SUCCEEDED" | "FAILED";
+                amountCents: number;
+                /** @enum {string} */
+                currency: "USD";
+                /** @enum {string|null} */
+                failureCode: "CARD_DECLINED" | "INSUFFICIENT_FUNDS" | null;
+                metadata: {
+                    [key: string]: string;
+                };
+            };
+        };
+        /** @enum {string} */
+        PaymentEventOutcome_Output: "APPLIED" | "IGNORED" | "REFUND_DUE";
+        PaymentWebhookAck_Output: {
+            /** @description The provider’s event ID (`id` of the body) */
+            eventId: string;
+            /** @description `APPLIED`: the event moved its unpaid order to `PROCESSING`; a job confirms or fails it. `IGNORED`: nothing changed. `REFUND_DUE`: a payment no order can use (the order had expired or already had a result, or the session or amount is not the order’s): recorded and due a refund, never sold. */
+            outcome: components["schemas"]["PaymentEventOutcome_Output"];
+            /** @description True when this event was received before: nothing changed this time. */
+            duplicate: boolean;
         };
         ClockStateDto_Output: {
             /**
@@ -3334,6 +3386,44 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Error. The body is an RFC 9457 problem details object. */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    PaymentWebhooksController_receive: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Unix seconds */
+                "X-Payments-Timestamp": string;
+                /** @description `v1=<hex>` */
+                "X-Payments-Signature": string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PaymentWebhookEvent"];
+            };
+        };
+        responses: {
+            /** @description Received. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PaymentWebhookAck_Output"];
                 };
             };
             /** @description Error. The body is an RFC 9457 problem details object. */

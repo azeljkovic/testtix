@@ -6,6 +6,11 @@ export interface IntegrationTargets {
   smtpUrl: string;
   /** Mailpit's HTTP API, which `waitForEmail` reads. */
   mailpitUrl: string;
+  /**
+   * A running fake payment provider (`TEST_PAYMENTS_URL`), or undefined to build and start one for
+   * the tests that need it (`startFakePayments()`).
+   */
+  paymentsUrl: string | undefined;
 }
 
 declare module 'vitest' {

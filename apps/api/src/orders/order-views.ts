@@ -104,6 +104,9 @@ export async function loadOrder(
       ...summarySelect,
       paymentUrl: true,
       updatedAt: true,
+      _count: {
+        select: { items: true, paymentEvents: { where: { outcome: 'REFUND_DUE' } } },
+      },
       items: {
         select: {
           priceCents: true,
@@ -138,5 +141,6 @@ export async function loadOrder(
     paymentUrl: summary.status === 'PENDING_PAYMENT' ? row.paymentUrl : null,
     updatedAt: row.updatedAt.toISOString(),
     retryAfterMs: retryAfterMs(summary.status, row.expiresAt, now, pollIntervalMs),
+    refundDue: row._count.paymentEvents > 0,
   };
 }

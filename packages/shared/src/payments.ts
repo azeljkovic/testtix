@@ -43,6 +43,21 @@ export const PAYMENT_EVENT_TYPES = ['payment.succeeded', 'payment.failed'] as co
 export const PaymentEventTypeSchema = z.enum(PAYMENT_EVENT_TYPES);
 export type PaymentEventType = z.infer<typeof PaymentEventTypeSchema>;
 
+/**
+ * What the API did with a received webhook event (C4.3), stored with it:
+ *
+ * - `APPLIED`: the event decided its order: it moved the unpaid order to `PROCESSING`, and a job
+ *   then confirms it (`payment.succeeded`) or fails it (`payment.failed`).
+ * - `IGNORED`: nothing to do, e.g. a failure for an order whose result is already known.
+ * - `REFUND_DUE`: money arrived that no order can use (the order had expired, another result was
+ *   already final, or the session or amount doesn't match): recorded and due a refund, never sold.
+ */
+export const PAYMENT_EVENT_OUTCOMES = ['APPLIED', 'IGNORED', 'REFUND_DUE'] as const;
+export const PaymentEventOutcomeSchema = z
+  .enum(PAYMENT_EVENT_OUTCOMES)
+  .meta({ id: 'PaymentEventOutcome' });
+export type PaymentEventOutcome = z.infer<typeof PaymentEventOutcomeSchema>;
+
 const httpUrl = z.url({ protocol: /^https?$/, error: 'Must be an http:// or https:// URL' });
 
 /** Free-form key/value pairs the caller gets back in the session and in every webhook. */

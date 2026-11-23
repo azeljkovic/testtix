@@ -16,6 +16,12 @@ const { version } = JSON.parse(
   version: string;
 };
 
+/** Application options shared by `main.ts` and the tests. */
+export const APP_OPTIONS = {
+  // Keeps each JSON body's raw bytes in `request.rawBody`, which webhook signatures are made over.
+  rawBody: true,
+} as const;
+
 /** The HTTP adapter shared by `main.ts` and the tests. */
 export function createHttpAdapter(): FastifyAdapter {
   const adapter = new FastifyAdapter({

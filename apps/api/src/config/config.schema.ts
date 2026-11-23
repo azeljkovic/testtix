@@ -1,4 +1,4 @@
-import { DEV_PAYMENTS_API_KEY } from '@testtix/shared';
+import { DEV_PAYMENTS_API_KEY, DEV_PAYMENTS_WEBHOOK_SECRET } from '@testtix/shared';
 import { z } from 'zod';
 
 export const LOG_LEVELS = ['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent'] as const;
@@ -83,6 +83,14 @@ export const envSchema = z
     PAYMENTS_WEBHOOK_URL: httpUrl.optional(),
     // A provider request that takes longer fails, and checkout answers 503.
     PAYMENTS_TIMEOUT_MS: z.coerce.number().int().min(100).max(60_000).default(5000),
+    // HMAC key of the provider's webhook signatures. Same value as the fake provider's.
+    PAYMENTS_WEBHOOK_SECRET: z.string().min(16, 'Must be at least 16 characters').optional(),
+    // Webhooks whose signed timestamp is further than this from the real time are rejected
+    // (replay protection). Checked against the real time, never the test clock.
+    PAYMENTS_WEBHOOK_TOLERANCE_SEC: z.coerce.number().int().min(1).max(3600).default(300),
+    // How long the order processing job waits before confirming or failing a `PROCESSING` order,
+    // so clients see "processing" for a while ("data appears eventually").
+    JOB_PROCESSING_DELAY_MS: z.coerce.number().int().min(0).max(600_000).default(1000),
     // `retryAfterMs` of an order that is still changing: how long clients wait between polls.
     ORDER_POLL_INTERVAL_MS: z.coerce.number().int().min(100).max(60_000).default(2000),
   })
@@ -98,6 +106,7 @@ export const envSchema = z
       'PAYMENTS_BASE_URL',
       'PAYMENTS_API_KEY',
       'PAYMENTS_WEBHOOK_URL',
+      'PAYMENTS_WEBHOOK_SECRET',
     ] as const;
     for (const key of required) {
       if (env[key] === undefined) {
@@ -136,8 +145,11 @@ export const envSchema = z
       webhookUrl:
         env.PAYMENTS_WEBHOOK_URL ?? DEV_PAYMENTS_WEBHOOK_URL.replace('{port}', String(env.PORT)),
       timeoutMs: env.PAYMENTS_TIMEOUT_MS,
+      webhookSecret: env.PAYMENTS_WEBHOOK_SECRET ?? DEV_PAYMENTS_WEBHOOK_SECRET,
+      webhookToleranceMs: env.PAYMENTS_WEBHOOK_TOLERANCE_SEC * 1000,
     },
     orderPollIntervalMs: env.ORDER_POLL_INTERVAL_MS,
+    orderProcessingDelayMs: env.JOB_PROCESSING_DELAY_MS,
   }));
 
 export type AppConfig = Readonly<z.output<typeof envSchema>>;

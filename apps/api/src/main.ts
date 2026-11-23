@@ -5,7 +5,7 @@ import type { NestFastifyApplication } from '@nestjs/platform-fastify';
 import { Logger } from 'nestjs-pino';
 
 import { AppModule } from './app.module.js';
-import { configureApp, createHttpAdapter } from './app.setup.js';
+import { APP_OPTIONS, configureApp, createHttpAdapter } from './app.setup.js';
 import { ConfigValidationError, parseConfig } from './config/config.schema.js';
 
 async function bootstrap(): Promise<void> {
@@ -23,7 +23,7 @@ async function bootstrap(): Promise<void> {
     AppModule.forRoot(config),
     createHttpAdapter(),
     // eslint-disable-next-line @typescript-eslint/no-unsafe-class-instance-assignment -- Nest declares its options type as a class; a literal is the documented usage.
-    { bufferLogs: true },
+    { bufferLogs: true, ...APP_OPTIONS },
   );
   configureApp(app);
   app.enableShutdownHooks();
