@@ -1,6 +1,5 @@
 import { setTimeout as sleep } from 'node:timers/promises';
 
-import { NestFactory } from '@nestjs/core';
 import type { NestFastifyApplication } from '@nestjs/platform-fastify';
 import { Queue } from 'bullmq';
 import request from 'supertest';
@@ -16,7 +15,7 @@ import {
 } from '../test-api/scenarios/scenario.schemas.js';
 import { createTestSession, sessionClient } from '../testing/auth.js';
 import { createIntegrationApp } from '../testing/integration/integration-app.js';
-import { WorkerAppModule } from '../worker-app.module.js';
+import { createWorkerApp } from '../worker.setup.js';
 import { HOLD_SWEEPER_QUEUE } from './hold-sweeper.processor.js';
 import { HOLD_SWEEPER_SCHEDULER_ID } from './hold-sweeper.schedule.js';
 import { HoldSweeperService } from './hold-sweeper.service.js';
@@ -258,28 +257,37 @@ describe('with the hold sweeper enabled', () => {
 });
 
 describe('the standalone worker (src/worker.ts)', () => {
-  it('sweeps while the API runs without an in-process worker', async () => {
+  it('sweeps while the API runs without an in-process worker, and answers health checks', async () => {
     const { databaseUrl, redisUrl, smtpUrl } = inject('integration');
     await emptyQueue();
     const app = await createIntegrationApp({ env: TEST_MODE });
-    const worker = await NestFactory.createApplicationContext(
-      WorkerAppModule.forRoot(
-        parseConfig({
-          NODE_ENV: 'test',
-          LOG_LEVEL: 'silent',
-          DATABASE_URL: databaseUrl,
-          REDIS_URL: redisUrl,
-          SMTP_URL: smtpUrl,
-          // Ignored by the worker entrypoint: it always runs the jobs.
-          WORKER_IN_PROCESS: 'false',
-          ...TEST_MODE,
-          ...FAST_SWEEPER,
-        }),
-      ),
-      // eslint-disable-next-line @typescript-eslint/no-unsafe-class-instance-assignment -- Nest declares its options type as a class; a literal is the documented usage.
+    const worker = await createWorkerApp(
+      parseConfig({
+        NODE_ENV: 'test',
+        LOG_LEVEL: 'silent',
+        DATABASE_URL: databaseUrl,
+        REDIS_URL: redisUrl,
+        SMTP_URL: smtpUrl,
+        // Ignored by the worker entrypoint: it always runs the jobs.
+        WORKER_IN_PROCESS: 'false',
+        ...TEST_MODE,
+        ...FAST_SWEEPER,
+      }),
       { logger: false },
     );
     try {
+      await worker.init();
+      await worker.getHttpAdapter().getInstance().ready();
+      await request(worker.getHttpServer()).get('/health').expect(200, { status: 'ok' });
+      await request(worker.getHttpServer())
+        .get('/health/ready')
+        .expect(200, {
+          status: 'ok',
+          checks: { database: { status: 'up' }, redis: { status: 'up' } },
+        });
+      // Nothing else is served.
+      await request(worker.getHttpServer()).get('/events').expect(404);
+
       const prisma = app.get(PrismaService);
       const seeded = await seedHold(app, 60);
       await app.get(ClockService).advanceBy(60_000);
