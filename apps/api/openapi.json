@@ -17,6 +17,25 @@
               }
             }
           },
+          "429": {
+            "description": "Rate limited (type `rate-limited`): too many requests in the rate-limit group `default` (per client address, `RATE_LIMIT_DEFAULT`). Wait `Retry-After` seconds. Requests with the server's `X-Load-Test-Key` skip every limit.",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds until the limit resets.",
+                "schema": {
+                  "type": "integer",
+                  "minimum": 1
+                }
+              }
+            },
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
           "default": {
             "description": "Error. The body is an RFC 9457 problem details object.",
             "content": {
@@ -72,6 +91,25 @@
           },
           "403": {
             "description": "The `X-CSRF-Token` header is missing or doesn't match the `testtix_csrf` cookie (type `csrf-token-invalid`).",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limited (type `rate-limited`): too many requests in the rate-limit group `default` (per client address, `RATE_LIMIT_DEFAULT`) and `auth` (per client address, `RATE_LIMIT_AUTH`). Wait `Retry-After` seconds. Requests with the server's `X-Load-Test-Key` skip every limit.",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds until the limit resets.",
+                "schema": {
+                  "type": "integer",
+                  "minimum": 1
+                }
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -143,6 +181,25 @@
               }
             }
           },
+          "429": {
+            "description": "Rate limited (type `rate-limited`): too many requests in the rate-limit group `default` (per client address, `RATE_LIMIT_DEFAULT`) and `auth` (per client address, `RATE_LIMIT_AUTH`). Wait `Retry-After` seconds. Requests with the server's `X-Load-Test-Key` skip every limit.",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds until the limit resets.",
+                "schema": {
+                  "type": "integer",
+                  "minimum": 1
+                }
+              }
+            },
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
           "default": {
             "description": "Error. The body is an RFC 9457 problem details object.",
             "content": {
@@ -181,6 +238,25 @@
           },
           "403": {
             "description": "The `X-CSRF-Token` header is missing or doesn't match the `testtix_csrf` cookie (type `csrf-token-invalid`).",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limited (type `rate-limited`): too many requests in the rate-limit group `default` (per client address, `RATE_LIMIT_DEFAULT`). Wait `Retry-After` seconds. Requests with the server's `X-Load-Test-Key` skip every limit.",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds until the limit resets.",
+                "schema": {
+                  "type": "integer",
+                  "minimum": 1
+                }
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -245,6 +321,25 @@
               }
             }
           },
+          "429": {
+            "description": "Rate limited (type `rate-limited`): too many requests in the rate-limit group `default` (per client address, `RATE_LIMIT_DEFAULT`) and `auth` (per client address, `RATE_LIMIT_AUTH`). Wait `Retry-After` seconds. Requests with the server's `X-Load-Test-Key` skip every limit.",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds until the limit resets.",
+                "schema": {
+                  "type": "integer",
+                  "minimum": 1
+                }
+              }
+            },
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
           "default": {
             "description": "Error. The body is an RFC 9457 problem details object.",
             "content": {
@@ -264,7 +359,7 @@
     },
     "/auth/verify-email/resend": {
       "post": {
-        "description": "Emails the logged-in user a new verification link. Links from earlier emails stop working. 409 `email-already-verified` when the user's address is already verified; 503 when the email can't be sent.",
+        "description": "Emails the logged-in user a new verification link. Links from earlier emails stop working. 409 `email-already-verified` when the user's address is already verified; 429 `rate-limited` after too many resends for this account (`RATE_LIMIT_VERIFICATION_RESEND`, default 3 per 15 minutes); 503 when the email can't be sent.",
         "operationId": "AuthController_resendVerification",
         "parameters": [
           {
@@ -293,6 +388,25 @@
           },
           "403": {
             "description": "The `X-CSRF-Token` header is missing or doesn't match the `testtix_csrf` cookie (type `csrf-token-invalid`).",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limited (type `rate-limited`): too many requests in the rate-limit group `default` (per client address, `RATE_LIMIT_DEFAULT`) and `verificationResend` (per user, `RATE_LIMIT_VERIFICATION_RESEND`). Wait `Retry-After` seconds. Requests with the server's `X-Load-Test-Key` skip every limit.",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds until the limit resets.",
+                "schema": {
+                  "type": "integer",
+                  "minimum": 1
+                }
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -341,6 +455,25 @@
           },
           "401": {
             "description": "No session cookie, or the session has expired or was ended.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limited (type `rate-limited`): too many requests in the rate-limit group `default` (per client address, `RATE_LIMIT_DEFAULT`). Wait `Retry-After` seconds. Requests with the server's `X-Load-Test-Key` skip every limit.",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds until the limit resets.",
+                "schema": {
+                  "type": "integer",
+                  "minimum": 1
+                }
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -541,6 +674,25 @@
               }
             }
           },
+          "429": {
+            "description": "Rate limited (type `rate-limited`): too many requests in the rate-limit group `default` (per client address, `RATE_LIMIT_DEFAULT`). Wait `Retry-After` seconds. Requests with the server's `X-Load-Test-Key` skip every limit.",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds until the limit resets.",
+                "schema": {
+                  "type": "integer",
+                  "minimum": 1
+                }
+              }
+            },
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
           "default": {
             "description": "Error. The body is an RFC 9457 problem details object.",
             "content": {
@@ -617,6 +769,25 @@
               }
             }
           },
+          "429": {
+            "description": "Rate limited (type `rate-limited`): too many requests in the rate-limit group `default` (per client address, `RATE_LIMIT_DEFAULT`). Wait `Retry-After` seconds. Requests with the server's `X-Load-Test-Key` skip every limit.",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds until the limit resets.",
+                "schema": {
+                  "type": "integer",
+                  "minimum": 1
+                }
+              }
+            },
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
           "default": {
             "description": "Error. The body is an RFC 9457 problem details object.",
             "content": {
@@ -677,6 +848,25 @@
           },
           "403": {
             "description": "Logged in, but without the ADMIN role (or the CSRF token is missing or wrong).",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limited (type `rate-limited`): too many requests in the rate-limit group `default` (per client address, `RATE_LIMIT_DEFAULT`). Wait `Retry-After` seconds. Requests with the server's `X-Load-Test-Key` skip every limit.",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds until the limit resets.",
+                "schema": {
+                  "type": "integer",
+                  "minimum": 1
+                }
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -771,6 +961,25 @@
               }
             }
           },
+          "429": {
+            "description": "Rate limited (type `rate-limited`): too many requests in the rate-limit group `default` (per client address, `RATE_LIMIT_DEFAULT`). Wait `Retry-After` seconds. Requests with the server's `X-Load-Test-Key` skip every limit.",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds until the limit resets.",
+                "schema": {
+                  "type": "integer",
+                  "minimum": 1
+                }
+              }
+            },
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
           "default": {
             "description": "Error. The body is an RFC 9457 problem details object.",
             "content": {
@@ -840,6 +1049,25 @@
               }
             }
           },
+          "429": {
+            "description": "Rate limited (type `rate-limited`): too many requests in the rate-limit group `default` (per client address, `RATE_LIMIT_DEFAULT`). Wait `Retry-After` seconds. Requests with the server's `X-Load-Test-Key` skip every limit.",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds until the limit resets.",
+                "schema": {
+                  "type": "integer",
+                  "minimum": 1
+                }
+              }
+            },
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
           "default": {
             "description": "Error. The body is an RFC 9457 problem details object.",
             "content": {
@@ -899,6 +1127,25 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/CatalogueVenuePage_Output"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limited (type `rate-limited`): too many requests in the rate-limit group `default` (per client address, `RATE_LIMIT_DEFAULT`). Wait `Retry-After` seconds. Requests with the server's `X-Load-Test-Key` skip every limit.",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds until the limit resets.",
+                "schema": {
+                  "type": "integer",
+                  "minimum": 1
+                }
+              }
+            },
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
                 }
               }
             }
@@ -1001,6 +1248,25 @@
               }
             }
           },
+          "429": {
+            "description": "Rate limited (type `rate-limited`): too many requests in the rate-limit group `default` (per client address, `RATE_LIMIT_DEFAULT`). Wait `Retry-After` seconds. Requests with the server's `X-Load-Test-Key` skip every limit.",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds until the limit resets.",
+                "schema": {
+                  "type": "integer",
+                  "minimum": 1
+                }
+              }
+            },
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
           "default": {
             "description": "Error. The body is an RFC 9457 problem details object.",
             "content": {
@@ -1077,6 +1343,25 @@
               }
             }
           },
+          "429": {
+            "description": "Rate limited (type `rate-limited`): too many requests in the rate-limit group `default` (per client address, `RATE_LIMIT_DEFAULT`). Wait `Retry-After` seconds. Requests with the server's `X-Load-Test-Key` skip every limit.",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds until the limit resets.",
+                "schema": {
+                  "type": "integer",
+                  "minimum": 1
+                }
+              }
+            },
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
           "default": {
             "description": "Error. The body is an RFC 9457 problem details object.",
             "content": {
@@ -1137,6 +1422,25 @@
           },
           "403": {
             "description": "Logged in, but without the ADMIN role (or the CSRF token is missing or wrong).",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limited (type `rate-limited`): too many requests in the rate-limit group `default` (per client address, `RATE_LIMIT_DEFAULT`). Wait `Retry-After` seconds. Requests with the server's `X-Load-Test-Key` skip every limit.",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds until the limit resets.",
+                "schema": {
+                  "type": "integer",
+                  "minimum": 1
+                }
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -1231,6 +1535,25 @@
               }
             }
           },
+          "429": {
+            "description": "Rate limited (type `rate-limited`): too many requests in the rate-limit group `default` (per client address, `RATE_LIMIT_DEFAULT`). Wait `Retry-After` seconds. Requests with the server's `X-Load-Test-Key` skip every limit.",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds until the limit resets.",
+                "schema": {
+                  "type": "integer",
+                  "minimum": 1
+                }
+              }
+            },
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
           "default": {
             "description": "Error. The body is an RFC 9457 problem details object.",
             "content": {
@@ -1292,6 +1615,25 @@
           },
           "403": {
             "description": "Logged in, but without the ADMIN role (or the CSRF token is missing or wrong).",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limited (type `rate-limited`): too many requests in the rate-limit group `default` (per client address, `RATE_LIMIT_DEFAULT`). Wait `Retry-After` seconds. Requests with the server's `X-Load-Test-Key` skip every limit.",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds until the limit resets.",
+                "schema": {
+                  "type": "integer",
+                  "minimum": 1
+                }
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -1378,6 +1720,25 @@
               }
             }
           },
+          "429": {
+            "description": "Rate limited (type `rate-limited`): too many requests in the rate-limit group `default` (per client address, `RATE_LIMIT_DEFAULT`). Wait `Retry-After` seconds. Requests with the server's `X-Load-Test-Key` skip every limit.",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds until the limit resets.",
+                "schema": {
+                  "type": "integer",
+                  "minimum": 1
+                }
+              }
+            },
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
           "default": {
             "description": "Error. The body is an RFC 9457 problem details object.",
             "content": {
@@ -1456,6 +1817,25 @@
               }
             }
           },
+          "429": {
+            "description": "Rate limited (type `rate-limited`): too many requests in the rate-limit group `default` (per client address, `RATE_LIMIT_DEFAULT`). Wait `Retry-After` seconds. Requests with the server's `X-Load-Test-Key` skip every limit.",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds until the limit resets.",
+                "schema": {
+                  "type": "integer",
+                  "minimum": 1
+                }
+              }
+            },
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
           "default": {
             "description": "Error. The body is an RFC 9457 problem details object.",
             "content": {
@@ -1526,6 +1906,25 @@
           },
           "403": {
             "description": "Logged in, but without the ADMIN role (or the CSRF token is missing or wrong).",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limited (type `rate-limited`): too many requests in the rate-limit group `default` (per client address, `RATE_LIMIT_DEFAULT`). Wait `Retry-After` seconds. Requests with the server's `X-Load-Test-Key` skip every limit.",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds until the limit resets.",
+                "schema": {
+                  "type": "integer",
+                  "minimum": 1
+                }
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -1614,6 +2013,25 @@
           },
           "403": {
             "description": "Logged in, but without the ADMIN role (or the CSRF token is missing or wrong).",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limited (type `rate-limited`): too many requests in the rate-limit group `default` (per client address, `RATE_LIMIT_DEFAULT`). Wait `Retry-After` seconds. Requests with the server's `X-Load-Test-Key` skip every limit.",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds until the limit resets.",
+                "schema": {
+                  "type": "integer",
+                  "minimum": 1
+                }
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -1783,6 +2201,25 @@
               }
             }
           },
+          "429": {
+            "description": "Rate limited (type `rate-limited`): too many requests in the rate-limit group `default` (per client address, `RATE_LIMIT_DEFAULT`). Wait `Retry-After` seconds. Requests with the server's `X-Load-Test-Key` skip every limit.",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds until the limit resets.",
+                "schema": {
+                  "type": "integer",
+                  "minimum": 1
+                }
+              }
+            },
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
           "default": {
             "description": "Error. The body is an RFC 9457 problem details object.",
             "content": {
@@ -1822,6 +2259,25 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/CatalogueEvent_Output"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limited (type `rate-limited`): too many requests in the rate-limit group `default` (per client address, `RATE_LIMIT_DEFAULT`). Wait `Retry-After` seconds. Requests with the server's `X-Load-Test-Key` skip every limit.",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds until the limit resets.",
+                "schema": {
+                  "type": "integer",
+                  "minimum": 1
+                }
+              }
+            },
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
                 }
               }
             }
@@ -1909,6 +2365,25 @@
               }
             }
           },
+          "429": {
+            "description": "Rate limited (type `rate-limited`): too many requests in the rate-limit group `default` (per client address, `RATE_LIMIT_DEFAULT`). Wait `Retry-After` seconds. Requests with the server's `X-Load-Test-Key` skip every limit.",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds until the limit resets.",
+                "schema": {
+                  "type": "integer",
+                  "minimum": 1
+                }
+              }
+            },
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
           "default": {
             "description": "Error. The body is an RFC 9457 problem details object.",
             "content": {
@@ -1960,6 +2435,25 @@
           },
           "401": {
             "description": "No session cookie, or the session has expired or was ended.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limited (type `rate-limited`): too many requests in the rate-limit group `default` (per client address, `RATE_LIMIT_DEFAULT`). Wait `Retry-After` seconds. Requests with the server's `X-Load-Test-Key` skip every limit.",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds until the limit resets.",
+                "schema": {
+                  "type": "integer",
+                  "minimum": 1
+                }
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -2022,6 +2516,25 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/SeatMap_Output"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limited (type `rate-limited`): too many requests in the rate-limit group `default` (per client address, `RATE_LIMIT_DEFAULT`). Wait `Retry-After` seconds. Requests with the server's `X-Load-Test-Key` skip every limit.",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds until the limit resets.",
+                "schema": {
+                  "type": "integer",
+                  "minimum": 1
+                }
+              }
+            },
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
                 }
               }
             }
@@ -2128,6 +2641,25 @@
               }
             }
           },
+          "429": {
+            "description": "Rate limited (type `rate-limited`): too many requests in the rate-limit group `default` (per client address, `RATE_LIMIT_DEFAULT`). Wait `Retry-After` seconds. Requests with the server's `X-Load-Test-Key` skip every limit.",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds until the limit resets.",
+                "schema": {
+                  "type": "integer",
+                  "minimum": 1
+                }
+              }
+            },
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
           "default": {
             "description": "Error. The body is an RFC 9457 problem details object.",
             "content": {
@@ -2180,6 +2712,25 @@
           },
           "401": {
             "description": "No session cookie, or the session has expired or was ended.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limited (type `rate-limited`): too many requests in the rate-limit group `default` (per client address, `RATE_LIMIT_DEFAULT`). Wait `Retry-After` seconds. Requests with the server's `X-Load-Test-Key` skip every limit.",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds until the limit resets.",
+                "schema": {
+                  "type": "integer",
+                  "minimum": 1
+                }
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -2251,6 +2802,25 @@
           },
           "403": {
             "description": "The `X-CSRF-Token` header is missing or doesn't match the `testtix_csrf` cookie (type `csrf-token-invalid`).",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limited (type `rate-limited`): too many requests in the rate-limit group `default` (per client address, `RATE_LIMIT_DEFAULT`). Wait `Retry-After` seconds. Requests with the server's `X-Load-Test-Key` skip every limit.",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds until the limit resets.",
+                "schema": {
+                  "type": "integer",
+                  "minimum": 1
+                }
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -2347,6 +2917,25 @@
               }
             }
           },
+          "429": {
+            "description": "Rate limited (type `rate-limited`): too many requests in the rate-limit group `default` (per client address, `RATE_LIMIT_DEFAULT`). Wait `Retry-After` seconds. Requests with the server's `X-Load-Test-Key` skip every limit.",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds until the limit resets.",
+                "schema": {
+                  "type": "integer",
+                  "minimum": 1
+                }
+              }
+            },
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
           "default": {
             "description": "Error. The body is an RFC 9457 problem details object.",
             "content": {
@@ -2418,6 +3007,25 @@
               }
             }
           },
+          "429": {
+            "description": "Rate limited (type `rate-limited`): too many requests in the rate-limit group `default` (per client address, `RATE_LIMIT_DEFAULT`). Wait `Retry-After` seconds. Requests with the server's `X-Load-Test-Key` skip every limit.",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds until the limit resets.",
+                "schema": {
+                  "type": "integer",
+                  "minimum": 1
+                }
+              }
+            },
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
           "default": {
             "description": "Error. The body is an RFC 9457 problem details object.",
             "content": {
@@ -2469,6 +3077,25 @@
           },
           "401": {
             "description": "No session cookie, or the session has expired or was ended.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limited (type `rate-limited`): too many requests in the rate-limit group `default` (per client address, `RATE_LIMIT_DEFAULT`). Wait `Retry-After` seconds. Requests with the server's `X-Load-Test-Key` skip every limit.",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds until the limit resets.",
+                "schema": {
+                  "type": "integer",
+                  "minimum": 1
+                }
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -2599,6 +3226,25 @@
               }
             }
           },
+          "429": {
+            "description": "Rate limited (type `rate-limited`): too many requests in the rate-limit group `default` (per client address, `RATE_LIMIT_DEFAULT`). Wait `Retry-After` seconds. Requests with the server's `X-Load-Test-Key` skip every limit.",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds until the limit resets.",
+                "schema": {
+                  "type": "integer",
+                  "minimum": 1
+                }
+              }
+            },
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
           "default": {
             "description": "Error. The body is an RFC 9457 problem details object.",
             "content": {
@@ -2633,6 +3279,25 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ClockStateDto_Output"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limited (type `rate-limited`): too many requests in the rate-limit group `testApi` (per client address, `RATE_LIMIT_TEST_API`). Wait `Retry-After` seconds. Requests with the server's `X-Load-Test-Key` skip every limit.",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds until the limit resets.",
+                "schema": {
+                  "type": "integer",
+                  "minimum": 1
+                }
+              }
+            },
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
                 }
               }
             }
@@ -2698,6 +3363,25 @@
               }
             }
           },
+          "429": {
+            "description": "Rate limited (type `rate-limited`): too many requests in the rate-limit group `testApi` (per client address, `RATE_LIMIT_TEST_API`). Wait `Retry-After` seconds. Requests with the server's `X-Load-Test-Key` skip every limit.",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds until the limit resets.",
+                "schema": {
+                  "type": "integer",
+                  "minimum": 1
+                }
+              }
+            },
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
           "default": {
             "description": "Error. The body is an RFC 9457 problem details object.",
             "content": {
@@ -2717,7 +3401,7 @@
     },
     "/__test/reset": {
       "post": {
-        "description": "Test mode only. Deletes every row (users, sessions, holds, orders and scenario data included) and empties every waiting room, resets the clock (or freezes it at `freezeAt`) and inserts the baseline seed for the clock date. The swap is atomic: other requests see the old data or the new baseline, never a half-empty database. Affects every client of this server, so it needs `X-Test-Key` when the server has a test API key.",
+        "description": "Test mode only. Deletes every row (users, sessions, holds, orders and scenario data included) empties every waiting room, clears the rate-limit counters, resets the clock (or freezes it at `freezeAt`) and inserts the baseline seed for the clock date. The swap is atomic: other requests see the old data or the new baseline, never a half-empty database. Affects every client of this server, so it needs `X-Test-Key` when the server has a test API key.",
         "operationId": "TestResetController_reset",
         "parameters": [
           {
@@ -2761,6 +3445,25 @@
               }
             }
           },
+          "429": {
+            "description": "Rate limited (type `rate-limited`): too many requests in the rate-limit group `testApi` (per client address, `RATE_LIMIT_TEST_API`). Wait `Retry-After` seconds. Requests with the server's `X-Load-Test-Key` skip every limit.",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds until the limit resets.",
+                "schema": {
+                  "type": "integer",
+                  "minimum": 1
+                }
+              }
+            },
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
           "default": {
             "description": "Error. The body is an RFC 9457 problem details object.",
             "content": {
@@ -2790,6 +3493,25 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/BasicCatalogueResultDto_Output"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limited (type `rate-limited`): too many requests in the rate-limit group `testApi` (per client address, `RATE_LIMIT_TEST_API`). Wait `Retry-After` seconds. Requests with the server's `X-Load-Test-Key` skip every limit.",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds until the limit resets.",
+                "schema": {
+                  "type": "integer",
+                  "minimum": 1
+                }
+              }
+            },
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
                 }
               }
             }
@@ -2827,6 +3549,25 @@
               }
             }
           },
+          "429": {
+            "description": "Rate limited (type `rate-limited`): too many requests in the rate-limit group `testApi` (per client address, `RATE_LIMIT_TEST_API`). Wait `Retry-After` seconds. Requests with the server's `X-Load-Test-Key` skip every limit.",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds until the limit resets.",
+                "schema": {
+                  "type": "integer",
+                  "minimum": 1
+                }
+              }
+            },
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
           "default": {
             "description": "Error. The body is an RFC 9457 problem details object.",
             "content": {
@@ -2856,6 +3597,25 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/OneSeatLeftResultDto_Output"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limited (type `rate-limited`): too many requests in the rate-limit group `testApi` (per client address, `RATE_LIMIT_TEST_API`). Wait `Retry-After` seconds. Requests with the server's `X-Load-Test-Key` skip every limit.",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds until the limit resets.",
+                "schema": {
+                  "type": "integer",
+                  "minimum": 1
+                }
+              }
+            },
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
                 }
               }
             }
@@ -2903,6 +3663,25 @@
               }
             }
           },
+          "429": {
+            "description": "Rate limited (type `rate-limited`): too many requests in the rate-limit group `testApi` (per client address, `RATE_LIMIT_TEST_API`). Wait `Retry-After` seconds. Requests with the server's `X-Load-Test-Key` skip every limit.",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds until the limit resets.",
+                "schema": {
+                  "type": "integer",
+                  "minimum": 1
+                }
+              }
+            },
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
           "default": {
             "description": "Error. The body is an RFC 9457 problem details object.",
             "content": {
@@ -2932,6 +3711,25 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/GaMeetupResultDto_Output"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limited (type `rate-limited`): too many requests in the rate-limit group `testApi` (per client address, `RATE_LIMIT_TEST_API`). Wait `Retry-After` seconds. Requests with the server's `X-Load-Test-Key` skip every limit.",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds until the limit resets.",
+                "schema": {
+                  "type": "integer",
+                  "minimum": 1
+                }
+              }
+            },
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
                 }
               }
             }
@@ -2969,6 +3767,25 @@
               }
             }
           },
+          "429": {
+            "description": "Rate limited (type `rate-limited`): too many requests in the rate-limit group `testApi` (per client address, `RATE_LIMIT_TEST_API`). Wait `Retry-After` seconds. Requests with the server's `X-Load-Test-Key` skip every limit.",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds until the limit resets.",
+                "schema": {
+                  "type": "integer",
+                  "minimum": 1
+                }
+              }
+            },
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
           "default": {
             "description": "Error. The body is an RFC 9457 problem details object.",
             "content": {
@@ -2998,6 +3815,25 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ConfirmedOrderResultDto_Output"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limited (type `rate-limited`): too many requests in the rate-limit group `testApi` (per client address, `RATE_LIMIT_TEST_API`). Wait `Retry-After` seconds. Requests with the server's `X-Load-Test-Key` skip every limit.",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds until the limit resets.",
+                "schema": {
+                  "type": "integer",
+                  "minimum": 1
+                }
+              }
+            },
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
                 }
               }
             }
@@ -3045,6 +3881,25 @@
               }
             }
           },
+          "429": {
+            "description": "Rate limited (type `rate-limited`): too many requests in the rate-limit group `testApi` (per client address, `RATE_LIMIT_TEST_API`). Wait `Retry-After` seconds. Requests with the server's `X-Load-Test-Key` skip every limit.",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds until the limit resets.",
+                "schema": {
+                  "type": "integer",
+                  "minimum": 1
+                }
+              }
+            },
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
           "default": {
             "description": "Error. The body is an RFC 9457 problem details object.",
             "content": {
@@ -3065,7 +3920,7 @@
   },
   "info": {
     "title": "TestTix API",
-    "description": "REST API of TestTix, a sample event ticket shop for software testing practice. Errors are `application/problem+json`; every response carries an `X-Request-Id` header.",
+    "description": "REST API of TestTix, a sample event ticket shop for software testing practice. Errors are `application/problem+json`; every response carries an `X-Request-Id` header. Requests are rate limited per client address (429 `rate-limited` with `Retry-After`); authorised load runs send the server's `X-Load-Test-Key` header to skip the limits.",
     "version": "0.0.0",
     "contact": {}
   },

@@ -5,6 +5,7 @@ import { createTransport } from 'nodemailer';
 
 import { AppModule } from '../app.module.js';
 import { APP_OPTIONS, configureApp, createHttpAdapter } from '../app.setup.js';
+import { APP_CONFIG } from '../config/config.module.js';
 import { type AppConfig, parseConfig } from '../config/config.schema.js';
 import { PrismaService } from '../infra/prisma.service.js';
 import { REDIS } from '../infra/redis.module.js';
@@ -36,6 +37,8 @@ export async function createTestApp(options: TestAppOptions = {}): Promise<NestF
     LOG_LEVEL: 'silent',
     // BullMQ needs a real Redis.
     WORKER_IN_PROCESS: 'false',
+    // The counters need a real Redis too. Rate-limit tests turn it on (`*.int.test.ts`).
+    RATE_LIMIT_ENABLED: 'false',
     ...options.env,
   });
   const database = options.database ?? up;
@@ -59,7 +62,7 @@ export async function createTestApp(options: TestAppOptions = {}): Promise<NestF
 /** Creates and initialises the HTTP app the way `main.ts` does, without listening on a port. */
 export async function startTestingApp(moduleRef: TestingModule): Promise<NestFastifyApplication> {
   const app = moduleRef.createNestApplication<NestFastifyApplication>(
-    createHttpAdapter(),
+    createHttpAdapter(moduleRef.get<AppConfig>(APP_CONFIG)),
     // eslint-disable-next-line @typescript-eslint/no-unsafe-class-instance-assignment -- Nest declares its options type as a class; a literal is the documented usage.
     { ...APP_OPTIONS },
   );

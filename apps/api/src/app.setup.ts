@@ -7,8 +7,10 @@ import { Logger } from 'nestjs-pino';
 import { cleanupOpenApiDoc } from 'nestjs-zod';
 
 import { addAuthDocs } from './auth/openapi-auth.js';
+import type { AppConfig } from './config/config.schema.js';
 import { addProblemDetailsResponses } from './errors/openapi-problems.js';
 import { REQUEST_ID_HEADER, requestIdFor } from './logging/request-id.js';
+import { addRateLimitDocs } from './rate-limit/openapi-rate-limit.js';
 
 const { version } = JSON.parse(
   readFileSync(new URL('../package.json', import.meta.url), 'utf8'),
@@ -23,8 +25,10 @@ export const APP_OPTIONS = {
 } as const;
 
 /** The HTTP adapter shared by `main.ts` and the tests. */
-export function createHttpAdapter(): FastifyAdapter {
+export function createHttpAdapter(config: Pick<AppConfig, 'trustProxy'>): FastifyAdapter {
   const adapter = new FastifyAdapter({
+    // `request.ip` (rate limits count per client address) from `X-Forwarded-For` behind proxies.
+    trustProxy: config.trustProxy,
     genReqId: requestIdFor,
     // Fastify would otherwise copy the header verbatim; `requestIdFor` validates it first.
     requestIdHeader: false,
@@ -41,12 +45,16 @@ export function buildOpenApiDocument(app: NestFastifyApplication): OpenAPIObject
     .setTitle('TestTix API')
     .setDescription(
       'REST API of TestTix, a sample event ticket shop for software testing practice. ' +
-        'Errors are `application/problem+json`; every response carries an `X-Request-Id` header.',
+        'Errors are `application/problem+json`; every response carries an `X-Request-Id` header. ' +
+        'Requests are rate limited per client address (429 `rate-limited` with `Retry-After`); ' +
+        "authorised load runs send the server's `X-Load-Test-Key` header to skip the limits.",
     )
     .setVersion(version)
     .build();
-  return addAuthDocs(
-    addProblemDetailsResponses(cleanupOpenApiDoc(SwaggerModule.createDocument(app, config))),
+  return addRateLimitDocs(
+    addAuthDocs(
+      addProblemDetailsResponses(cleanupOpenApiDoc(SwaggerModule.createDocument(app, config))),
+    ),
   );
 }
 
