@@ -13,6 +13,26 @@ export interface Email {
   html: string;
   /** The `Date` header. */
   date: string;
+  /** Inline parts (images the HTML shows as `cid:`). */
+  inline: EmailPart[];
+  /** Attached files. */
+  attachments: EmailPart[];
+}
+
+/** A file in an email. Read its bytes with `emailPart(email, part)`. */
+export interface EmailPart {
+  partId: string;
+  fileName: string;
+  contentType: string;
+  /** Without the angle brackets. Empty when the part has none. */
+  contentId: string;
+}
+
+interface Part {
+  PartID: string;
+  FileName: string;
+  ContentType: string;
+  ContentID: string;
 }
 
 interface Address {
@@ -32,6 +52,8 @@ interface Message {
   Text: string;
   HTML: string;
   Date: string;
+  Inline: Part[] | null;
+  Attachments: Part[] | null;
 }
 
 export interface WaitForEmailOptions {
@@ -96,7 +118,26 @@ export async function getEmail(id: string): Promise<Email> {
     text: message.Text,
     html: message.HTML,
     date: message.Date,
+    inline: (message.Inline ?? []).map(toPart),
+    attachments: (message.Attachments ?? []).map(toPart),
   };
+}
+
+function toPart(part: Part): EmailPart {
+  return {
+    partId: part.PartID,
+    fileName: part.FileName,
+    contentType: part.ContentType,
+    contentId: part.ContentID,
+  };
+}
+
+/** The bytes of a part of the email, as Mailpit decoded them. */
+export async function emailPart(email: Email, part: EmailPart): Promise<Buffer> {
+  const path = `/api/v1/message/${encodeURIComponent(email.id)}/part/${encodeURIComponent(part.partId)}`;
+  const res = await fetch(`${inject('integration').mailpitUrl}${path}`);
+  if (!res.ok) throw new Error(`Mailpit ${path} answered ${String(res.status)}`);
+  return Buffer.from(await res.arrayBuffer());
 }
 
 /** The first link in the email's text part that starts with `prefix`. */

@@ -586,6 +586,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/tickets/{ticketId}/pdf": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Download one of your tickets as a PDF
+         * @description One A4 page with the ticket’s QR code (it encodes the ticket code), the code, the event, the venue and start time (in the venue’s time zone), the seat or GA section, the price and the order ID; the same page as in the e-ticket email’s PDF. Tickets exist once an order is `CONFIRMED`: find their IDs in `GET /orders/{orderId}` (`items[].ticket`). 404 for unknown tickets and other users’ tickets.
+         */
+        get: operations["TicketsController_pdf"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/__test/clock": {
         parameters: {
             query?: never;
@@ -744,6 +764,26 @@ export interface paths {
          * @description A published GA meetup on sale whose Floor (10 places, $8.00) has one place left; the other nine are sold through confirmed orders of a new buyer. Test mode only. Adds a new venue, events (and orders) with fresh IDs on every call; the slugs and titles end in a random suffix, so calls never collide and existing data is not touched. Open even when the server has a test API key, since it only adds data.
          */
         post: operations["TestScenariosController_gaLastTicket"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/__test/seed/confirmed-order": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Seed scenario: a confirmed order with tickets
+         * @description A published concert on sale (Seats rows A–B × 4 at $45.00, Standing GA of 10 at $25.00) and a new customer’s `CONFIRMED` order for row A seats 1 and 2 and one Standing place, with three tickets (IDs and codes in the response). No e-ticket email is sent; download a ticket with `GET /tickets/{ticketId}/pdf`. The response logs the customer in, like `POST /__test/sessions`. Test mode only. Adds a new venue, events (and orders) with fresh IDs on every call; the slugs and titles end in a random suffix, so calls never collide and existing data is not touched. Open even when the server has a test API key, since it only adds data.
+         */
+        post: operations["TestScenariosController_confirmedOrder"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1413,7 +1453,35 @@ export interface components {
                 timezone: string;
             };
         };
-        OrderItem_Output: components["schemas"]["HoldItem_Output"];
+        OrderItem_Output: {
+            /** Format: uuid */
+            inventoryUnitId: string;
+            section: {
+                /** Format: uuid */
+                id: string;
+                name: string;
+                type: components["schemas"]["SectionType_Output"];
+            };
+            /** @description The seat; null for a GA place */
+            seat: {
+                /** Format: uuid */
+                id: string;
+                row: string;
+                number: number;
+            } | null;
+            priceCents: number;
+            /** @description Issued when the order is confirmed; null until then (and for orders that never are) */
+            ticket: components["schemas"]["OrderTicket_Output"] | null;
+        };
+        OrderTicket_Output: {
+            /**
+             * Format: uuid
+             * @description Download it with `GET /tickets/{ticketId}/pdf`
+             */
+            id: string;
+            /** @description The unguessable code the ticket’s QR encodes */
+            code: string;
+        };
         Order_Output: {
             /** Format: uuid */
             id: string;
@@ -1725,6 +1793,56 @@ export interface components {
             orderIds: string[];
             /** @description The GA section with one place left */
             section: components["schemas"]["ScenarioGaSection_Output"];
+        };
+        ConfirmedOrderResultDto_Output: {
+            venue: components["schemas"]["ScenarioVenue_Output"];
+            event: components["schemas"]["ScenarioEvent_Output"];
+            /** @description The customer who bought the tickets, logged in: send `cookie` (and `csrfToken` on writes) to act as them */
+            customer: {
+                user: components["schemas"]["AuthUser_Output"];
+                session: {
+                    /** @description Value of the `testtix_session` cookie */
+                    token: string;
+                    /** Format: date-time */
+                    expiresAt: string;
+                };
+                /** @description Value of the `testtix_csrf` cookie; send it in `X-CSRF-Token` too */
+                csrfToken: string;
+                /** @description A ready-made `Cookie` request header with both cookies, for clients without a cookie jar */
+                cookie: string;
+            };
+            order: {
+                /** Format: uuid */
+                id: string;
+                /** @enum {string} */
+                status: "CONFIRMED";
+                /** @description $115.00: two seats at $45.00 and a place at $25.00 */
+                totalCents: number;
+                /** @description Row A seats 1 and 2, then one Standing place */
+                tickets: {
+                    /**
+                     * Format: uuid
+                     * @description Download it with `GET /tickets/{ticketId}/pdf`
+                     */
+                    id: string;
+                    /** @description What the ticket’s QR encodes */
+                    code: string;
+                    /** Format: uuid */
+                    inventoryUnitId: string;
+                    section: {
+                        /** Format: uuid */
+                        id: string;
+                        name: string;
+                        type: components["schemas"]["SectionType_Output"];
+                    };
+                    /** @description Null for the GA place */
+                    seat: {
+                        row: string;
+                        number: number;
+                    } | null;
+                    priceCents: number;
+                }[];
+            };
         };
         /** @enum {string} */
         Role: "CUSTOMER" | "ADMIN";
@@ -3437,6 +3555,46 @@ export interface operations {
             };
         };
     };
+    TicketsController_pdf: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                ticketId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The PDF, as an attachment (`Content-Disposition`). */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/pdf": string;
+                };
+            };
+            /** @description No session cookie, or the session has expired or was ended. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Error. The body is an RFC 9457 problem details object. */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
     TestClockController_get: {
         parameters: {
             query?: never;
@@ -3721,6 +3879,35 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["GaLastTicketResultDto_Output"];
+                };
+            };
+            /** @description Error. The body is an RFC 9457 problem details object. */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    TestScenariosController_confirmedOrder: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description What was created. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConfirmedOrderResultDto_Output"];
                 };
             };
             /** @description Error. The body is an RFC 9457 problem details object. */

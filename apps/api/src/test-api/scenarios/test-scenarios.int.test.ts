@@ -8,8 +8,10 @@ import { seedDatabase } from '../../seed/seed.js';
 import { dataHash } from '../../testing/integration/data-hash.js';
 import { createIntegrationApp } from '../../testing/integration/integration-app.js';
 import { resetState } from '../../testing/integration/reset.js';
+import { pdfPageCount, qrCodesInPdf, binaryBody } from '../../testing/documents.js';
 import {
   BasicCatalogueResultSchema,
+  ConfirmedOrderResultSchema,
   GaLastTicketResultSchema,
   GaMeetupResultSchema,
   HoldAboutToExpireResultSchema,
@@ -231,6 +233,31 @@ describe('POST /__test/seed/ga-last-ticket', () => {
   });
 });
 
+describe('POST /__test/seed/confirmed-order', () => {
+  it('gives a logged-in customer a confirmed order whose tickets can be downloaded', async () => {
+    const body = ConfirmedOrderResultSchema.parse(await seed('confirmed-order'));
+    await expectStored(body.event);
+
+    const order = await http.get(`/orders/${body.order.id}`).set('Cookie', body.customer.cookie);
+    expect(order.status).toBe(200);
+    expect(order.body).toMatchObject({ status: 'CONFIRMED', totalCents: 11500, ticketCount: 3 });
+    expect(
+      (order.body as { items: { ticket: unknown }[] }).items.map((item) => item.ticket),
+    ).toEqual(body.order.tickets.map(({ id, code }) => ({ id, code })));
+
+    const [first] = body.order.tickets;
+    const pdf = await http
+      .get(`/tickets/${first?.id ?? ''}/pdf`)
+      .set('Cookie', body.customer.cookie)
+      .buffer(true)
+      .parse(binaryBody);
+    expect(pdf.status).toBe(200);
+    const content = pdf.body as Buffer;
+    expect(await pdfPageCount(content)).toBe(1);
+    expect(await qrCodesInPdf(content)).toEqual([first?.code]);
+  });
+});
+
 describe('every scenario', () => {
   const scenarios = [
     'basic-catalogue',
@@ -239,6 +266,7 @@ describe('every scenario', () => {
     'hold-about-to-expire',
     'ga-meetup',
     'ga-last-ticket',
+    'confirmed-order',
   ];
 
   it.each(scenarios)('%s creates new rows on every call', async (scenario) => {
@@ -281,7 +309,7 @@ describe('every scenario', () => {
   it('works on an empty database (no baseline needed)', async () => {
     expect(await prisma.venue.count()).toBe(0);
     for (const scenario of scenarios) await seed(scenario);
-    expect(await prisma.event.count()).toBe(8);
+    expect(await prisma.event.count()).toBe(9);
   });
 
   it.each(scenarios)('%s stays open when the server has a test API key', async (scenario) => {

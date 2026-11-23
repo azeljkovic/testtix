@@ -110,6 +110,7 @@ export async function loadOrder(
       items: {
         select: {
           priceCents: true,
+          ticket: { select: { id: true, code: true } },
           inventoryUnit: {
             select: {
               id: true,
@@ -137,6 +138,7 @@ export async function loadOrder(
       section: item.inventoryUnit.section,
       seat: item.inventoryUnit.seat,
       priceCents: item.priceCents,
+      ticket: item.ticket,
     })),
     paymentUrl: summary.status === 'PENDING_PAYMENT' ? row.paymentUrl : null,
     updatedAt: row.updatedAt.toISOString(),

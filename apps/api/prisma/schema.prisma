@@ -334,6 +334,9 @@ model Order {
   paymentSessionId String?     @unique @map("payment_session_id")
   /// The provider's payment page for `paymentSessionId`.
   paymentUrl       String?     @map("payment_url")
+  /// When the e-ticket email went out (C4.4). Null while it is due: a `CONFIRMED` order without
+  /// it is picked up by the recovery job.
+  ticketsEmailedAt DateTime?   @map("tickets_emailed_at") @db.Timestamptz(3)
   createdAt        DateTime    @map("created_at") @db.Timestamptz(3)
   updatedAt        DateTime    @map("updated_at") @db.Timestamptz(3)
 
@@ -346,6 +349,8 @@ model Order {
   // "My orders", newest first (C4.2).
   @@index([userId, createdAt, id])
   @@index([status, expiresAt])
+  // Recovery job (C4.3, C4.4): stuck `PROCESSING` orders and overdue e-ticket emails.
+  @@index([status, ticketsEmailedAt, updatedAt])
   @@map("orders")
 }
 

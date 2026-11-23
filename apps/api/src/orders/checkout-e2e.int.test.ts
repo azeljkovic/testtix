@@ -9,6 +9,7 @@ import { ClockService } from '../clock/clock.service.js';
 import { PrismaService } from '../infra/prisma.service.js';
 import { QUEUE_PREFIX } from '../jobs/jobs.module.js';
 import type { SessionClient } from '../testing/auth.js';
+import { pdfPageCount, qrCodesInPdf } from '../testing/documents.js';
 import {
   checkout,
   checkoutCustomer,
@@ -24,11 +25,12 @@ import {
   startFakePayments,
 } from '../testing/integration/fake-payments.js';
 import { createIntegrationApp } from '../testing/integration/integration-app.js';
+import { emailPart, waitForEmail } from '../testing/integration/mailpit.js';
 import { ORDER_PROCESSING_QUEUE } from './order-jobs.js';
 import type { Order } from './orders.schemas.js';
 
 /**
- * Checkout end to end (C4.3): the API with its worker running, the real fake payment provider in a
+ * Checkout end to end (C4.3, C4.4): the API with its worker running, the real fake payment provider in a
  * container, real webhooks between them. Test cards from `apps/fake-payments/src/cards/`.
  */
 const CARDS = {
@@ -117,7 +119,7 @@ async function unitStatuses(unitIds: string[]): Promise<string[]> {
 
 describe('checkout with the real payment provider', () => {
   it('confirms the order after a successful payment, through processing', async () => {
-    const { client, order, sessionId, unitIds } = await startCheckout();
+    const { event, client, order, sessionId, unitIds } = await startCheckout();
     expect(order.paymentUrl).toContain(`/pay/${sessionId}`);
 
     await payWithCard(provider.url, sessionId, CARDS.success);
@@ -132,6 +134,17 @@ describe('checkout with the real payment provider', () => {
     expect(await unitStatuses(unitIds)).toEqual(['SOLD', 'SOLD', 'SOLD']);
     const session = await getPaymentSession(provider.url, sessionId);
     expect(session.webhookDeliveries.map((d) => d.statusCode)).toEqual([200]);
+
+    // The worker then sends the e-ticket email, with a PDF page per ticket.
+    const codes = (seen.at(-1)?.items ?? []).map((item) => item.ticket?.code);
+    const email = await waitForEmail(client.user.email, `Your tickets for ${event.title}`, {
+      timeoutMs: 15_000,
+    });
+    const [pdf] = email.attachments;
+    if (pdf === undefined) throw new Error('No PDF attached');
+    const pdfBytes = await emailPart(email, pdf);
+    expect(await pdfPageCount(pdfBytes)).toBe(3);
+    expect(await qrCodesInPdf(pdfBytes)).toEqual(codes);
   });
 
   it('fails the order and releases the tickets after a declined payment', async () => {

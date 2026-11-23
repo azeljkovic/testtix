@@ -24,10 +24,8 @@ export function newScenarioSuffix(): string {
   return randomBytes(4).toString('hex');
 }
 
-/** A random ticket code: 128 bits, base64url. */
-export function newTicketCode(): string {
-  return randomBytes(16).toString('base64url');
-}
+/** Scenario tickets get codes like the ones checkout issues. */
+export { newTicketCode } from '../../tickets/ticket-code.js';
 
 /**
  * `passwordHash` of the buyers scenarios create. It is not an argon2 hash, so no password matches
@@ -84,9 +82,9 @@ export function addBuyer(rows: ScenarioRows, ctx: ScenarioContext): { id: string
 export function addCustomer(
   rows: ScenarioRows,
   ctx: ScenarioContext,
-  kind: 'buyer' | 'holder',
+  kind: 'buyer' | 'holder' | 'customer',
 ): { id: string; email: string } {
-  const label = kind === 'buyer' ? 'Buyer' : 'Holder';
+  const label = { buyer: 'Buyer', holder: 'Holder', customer: 'Customer' }[kind];
   const buyer = {
     id: ctx.newId(),
     email: `${kind}-${ctx.suffix}@scenario.testtix.test`,
@@ -102,9 +100,10 @@ export function addCustomer(
 }
 
 /**
- * Sells inventory units the way checkout will (C4): marks them `SOLD` and adds `CONFIRMED`
+ * Sells inventory units the way checkout does (C4): marks them `SOLD` and adds `CONFIRMED`
  * orders for `buyerId`, with one order item and one ticket per unit, at most
- * `DEFAULT_MAX_TICKETS_PER_ORDER` units per order. Returns the order IDs.
+ * `DEFAULT_MAX_TICKETS_PER_ORDER` units per order. Returns the order IDs. No e-ticket email is
+ * due for them (`ticketsEmailedAt` is set), so the recovery job never sends one.
  */
 export function sellUnits(
   rows: ScenarioRows,
@@ -128,6 +127,7 @@ export function sellUnits(
       status: 'CONFIRMED',
       totalCents: batch.reduce((sum, unit) => sum + unit.priceCents, 0),
       expiresAt: new Date(ctx.now.getTime() + DEFAULT_HOLD_DURATION_SEC * 1000),
+      ticketsEmailedAt: ctx.now,
       createdAt: ctx.now,
       updatedAt: ctx.now,
     });

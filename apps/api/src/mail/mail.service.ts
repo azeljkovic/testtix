@@ -14,16 +14,25 @@ export interface MailRecipient {
   address: string;
 }
 
+/** A file sent with the email. With `cid`, it is an inline image the HTML shows as `cid:<cid>`. */
+export interface MailAttachment {
+  filename: string;
+  content: Buffer;
+  contentType: string;
+  cid?: string;
+}
+
 export interface MailMessage<K extends MailTemplateName> {
   to: MailRecipient;
   template: K;
   data: MailTemplateData[K];
+  attachments?: readonly MailAttachment[];
 }
 
 /**
- * Renders and sends emails. Sending is synchronous: `send` resolves once the SMTP server has
- * accepted the message and rejects when it doesn't. Background delivery (BullMQ) comes with the
- * order emails in M4.
+ * Renders and sends emails. `send` resolves once the SMTP server has accepted the message and
+ * rejects when it doesn't. Callers decide where it runs: the verification email is sent from the
+ * request, the e-ticket email from a background job (C4.4).
  */
 @Injectable()
 export class MailService {
@@ -46,6 +55,14 @@ export class MailService {
       subject,
       html,
       text,
+      attachments: (message.attachments ?? []).map((attachment) => ({
+        filename: attachment.filename,
+        content: attachment.content,
+        contentType: attachment.contentType,
+        ...(attachment.cid === undefined
+          ? {}
+          : { cid: attachment.cid, contentDisposition: 'inline' as const }),
+      })),
       // The `Date` header follows the server clock, so it matches a frozen or moved test clock.
       date: await this.clock.now(),
     })) as { messageId?: string };

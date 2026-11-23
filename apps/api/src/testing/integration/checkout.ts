@@ -16,7 +16,7 @@ import {
   type ScenarioContext,
   scenarioVenue,
 } from '../../test-api/scenarios/scenario-data.js';
-import { createTestSession, type SessionClient, sessionClient } from '../auth.js';
+import { createTestSession, type SessionClient, sessionClient, type TestSession } from '../auth.js';
 
 /** An event inserted by `insertCheckoutEvent()`, with lookups for its seats and sections. */
 export interface CheckoutEvent {
@@ -104,12 +104,13 @@ export async function insertCheckoutEvent(
   };
 }
 
-/** A logged-in customer (email verified unless told otherwise). */
+/** A logged-in customer (email verified unless told otherwise), with their `user`. */
 export async function checkoutCustomer(
   app: NestFastifyApplication,
   options: { emailVerified?: boolean } = {},
-): Promise<SessionClient> {
-  return sessionClient(app, await createTestSession(app, { role: 'CUSTOMER', ...options }));
+): Promise<SessionClient & Pick<TestSession, 'user'>> {
+  const session = await createTestSession(app, { role: 'CUSTOMER', ...options });
+  return { ...sessionClient(app, session), user: session.user };
 }
 
 export async function holdTickets(

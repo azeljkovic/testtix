@@ -6,8 +6,12 @@ import { uuidv7 } from '../../infra/uuid.js';
 import { insertRows } from '../../seed/seed.js';
 import { newScenarioSuffix, newTicketCode, type ScenarioContext } from './scenario-data.js';
 import { TestSessionsService } from '../sessions/test-sessions.service.js';
-import type { HoldAboutToExpireRequest, HoldAboutToExpireResult } from './scenario.schemas.js';
-import { holdAboutToExpire, type Scenario } from './scenarios.js';
+import type {
+  ConfirmedOrderResult,
+  HoldAboutToExpireRequest,
+  HoldAboutToExpireResult,
+} from './scenario.schemas.js';
+import { confirmedOrder, holdAboutToExpire, type Scenario } from './scenarios.js';
 
 /** Inserts seed scenarios (`POST /__test/seed/{scenario}`). */
 @Injectable()
@@ -41,5 +45,12 @@ export class TestScenariosService {
     const { holderId, ...result } = await this.create((ctx) => holdAboutToExpire(ctx, input));
     const holder = await this.prisma.user.findUniqueOrThrow({ where: { id: holderId } });
     return { ...result, holder: await this.sessions.logIn(holder) };
+  }
+
+  /** `confirmed-order`, with the customer logged in. */
+  async confirmedOrder(): Promise<ConfirmedOrderResult> {
+    const { customerId, ...result } = await this.create(confirmedOrder);
+    const customer = await this.prisma.user.findUniqueOrThrow({ where: { id: customerId } });
+    return { ...result, customer: await this.sessions.logIn(customer) };
   }
 }

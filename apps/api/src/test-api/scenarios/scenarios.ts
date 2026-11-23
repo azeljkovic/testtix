@@ -24,6 +24,7 @@ import {
 } from './scenario-data.js';
 import type {
   BasicCatalogueResult,
+  ConfirmedOrderScenario,
   GaLastTicketResult,
   GaMeetupResult,
   HoldAboutToExpireRequest,
@@ -315,6 +316,77 @@ export function gaLastTicket(ctx: ScenarioContext): Scenario<GaLastTicketResult>
       buyer: { id: buyer.id, email: buyer.email },
       orderIds,
       section: describeGaSection(rows, requireSection(rows, 'Floor')),
+    },
+  };
+}
+
+/**
+ * A published, on-sale concert (Seats: rows A–B × 4 at $45.00; Standing: GA of 10 at $25.00) and
+ * a new customer's `CONFIRMED` order for row A seats 1 and 2 and one Standing place, with its
+ * three tickets. The service logs the customer in.
+ */
+export function confirmedOrder(ctx: ScenarioContext): Scenario<ConfirmedOrderScenario> {
+  const rows = buildScenarioCatalogue(
+    ctx,
+    scenarioVenue(ctx, [
+      { name: 'Seats', type: 'SEATED', rows: 2, seatsPerRow: 4 },
+      { name: 'Standing', type: 'GA', capacity: 10 },
+    ]),
+    [
+      scenarioEvent(ctx, {
+        slug: 'confirmed-order',
+        title: 'Confirmed Order',
+        description: 'Test scenario confirmed-order: a customer has bought three tickets.',
+        category: 'CONCERT',
+        starts: [14, '23:00'],
+        durationMin: 150,
+        batches: [
+          { name: 'Seats', priceCents: 4500, sections: ['Seats'], releases: ON_SALE },
+          { name: 'Standing', priceCents: 2500, sections: ['Standing'], releases: ON_SALE },
+        ],
+      }),
+    ],
+  );
+  const eventId = onlyEventId(rows);
+  const seats = requireSection(rows, 'Seats');
+  const standing = requireSection(rows, 'Standing');
+  const seatUnits = rows.inventoryUnits.filter((unit) => unit.sectionId === seats).slice(0, 2);
+  const gaUnit = rows.inventoryUnits.find((unit) => unit.sectionId === standing);
+  if (seatUnits.length !== 2 || gaUnit === undefined) throw new Error('confirmed-order: no units');
+  const units = [...seatUnits, gaUnit];
+  const customer = addCustomer(rows, ctx, 'customer');
+  const [orderId] = sellUnits(rows, ctx, units, customer.id);
+  if (orderId === undefined) throw new Error('confirmed-order: no order');
+  const sections = new Map(rows.sections.map((section) => [requireId(section), section]));
+  return {
+    rows,
+    result: {
+      venue: describeVenue(rows),
+      event: describeEvent(rows, eventId),
+      customerId: customer.id,
+      order: {
+        id: orderId,
+        status: 'CONFIRMED',
+        totalCents: units.reduce((sum, unit) => sum + unit.priceCents, 0),
+        tickets: units.map((unit) => {
+          const unitId = requireId(unit);
+          const item = rows.orderItems.find((i) => i.inventoryUnitId === unitId);
+          const ticket = rows.tickets.find((t) => t.orderItemId === item?.id);
+          const section = sections.get(unit.sectionId);
+          const seat = rows.seats.find((s) => s.id === unit.seatId);
+          if (ticket === undefined || section === undefined) {
+            throw new Error('confirmed-order: no ticket');
+          }
+          return {
+            id: requireId(ticket),
+            code: ticket.code,
+            inventoryUnitId: unitId,
+            section: { id: unit.sectionId, name: section.name, type: section.type },
+            seat: seat === undefined ? null : { row: seat.row, number: seat.number },
+            priceCents: unit.priceCents,
+          };
+        }),
+      },
     },
   };
 }

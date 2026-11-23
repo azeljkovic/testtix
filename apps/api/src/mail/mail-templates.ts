@@ -13,13 +13,37 @@ export const MAIL_TEMPLATES_DIR = fileURLToPath(new URL('../../templates/mail/',
 /** Each email, with the variables its templates use. */
 export interface MailTemplateData {
   'verify-email': { name: string; verifyUrl: string; expiresIn: string };
+  /** The order confirmation, which carries the e-tickets (C4.4). */
+  'order-confirmed': {
+    name: string;
+    orderId: string;
+    orderUrl: string;
+    eventTitle: string;
+    /** In the venue's time zone. */
+    eventTime: string;
+    venue: string;
+    total: string;
+    /** One per ticket; `qrCid` is the inline QR image's Content-ID. */
+    tickets: { place: string; price: string; code: string; qrCid: string }[];
+  };
 }
 
 export type MailTemplateName = keyof MailTemplateData;
 
-const SUBJECTS: Readonly<Record<MailTemplateName, string>> = {
-  'verify-email': 'Verify your email address',
+type Subjects = { readonly [K in MailTemplateName]: (data: MailTemplateData[K]) => string };
+
+const SUBJECTS: Subjects = {
+  'verify-email': () => 'Verify your email address',
+  'order-confirmed': (data) => `Your tickets for ${data.eventTitle}`,
 };
+
+/** The subject an email gets for `data`. */
+export function mailSubject<K extends MailTemplateName>(
+  name: K,
+  data: MailTemplateData[K],
+): string {
+  return (SUBJECTS[name] as (data: MailTemplateData[K]) => string)(data);
+}
 
 const TEMPLATE_NAMES = Object.keys(SUBJECTS) as MailTemplateName[];
 
@@ -51,7 +75,7 @@ export class MailRenderer {
   }
 
   render<K extends MailTemplateName>(name: K, data: MailTemplateData[K]): RenderedMail {
-    const subject = SUBJECTS[name];
+    const subject = mailSubject(name, data);
     return {
       subject,
       html: this.part(this.html, name, data, subject),

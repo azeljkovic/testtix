@@ -1,0 +1,18 @@
+Hi {{name}},
+
+Thanks for your order. Here are your tickets for {{eventTitle}}. Show a ticket's QR code at the door, on your phone or printed: the attached PDF has one page per ticket.
+
+When:  {{eventTime}}
+Where: {{venue}}
+Order: {{orderId}}
+
+{{#each tickets}}
+- {{place}} ({{price}})
+  Ticket code: {{code}}
+{{/each}}
+
+Total: {{total}}
+
+View your order: {{orderUrl}}
+
+Each code gets one person in, once. Don't share your tickets.

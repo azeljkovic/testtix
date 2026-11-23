@@ -2396,6 +2396,66 @@
         ]
       }
     },
+    "/tickets/{ticketId}/pdf": {
+      "get": {
+        "description": "One A4 page with the ticket’s QR code (it encodes the ticket code), the code, the event, the venue and start time (in the venue’s time zone), the seat or GA section, the price and the order ID; the same page as in the e-ticket email’s PDF. Tickets exist once an order is `CONFIRMED`: find their IDs in `GET /orders/{orderId}` (`items[].ticket`). 404 for unknown tickets and other users’ tickets.",
+        "operationId": "TicketsController_pdf",
+        "parameters": [
+          {
+            "name": "ticketId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The PDF, as an attachment (`Content-Disposition`).",
+            "content": {
+              "application/pdf": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No session cookie, or the session has expired or was ended.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error. The body is an RFC 9457 problem details object.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Download one of your tickets as a PDF",
+        "tags": [
+          "tickets"
+        ],
+        "security": [
+          {
+            "session": []
+          }
+        ]
+      }
+    },
     "/__test/clock": {
       "get": {
         "description": "Test mode only. Returns the time the server uses for holds, sessions and drops.",
@@ -2756,6 +2816,39 @@
           }
         },
         "summary": "Seed scenario: one GA place left",
+        "tags": [
+          "test"
+        ]
+      }
+    },
+    "/__test/seed/confirmed-order": {
+      "post": {
+        "description": "A published concert on sale (Seats rows A–B × 4 at $45.00, Standing GA of 10 at $25.00) and a new customer’s `CONFIRMED` order for row A seats 1 and 2 and one Standing place, with three tickets (IDs and codes in the response). No e-ticket email is sent; download a ticket with `GET /tickets/{ticketId}/pdf`. The response logs the customer in, like `POST /__test/sessions`. Test mode only. Adds a new venue, events (and orders) with fresh IDs on every call; the slugs and titles end in a random suffix, so calls never collide and existing data is not touched. Open even when the server has a test API key, since it only adds data.",
+        "operationId": "TestScenariosController_confirmedOrder",
+        "parameters": [],
+        "responses": {
+          "201": {
+            "description": "What was created.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConfirmedOrderResultDto_Output"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error. The body is an RFC 9457 problem details object.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Seed scenario: a confirmed order with tickets",
         "tags": [
           "test"
         ]
@@ -4983,7 +5076,104 @@
         "additionalProperties": false
       },
       "OrderItem_Output": {
-        "$ref": "#/components/schemas/HoldItem_Output"
+        "type": "object",
+        "properties": {
+          "inventoryUnitId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          },
+          "section": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "format": "uuid",
+                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+              },
+              "name": {
+                "type": "string"
+              },
+              "type": {
+                "$ref": "#/components/schemas/SectionType_Output"
+              }
+            },
+            "required": [
+              "id",
+              "name",
+              "type"
+            ],
+            "additionalProperties": false
+          },
+          "seat": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "format": "uuid",
+                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+              },
+              "row": {
+                "type": "string"
+              },
+              "number": {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              }
+            },
+            "required": [
+              "id",
+              "row",
+              "number"
+            ],
+            "additionalProperties": false,
+            "description": "The seat; null for a GA place",
+            "nullable": true
+          },
+          "priceCents": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "ticket": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/OrderTicket_Output"
+              }
+            ],
+            "nullable": true,
+            "description": "Issued when the order is confirmed; null until then (and for orders that never are)"
+          }
+        },
+        "required": [
+          "inventoryUnitId",
+          "section",
+          "seat",
+          "priceCents",
+          "ticket"
+        ],
+        "additionalProperties": false
+      },
+      "OrderTicket_Output": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+            "description": "Download it with `GET /tickets/{ticketId}/pdf`"
+          },
+          "code": {
+            "type": "string",
+            "description": "The unguessable code the ticket’s QR encodes"
+          }
+        },
+        "required": [
+          "id",
+          "code"
+        ],
+        "additionalProperties": false
       },
       "Order_Output": {
         "type": "object",
@@ -6000,6 +6190,176 @@
           "buyer",
           "orderIds",
           "section"
+        ],
+        "additionalProperties": false
+      },
+      "ConfirmedOrderResultDto_Output": {
+        "type": "object",
+        "properties": {
+          "venue": {
+            "$ref": "#/components/schemas/ScenarioVenue_Output"
+          },
+          "event": {
+            "$ref": "#/components/schemas/ScenarioEvent_Output"
+          },
+          "customer": {
+            "type": "object",
+            "properties": {
+              "user": {
+                "$ref": "#/components/schemas/AuthUser_Output"
+              },
+              "session": {
+                "type": "object",
+                "properties": {
+                  "token": {
+                    "type": "string",
+                    "description": "Value of the `testtix_session` cookie"
+                  },
+                  "expiresAt": {
+                    "type": "string",
+                    "format": "date-time",
+                    "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+                  }
+                },
+                "required": [
+                  "token",
+                  "expiresAt"
+                ],
+                "additionalProperties": false
+              },
+              "csrfToken": {
+                "type": "string",
+                "description": "Value of the `testtix_csrf` cookie; send it in `X-CSRF-Token` too"
+              },
+              "cookie": {
+                "type": "string",
+                "description": "A ready-made `Cookie` request header with both cookies, for clients without a cookie jar"
+              }
+            },
+            "required": [
+              "user",
+              "session",
+              "csrfToken",
+              "cookie"
+            ],
+            "additionalProperties": false,
+            "description": "The customer who bought the tickets, logged in: send `cookie` (and `csrfToken` on writes) to act as them"
+          },
+          "order": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "format": "uuid",
+                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+              },
+              "status": {
+                "type": "string",
+                "enum": [
+                  "CONFIRMED"
+                ]
+              },
+              "totalCents": {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991,
+                "description": "$115.00: two seats at $45.00 and a place at $25.00"
+              },
+              "tickets": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+                      "description": "Download it with `GET /tickets/{ticketId}/pdf`"
+                    },
+                    "code": {
+                      "type": "string",
+                      "description": "What the ticket’s QR encodes"
+                    },
+                    "inventoryUnitId": {
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
+                    "section": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        },
+                        "name": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "$ref": "#/components/schemas/SectionType_Output"
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "name",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "seat": {
+                      "type": "object",
+                      "properties": {
+                        "row": {
+                          "type": "string"
+                        },
+                        "number": {
+                          "type": "integer",
+                          "minimum": -9007199254740991,
+                          "maximum": 9007199254740991
+                        }
+                      },
+                      "required": [
+                        "row",
+                        "number"
+                      ],
+                      "additionalProperties": false,
+                      "description": "Null for the GA place",
+                      "nullable": true
+                    },
+                    "priceCents": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "code",
+                    "inventoryUnitId",
+                    "section",
+                    "seat",
+                    "priceCents"
+                  ],
+                  "additionalProperties": false
+                },
+                "description": "Row A seats 1 and 2, then one Standing place"
+              }
+            },
+            "required": [
+              "id",
+              "status",
+              "totalCents",
+              "tickets"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "venue",
+          "event",
+          "customer",
+          "order"
         ],
         "additionalProperties": false
       },
