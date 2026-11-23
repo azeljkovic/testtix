@@ -300,6 +300,7 @@ Claude's workspace has no Docker daemon, so Testcontainers can't run there. Beca
 - Order confirmation and e-ticket emails use HTML and text parts, a QR in the body (inline CID image) and the PDF attached.
 - `GET /tickets/:id/pdf` for download (owner only).
 - Scenario: `confirmed-order`.
+- From C4.3: orders are confirmed only in `OrderProcessingService.finalize()` (the processing job), for paid and free orders alike; issue tickets and send the emails from there (e.g. a follow-up job), keeping the job idempotent.
 - Verify: an integration test reads Mailpit, checks the PDF page count equals the ticket count (seated and GA), and decodes the QR to the ticket code.
 
 **C4.5 Web checkout + orders**

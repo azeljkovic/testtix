@@ -157,6 +157,7 @@ Problem types so far:
 | `urn:testtix:problem:email-not-verified`           | 403    | [Checking out](#checkout-and-orders) before verifying your email address                                                                                               |
 | `urn:testtix:problem:hold-expired`                 | 409    | Checking out a hold that has expired (or has no tickets left)                                                                                                          |
 | `urn:testtix:problem:payment-provider-unavailable` | 503    | Checking out while the payment provider is down, slow or answering errors. The order is kept: retry the same request                                                   |
+| `urn:testtix:problem:webhook-signature-invalid`    | 400    | A [payment webhook](#payment-webhooks) without valid signature headers, with a signature that doesn't match, or with a timestamp outside the replay window             |
 
 ## Accounts and sessions
 
@@ -441,7 +442,7 @@ The container reaches an API on your machine at `host.docker.internal` (e.g. `ht
 
 ## Checkout and orders
 
-Checking out turns your hold into an **order** and a payment page. The order goes `PENDING_PAYMENT` → (payment) → `PROCESSING` → `CONFIRMED` or `FAILED`; an unpaid order becomes `EXPIRED` with its hold. Confirming paid orders arrives with C4.3: for now orders stay `PENDING_PAYMENT` until they expire.
+Checking out turns your hold into an **order** and a payment page. The order goes `PENDING_PAYMENT` → (payment, reported by [webhook](#payment-webhooks)) → `PROCESSING` → `CONFIRMED` or `FAILED`; an unpaid order becomes `EXPIRED` with its hold.
 
 | Endpoint                | Session | What it does                                                                                  |
 | ----------------------- | ------- | --------------------------------------------------------------------------------------------- |
@@ -457,36 +458,78 @@ curl -s -X POST http://localhost:3000/orders \
   -H 'Content-Type: application/json' -d '{"holdId":"<hold id>"}'
 ```
 
-The order has its `id`, `status`, `event` (`id`, `slug`, `title`, `startsAt`, `venue.name`, `venue.timezone`), `totalCents`, `ticketCount`, `items` (the hold's items: `inventoryUnitId`, `section`, `seat`, `priceCents`), `expiresAt`, `createdAt`, `updatedAt`, `paymentUrl` and `retryAfterMs`. Send the customer to `paymentUrl`, the [payment page](#payment-page); afterwards the provider returns them to `<WEB_BASE_URL>/orders/<order id>?session_id=…`. List items (`GET /orders`) have the same fields without `items`, `paymentUrl`, `updatedAt` and `retryAfterMs`.
+The order has its `id`, `status`, `event` (`id`, `slug`, `title`, `startsAt`, `venue.name`, `venue.timezone`), `totalCents`, `ticketCount`, `items` (the hold's items: `inventoryUnitId`, `section`, `seat`, `priceCents`), `expiresAt`, `createdAt`, `updatedAt`, `paymentUrl`, `retryAfterMs` and `refundDue` (see [late payments](#late-and-out-of-order-payments)). Send the customer to `paymentUrl`, the [payment page](#payment-page); afterwards the provider returns them to `<WEB_BASE_URL>/orders/<order id>?session_id=…`. List items (`GET /orders`) have the same fields without `items`, `paymentUrl`, `updatedAt`, `retryAfterMs` and `refundDue`.
 
 Rules of `POST /orders`, checked in this order:
 
 1. **400 `validation-error`** unless the body is exactly `{"holdId":"<uuid>"}`.
 2. **403 `email-not-verified`** until your email is [verified](#email-verification) (test sessions are verified unless created with `"emailVerified":false`).
-3. **404** for unknown holds, other customers' holds, and holds already released, replaced or [swept](#holding-tickets).
+3. **404** for unknown holds, other customers' holds, and holds already released, replaced or [swept](#holding-tickets), or used up by a paid or free order (`PROCESSING` onwards).
 4. **409 `hold-expired`** once the hold's `expiresAt` has passed.
-5. If the hold already has an order, **200** with that order: a hold has at most one order, so a double click or a retry is harmless (two requests at the same moment get one 201 and one 200 with the same order).
+5. If the hold already has an unpaid order, **200** with that order: a hold has at most one order, so a double click or a retry is harmless (two requests at the same moment get one 201 and one 200 with the same order).
 6. **409 `event-not-on-sale`** when the event was unpublished or cancelled, or has started, since the hold was made.
 7. **201** with the new order. Then the API asks the provider for a payment session. If that fails (unreachable, an error status, or no answer within `PAYMENTS_TIMEOUT_MS`, 5 s), the answer is **503 `payment-provider-unavailable`**, but the order exists, `PENDING_PAYMENT` with `paymentUrl: null`, and the hold is unchanged: send the same request again (200, now with `paymentUrl`). To try it, stop the provider (`docker compose --project-directory . -f docker/compose.yml stop fake-payments`; `pnpm infra:up` starts it again).
 
-**Free orders** (every ticket priced $0) get no payment page: `paymentUrl` stays null, since the provider can't take a payment of 0.
+**Free orders** (every ticket priced $0) get no payment page, since the provider can't take a payment of 0: the 201 answer is already `PROCESSING` (`paymentUrl: null`), and the [processing job](#processing) confirms it.
 
-**The order owns the hold.** Its tickets stay `HELD` in your hold (the seat map shows them as `HELD`), and the order's `expiresAt` is the hold's. The order expires when the hold ends, whichever way:
+**The order owns the hold while it is unpaid.** Its tickets stay `HELD` in your hold (the seat map shows them as `HELD`), and the order's `expiresAt` is the hold's. The unpaid order expires when the hold ends, whichever way:
 
 - **The hold runs out:** at `expiresAt` (server clock) the order is `EXPIRED` in every response at once, like holds ([lazy expiry](#holding-tickets)); the hold sweeper later stores that in the database and frees the tickets. Move the clock to test it.
 - **You release the hold** (`DELETE /holds/{holdId}`) or **replace it** with a new hold for the same event: the unpaid order becomes `EXPIRED` in the same step. The new hold can be checked out as a new order.
 
-Paying an expired order's payment page anyway is possible (the provider doesn't know about the hold); C4.3 records such payments and flags them for refund, never selling the tickets.
+Paying an expired order's payment page anyway is possible (the provider doesn't know about the hold): the payment is recorded and flagged for refund, never selling the tickets ([late payments](#late-and-out-of-order-payments)).
 
 **Polling.** `retryAfterMs` says how long to wait before asking for the order again: `ORDER_POLL_INTERVAL_MS` (2 s) while it can still change, never past `expiresAt` while it is unpaid (so a poll lands right at expiry), and `null` once the status is final (`CONFIRMED`, `FAILED`, `EXPIRED`). Stop polling then.
 
 | Order `status`    | Meaning                                                                    | `paymentUrl`  | `retryAfterMs` |
 | ----------------- | -------------------------------------------------------------------------- | ------------- | -------------- |
 | `PENDING_PAYMENT` | Waiting for payment until `expiresAt`                                      | set (or null) | ≤ 2000         |
-| `PROCESSING`      | The provider reported a result; the order is being finished (C4.3)         | null          | 2000           |
-| `CONFIRMED`       | Paid; tickets issued (C4.3, C4.4)                                          | null          | null           |
-| `FAILED`          | The payment was declined; the tickets are released (C4.3)                  | null          | null           |
+| `PROCESSING`      | The provider reported a result; the job finishes it soon. Tickets are sold | null          | 2000           |
+| `CONFIRMED`       | Paid (or free); the tickets stay sold. Ticket issue comes with C4.4        | null          | null           |
+| `FAILED`          | The payment was declined; the tickets are available again                  | null          | null           |
 | `EXPIRED`         | Not paid while the hold lasted: it ran out, or you released or replaced it | null          | null           |
+
+### Payment webhooks
+
+The provider reports each payment to `POST /webhooks/payments` ([webhook format](#webhooks)). No session or CSRF token: the signature is the authentication. The endpoint checks, in this order:
+
+1. **400 `webhook-signature-invalid`** when `X-Payments-Signature` or `X-Payments-Timestamp` is missing or malformed, the signature doesn't match the raw body under `PAYMENTS_WEBHOOK_SECRET` (default `whsec_testtix_local_only`, the same variable the provider reads), or the timestamp is more than `PAYMENTS_WEBHOOK_TOLERANCE_SEC` (300 s) from the **real** time. The replay window ignores the [test clock](#the-server-clock), since the provider stamps its own real clock: moving the server clock never makes webhooks stale.
+2. **400 `validation-error`** when a correctly signed body isn't a webhook event.
+3. **200** otherwise, with `{"eventId":"evt_…","outcome":"APPLIED","duplicate":false}`. Each event `id` is recorded once (`payment_events`); later deliveries of the same event, even two at the same moment, answer 200 with `duplicate: true` and the recorded `outcome`, and change nothing.
+
+`outcome` says what the event did:
+
+| `outcome`    | When                                                                                                                                                                                         | Effect                                                                        |
+| ------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------- |
+| `APPLIED`    | The first result (success or failure) for a `PENDING_PAYMENT` order that hasn't expired (server clock), from the order's own payment session and for its total                               | The order becomes `PROCESSING`; the job confirms or fails it                  |
+| `REFUND_DUE` | A success no order can use: the order had expired (or its hold was released or replaced), already has a result, isn't known (`metadata.orderId`), or the session or amount isn't the order's | Recorded and due a refund; nothing is sold. The order shows `refundDue: true` |
+| `IGNORED`    | A failure that changes nothing (the order already has a result, or is gone), or the same success reported again under a new event `id`                                                       | Recorded only                                                                 |
+
+**A `PROCESSING` order's tickets are safe.** When the payment result arrives, the tickets leave the hold and are `SOLD` (the seat map shows them as sold), and the hold is used up: releasing it answers 404, a new hold can't take those seats, and the hold sweeper has nothing to free. Only the processing job decides them.
+
+#### Processing
+
+A background job finishes every `PROCESSING` order `JOB_PROCESSING_DELAY_MS` (default 1000 ms) after the webhook, so clients see "processing" for a while ("data appears eventually"); raise the delay to watch it longer. A successful payment (or a free order) becomes **`CONFIRMED`** and its tickets stay sold; a failed one becomes **`FAILED`** and its tickets are available again at once. Running the job twice changes nothing. If the job could not be queued (Redis down) or failed for good, a recovery job that runs every minute queues it again once the order has been `PROCESSING` for longer than the delay plus 60 seconds (server clock). The job runs in the worker (`WORKER_IN_PROCESS=true` by default, or `start:worker`); without a worker, orders stay `PROCESSING`.
+
+The delay is real time, not the server clock: freezing the clock does not hold orders in `PROCESSING`.
+
+#### Late and out-of-order payments
+
+- **Paid after the hold expired:** the provider took the money, but the order is `EXPIRED` and its tickets may be someone else's. The payment is `REFUND_DUE`, the order stays (or becomes) `EXPIRED` with `refundDue: true`, and no ticket is sold. This works whether or not the sweeper has run yet. To try it: check out, move the [clock](#the-server-clock) past `expiresAt`, then pay.
+- **A failure after the success** (another event `id`): `IGNORED`; the order is confirmed.
+- **A success after the failure:** `REFUND_DUE`; the order stays `FAILED`, its tickets released.
+- **Duplicates** (the `4000 0000 0000 0887` card, or provider retries): one transition; the rest are `duplicate: true`.
+- **No webhook** (the `4000 0000 0000 0077` card): the order stays `PENDING_PAYMENT` and expires with its hold, like an unpaid order.
+
+To send a webhook by hand, sign the exact bytes you send (see [Signature](#webhooks)):
+
+```sh
+body='{"id":"evt_manual_1","type":"payment.succeeded","createdAt":"2026-12-01T10:00:00.000Z","data":{"sessionId":"<ps_… of the order>","status":"SUCCEEDED","amountCents":<order total>,"currency":"USD","failureCode":null,"metadata":{"orderId":"<order id>"}}}'
+ts=$(date +%s)
+sig=$(printf '%s' "$ts.$body" | openssl dgst -sha256 -hmac 'whsec_testtix_local_only' | awk '{print $NF}')
+curl -s -X POST http://localhost:3000/webhooks/payments -H 'Content-Type: application/json' \
+  -H "X-Payments-Timestamp: $ts" -H "X-Payments-Signature: v1=$sig" --data-raw "$body"
+```
 
 ## Admin API
 
