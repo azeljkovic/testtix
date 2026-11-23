@@ -15,6 +15,7 @@ import type {
 } from '../api/seats.js';
 import { authPagePath } from '../auth/redirect.js';
 import { SESSION_QUERY_KEY, useSession } from '../auth/session.js';
+import { EventNotFound } from '../catalogue/EventNotFound.js';
 import { formatEventDateTime, NOT_ON_SALE_NOTES, ticketCount } from '../catalogue/format.js';
 import { catalogueQueries } from '../catalogue/queries.js';
 import { FormAlert } from '../forms/FormAlert.js';
@@ -84,21 +85,6 @@ export function ChooseSeatsPage() {
     );
   }
   return <SeatPicker event={event.data} map={seatMap.data} />;
-}
-
-function EventNotFound() {
-  return (
-    <>
-      <PageTitle title="Event not found" />
-      <h1 className="text-3xl font-bold tracking-tight">Event not found</h1>
-      <p className="mt-4 text-slate-600">
-        There’s no event at this address. It may have been unpublished or cancelled.
-      </p>
-      <Link to="/events" className={`mt-6 inline-block ${LINK_CLASS}`}>
-        Browse all events
-      </Link>
-    </>
-  );
 }
 
 /**
@@ -337,6 +323,7 @@ function SeatPicker({ event, map }: { event: CatalogueEvent; map: SeatMap }) {
               <HoldPanel
                 key={hold.id}
                 hold={hold}
+                checkoutHref={`/events/${event.slug}/checkout`}
                 focusOnMount={sidebarFocus === 'hold'}
                 onExpire={expire}
                 onLastMinute={() => {

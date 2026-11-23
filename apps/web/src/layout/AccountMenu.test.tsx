@@ -22,7 +22,7 @@ describe('account menu', () => {
     );
   });
 
-  it('shows a customer the account page and log out, but not admin', async () => {
+  it('shows a customer the account page, their orders and log out, but not admin', async () => {
     logInAs(customer);
     const { user, router } = renderApp('/');
 
@@ -30,10 +30,23 @@ describe('account menu', () => {
 
     expect(screen.getByText('Logged in as ada@example.com')).toBeInTheDocument();
     const items = screen.getAllByRole('menuitem').map((item) => item.textContent);
-    expect(items).toEqual(['Account', 'Log out']);
+    expect(items).toEqual(['Account', 'Your orders', 'Log out']);
 
     await user.click(screen.getByRole('menuitem', { name: 'Account' }));
     expect(router.state.location.pathname).toBe('/account');
+  });
+
+  it('takes a customer to their orders', async () => {
+    logInAs(customer);
+    const { user, router } = renderApp('/');
+
+    await user.click(await screen.findByRole('button', { name: 'Ada Lovelace, account menu' }));
+    await user.click(screen.getByRole('menuitem', { name: 'Your orders' }));
+
+    expect(
+      await screen.findByRole('heading', { level: 1, name: 'Your orders' }),
+    ).toBeInTheDocument();
+    expect(router.state.location.pathname).toBe('/orders');
   });
 
   it('shows an admin the admin area', async () => {

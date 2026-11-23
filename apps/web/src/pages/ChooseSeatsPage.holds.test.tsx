@@ -128,7 +128,11 @@ describe('holding tickets', () => {
       'Stalls, row B, seat 2$89.00',
     ]);
     expect(holdFigures()).toEqual(['2', '$178.00']);
-    expect(screen.getByRole('timer')).toHaveTextContent(/^(10:00|9:5\d)$/);
+    expect(screen.getByRole('timer', { name: 'Time left' })).toHaveTextContent(/^(10:00|9:5\d)$/);
+    expect(screen.getByRole('link', { name: 'Check out' })).toHaveAttribute(
+      'href',
+      '/events/midnight-echoes-live/checkout',
+    );
     expect(screen.queryByRole('region', { name: 'Your selection' })).not.toBeInTheDocument();
 
     // The map is refetched: the held seats show as held, and nothing can be picked until release.

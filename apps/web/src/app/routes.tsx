@@ -11,12 +11,15 @@ import { AdminVenuesPage } from '../pages/admin/AdminVenuesPage.js';
 import { EditEventPage, NewEventPage } from '../pages/admin/EventFormPage.js';
 import { ReleaseBatchPage } from '../pages/admin/ReleaseBatchPage.js';
 import { EditVenuePage, NewVenuePage } from '../pages/admin/VenueFormPage.js';
+import { CheckoutPage } from '../pages/CheckoutPage.js';
 import { ChooseSeatsPage } from '../pages/ChooseSeatsPage.js';
 import { EventDetailPage } from '../pages/EventDetailPage.js';
 import { EventsPage } from '../pages/EventsPage.js';
 import { HomePage } from '../pages/HomePage.js';
 import { LoginPage } from '../pages/LoginPage.js';
 import { NotFoundPage } from '../pages/NotFoundPage.js';
+import { OrderPage } from '../pages/OrderPage.js';
+import { OrdersPage } from '../pages/OrdersPage.js';
 import { RegisterPage } from '../pages/RegisterPage.js';
 import { VerifyEmailPage } from '../pages/VerifyEmailPage.js';
 
@@ -34,7 +37,16 @@ export const routes: RouteObject[] = [
       // The API's verification emails link here (`VERIFY_EMAIL_PATH` in apps/api).
       { path: 'verify-email', element: <VerifyEmailPage /> },
       // Logged-in users only.
-      { element: <RequireAuth />, children: [{ path: 'account', element: <AccountPage /> }] },
+      {
+        element: <RequireAuth />,
+        children: [
+          { path: 'account', element: <AccountPage /> },
+          { path: 'events/:slug/checkout', element: <CheckoutPage /> },
+          { path: 'orders', element: <OrdersPage /> },
+          // The payment provider returns here, and the e-ticket email links here (apps/api).
+          { path: 'orders/:orderId', element: <OrderPage /> },
+        ],
+      },
       // Admins only.
       {
         element: <RequireAuth role="ADMIN" />,
