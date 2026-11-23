@@ -115,6 +115,8 @@ The seed is deterministic: the same venues, events and IDs on every run, with da
 
 Each run applies the migrations, and each test file starts with empty tables and an empty Redis database.
 
+`pnpm docs:examples` runs every shell example of the [testing guide](docs/testing-guide.md) against the local API in test mode (`pnpm --filter @testtix/api dev` with local infra up), with a `POST /__test/reset` before each, so it **wipes the local data**. A comment before a block can group it with others or skip it (see `scripts/check-guide-examples.mjs`). CI runs it on every PR.
+
 ## Local infrastructure
 
 `docker/compose.yml` runs the services the app depends on. `pnpm infra:up` starts them and waits until every health check passes; `pnpm infra:check` then checks each one from the host (a query, a `PING`, an email delivered to Mailpit, a payment session).
@@ -146,6 +148,7 @@ The compose file has two placeholder profiles that later milestones fill in: `fu
 | `pnpm test:integration` | Runs API integration tests (needs Docker, or `TEST_*` URLs) |
 | `pnpm openapi`          | Regenerates the OpenAPI spec and the web client types       |
 | `pnpm openapi:check`    | Fails if the committed spec or client types are stale       |
+| `pnpm docs:examples`    | Runs the testing guide's examples against the local API     |
 | `pnpm db:deploy`        | Applies database migrations                                 |
 | `pnpm db:migrate`       | Creates and applies a migration (development)               |
 | `pnpm db:reset`         | Drops the local database and re-applies every migration     |

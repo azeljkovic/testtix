@@ -18,6 +18,7 @@
     "test:integration": "turbo run test:integration",
     "openapi": "turbo run openapi",
     "openapi:check": "bash scripts/check-openapi.sh",
+    "docs:examples": "node scripts/check-guide-examples.mjs",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "clean": "turbo run clean",
