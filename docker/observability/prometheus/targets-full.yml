@@ -1,0 +1,15 @@
+# The `full` profile's containers: every API replica (Docker's DNS answers `api` with each
+# replica's address, re-read every 5 s, so scaling is picked up) and the standalone worker.
+scrape_configs:
+  - job_name: api
+    dns_sd_configs:
+      - names: [api]
+        type: A
+        port: 3000
+        refresh_interval: 5s
+  - job_name: worker
+    dns_sd_configs:
+      - names: [worker]
+        type: A
+        port: 3001
+        refresh_interval: 5s

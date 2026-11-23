@@ -1,0 +1,12 @@
+apiVersion: 1
+
+providers:
+  - name: TestTix
+    folder: TestTix
+    type: file
+    # Change the dashboards in their JSON files (Grafana reloads them); to experiment in the UI,
+    # use "Save as" for a copy.
+    allowUiUpdates: false
+    updateIntervalSeconds: 10
+    options:
+      path: /var/lib/grafana/dashboards

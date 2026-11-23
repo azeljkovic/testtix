@@ -1,0 +1,11 @@
+# Prometheus for the `observability` compose profile (C6.2). What it scrapes is in targets.yml,
+# mounted from targets-<OBSERVABILITY_TARGETS>.yml: `full` (default, the `full` profile's
+# containers) or `host` (`pnpm dev` on this machine).
+global:
+  # Short, so a minute-long k6 run gives the dashboard enough points.
+  scrape_interval: 5s
+  scrape_timeout: 4s
+  evaluation_interval: 5s
+
+scrape_config_files:
+  - /etc/prometheus/targets.yml
