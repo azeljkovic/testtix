@@ -1,6 +1,6 @@
 {
   "name": "@testtix/fake-payments",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "private": true,
   "description": "Fake hosted payment provider for TestTix: payment page, test cards and signed webhooks.",
   "license": "MIT",

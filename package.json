@@ -1,6 +1,6 @@
 {
   "name": "testtix",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "private": true,
   "description": "TestTix — a sample event ticket shop built as a realistic target for software testing practice.",
   "license": "MIT",
