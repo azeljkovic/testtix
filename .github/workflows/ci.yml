@@ -4,6 +4,8 @@ on:
   pull_request:
   push:
     branches: [main]
+    # Release tags (C6.4): the images get semver tags too.
+    tags: ['v*']
 
 permissions:
   contents: read
@@ -197,3 +199,110 @@ jobs:
       - name: Stop infra
         if: always()
         run: pnpm infra:reset
+
+  images:
+    name: Images + full-stack smoke test
+    needs: checks
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    env:
+      # The tag `pnpm full:up` runs and `publish` pushes under its registry names.
+      TESTTIX_IMAGE_TAG: ci
+    steps:
+      - name: Check out code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      # pnpm checks `engines` even for plain scripts, so Node comes from .nvmrc here too.
+      - name: Set up pnpm
+        uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
+
+      - name: Set up Node.js
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+
+      # api (also run as migrate and worker), web and fake-payments.
+      - name: Build the images
+        run: docker compose --project-directory . -f docker/compose.yml --profile full build
+
+      - name: Start the full stack
+        run: pnpm full:up
+
+      # Health checks, the web app and API through Caddy, and a test purchase to the e-ticket email.
+      - name: Smoke test
+        run: pnpm full:check
+
+      - name: Show service logs
+        if: failure()
+        run: docker compose --project-directory . -f docker/compose.yml --profile full logs --no-color
+
+      - name: Stop the full stack
+        if: always()
+        run: pnpm full:reset
+
+      # `publish` pushes exactly these images, once every other job has passed.
+      - name: Save the images
+        if: github.event_name == 'push'
+        run: docker save testtix/api:ci testtix/web:ci testtix/fake-payments:ci | zstd -T0 -3 -o images.tar.zst
+
+      - name: Upload the images
+        if: github.event_name == 'push'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: images
+          path: images.tar.zst
+          retention-days: 1
+          compression-level: 0
+          if-no-files-found: error
+
+  publish:
+    name: Push images to GHCR
+    if: github.event_name == 'push'
+    needs: [images, integration, guide-examples, infra]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Download the images
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: images
+
+      - name: Load the images
+        run: zstd -dc images.tar.zst | docker load
+
+      # ghcr.io/<owner>/testtix/{api,web,fake-payments}: `sha-<commit>` always, `main` from main,
+      # and `<major>.<minor>.<patch>`, `<major>.<minor>` and `latest` from release tags.
+      - name: Image tags
+        id: meta
+        uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
+        with:
+          images: |
+            ghcr.io/${{ github.repository }}/api
+            ghcr.io/${{ github.repository }}/web
+            ghcr.io/${{ github.repository }}/fake-payments
+          tags: |
+            type=sha
+            type=ref,event=branch
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+
+      - name: Log in to GHCR
+        uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4.8.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Push
+        env:
+          TAGS: ${{ steps.meta.outputs.tags }}
+        run: |
+          while read -r ref; do
+            [[ -z "$ref" ]] && continue
+            name="${ref%:*}"
+            docker tag "testtix/${name##*/}:ci" "$ref"
+            docker push "$ref"
+          done <<< "$TAGS"

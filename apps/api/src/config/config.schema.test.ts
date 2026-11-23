@@ -35,6 +35,7 @@ describe('parseConfig', () => {
       nodeEnv: 'development',
       host: '127.0.0.1',
       port: 3000,
+      workerPort: 3001,
       logLevel: 'info',
       databaseUrl: DEV_DATABASE_URL,
       redisUrl: DEV_REDIS_URL,
@@ -79,6 +80,7 @@ describe('parseConfig', () => {
       NODE_ENV: 'production',
       HOST: '0.0.0.0',
       PORT: '8080',
+      WORKER_PORT: '8081',
       LOG_LEVEL: 'debug',
       DATABASE_URL: 'postgres://u:p@db:5432/app',
       REDIS_URL: 'rediss://cache:6380',
@@ -116,6 +118,7 @@ describe('parseConfig', () => {
       nodeEnv: 'production',
       host: '0.0.0.0',
       port: 8080,
+      workerPort: 8081,
       logLevel: 'debug',
       databaseUrl: 'postgres://u:p@db:5432/app',
       redisUrl: 'rediss://cache:6380',
@@ -275,10 +278,10 @@ describe('parseConfig', () => {
     ['65536', 'too big'],
     ['3000.5', 'not an integer'],
     ['abc', 'not a number'],
-  ])('rejects PORT=%s (%s)', (port) => {
-    expect(parseError({ PORT: port }).issues.map((issue) => issue.path.join('.'))).toEqual([
-      'PORT',
-    ]);
+  ])('rejects PORT and WORKER_PORT=%s (%s)', (port) => {
+    expect(
+      parseError({ PORT: port, WORKER_PORT: port }).issues.map((issue) => issue.path.join('.')),
+    ).toEqual(['PORT', 'WORKER_PORT']);
   });
 
   it.each(['1', '65535'])('accepts boundary PORT=%s', (port) => {

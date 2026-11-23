@@ -4,6 +4,9 @@
  *
  * Reads the same environment as the API. "Now" comes from `ClockService`, so with test mode on
  * the data is relative to the test clock, like `POST /__test/reset` (C1.3).
+ *
+ * `--if-empty` skips a database that already has data instead of failing (exit code 0), so a
+ * container can run it on every start (the `migrate` service in docker/compose.yml).
  */
 import 'reflect-metadata';
 
@@ -14,6 +17,8 @@ import { ClockService } from '../clock/clock.service.js';
 import { ConfigValidationError, parseConfig } from '../config/config.schema.js';
 import { PrismaClient } from '../generated/prisma/client.js';
 import { seedDatabase, SeedTargetNotEmptyError } from './seed.js';
+
+const ifEmpty = process.argv.slice(2).includes('--if-empty');
 
 try {
   const config = parseConfig(process.env);
@@ -32,12 +37,16 @@ try {
     await prisma.$disconnect();
   }
 } catch (err) {
-  const message =
-    err instanceof SeedTargetNotEmptyError || err instanceof ConfigValidationError
-      ? err.message
-      : err instanceof Error
-        ? (err.stack ?? err.message)
-        : String(err);
-  process.stderr.write(`Seed failed: ${message}\n`);
-  process.exitCode = 1;
+  if (ifEmpty && err instanceof SeedTargetNotEmptyError) {
+    process.stdout.write('The database already has data; seed skipped.\n');
+  } else {
+    const message =
+      err instanceof SeedTargetNotEmptyError || err instanceof ConfigValidationError
+        ? err.message
+        : err instanceof Error
+          ? (err.stack ?? err.message)
+          : String(err);
+    process.stderr.write(`Seed failed: ${message}\n`);
+    process.exitCode = 1;
+  }
 }

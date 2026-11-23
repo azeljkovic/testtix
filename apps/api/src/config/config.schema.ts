@@ -78,6 +78,8 @@ export const envSchema = z
     NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
     HOST: z.string().min(1).default('127.0.0.1'),
     PORT: z.coerce.number().int().min(1).max(65535).default(3000),
+    // Port of the standalone worker's health endpoints (`node dist/worker.js`); it binds to HOST.
+    WORKER_PORT: z.coerce.number().int().min(1).max(65535).default(3001),
     LOG_LEVEL: z.enum(LOG_LEVELS).default('info'),
     DATABASE_URL: z
       .url({ protocol: /^postgres(ql)?$/, error: 'Must be a postgres:// or postgresql:// URL' })
@@ -193,6 +195,7 @@ export const envSchema = z
     nodeEnv: env.NODE_ENV,
     host: env.HOST,
     port: env.PORT,
+    workerPort: env.WORKER_PORT,
     logLevel: env.LOG_LEVEL,
     databaseUrl: env.DATABASE_URL ?? DEV_DATABASE_URL,
     redisUrl: env.REDIS_URL ?? DEV_REDIS_URL,

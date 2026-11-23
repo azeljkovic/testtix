@@ -65,6 +65,8 @@ pnpm --filter @testtix/api build
 pnpm --filter @testtix/api start:worker   # node dist/worker.js; reads the root .env if present
 ```
 
+The worker answers `GET /health` and `GET /health/ready` (Postgres and Redis) on `WORKER_PORT` (default 3001), for container health checks; it serves nothing else.
+
 ## Web app
 
 The React single-page app lives in `apps/web` (Vite, React Router, TanStack Query, Tailwind CSS, React Aria Components).
@@ -134,7 +136,36 @@ The fake payment provider (`apps/fake-payments`) is built from its own Dockerfil
 
 Data lives in named Docker volumes, so it survives `pnpm infra:down`. Use `pnpm infra:reset` to delete it and start clean.
 
-The compose file has two placeholder profiles that later milestones fill in: `full` runs the app itself in containers, and `observability` adds Prometheus and Grafana.
+The compose file has two profiles: `full` runs the app itself in containers ([below](#running-everything-in-containers)), and `observability` (a placeholder until C6.2) adds Prometheus and Grafana.
+
+## Running everything in containers
+
+The `full` compose profile runs the whole shop from Docker images, with nothing but Docker on the host: the services above (with the same data volumes), plus the app at the same addresses as `pnpm dev`.
+
+```sh
+pnpm full:up --build   # build the images, start everything, wait until healthy
+pnpm full:check        # smoke test: health checks, web app, a test purchase (resets the data)
+pnpm full:down         # stop every container (pnpm full:reset also deletes the data)
+```
+
+| Service   | What it runs                                                                                                                      |
+| --------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| `migrate` | `prisma migrate deploy`, then the seed if the database is empty; runs once before `api` and `worker` start                        |
+| `api`     | the API, `API_REPLICAS` copies (default 2), reachable only through `web`                                                          |
+| `worker`  | the background jobs (`node dist/worker.js`), with health checks on port 3001 inside the container                                 |
+| `web`     | Caddy: the web app at <http://localhost:5173> (API under `/api`) and the API at <http://localhost:3000>, spread over the replicas |
+
+The app's containers use the API's production settings (`NODE_ENV=production`) with test mode on (`TESTTIX_TEST_MODE=true`), so the [test API](docs/testing-guide.md) works and the testing guide's examples run against it. Other API settings from the root `.env` or the shell are passed through (`TEST_API_KEY`, `LOAD_TEST_KEY`, `RATE_LIMIT_*`, `JOB_PROCESSING_DELAY_MS`…; see `docker/compose.yml`); the ones that wire the containers together are fixed. `WEB_PORT` and `PORT` choose the host ports. Stop `pnpm dev` first, since both use the same ports.
+
+**Published images.** CI pushes every commit on `main` to GHCR as `ghcr.io/azeljkovic/testtix/{api,web,fake-payments}:sha-<commit>` (and `:main`), and release tags as `:<version>`, `:<major>.<minor>` and `:latest` (linux/amd64). To run those instead of building:
+
+```sh
+export TESTTIX_IMAGE_REGISTRY=ghcr.io/azeljkovic/testtix TESTTIX_IMAGE_TAG=main
+docker compose --project-directory . -f docker/compose.yml --profile full pull
+pnpm full:up
+```
+
+The api image runs the API by default (`node dist/main.js`, port 3000); the same image is the worker (`node dist/worker.js`) and runs the migrations (`prisma migrate deploy`, then `node dist/seed/main.js --if-empty`). Every image runs as a non-root user and has a health check.
 
 ## Scripts
 
@@ -160,6 +191,10 @@ The compose file has two placeholder profiles that later milestones fill in: `fu
 | `pnpm infra:check`      | Smoke-tests the running local infra                         |
 | `pnpm infra:down`       | Stops local infra, keeping its data                         |
 | `pnpm infra:reset`      | Stops local infra and deletes its data                      |
+| `pnpm full:up`          | Starts the whole app in containers (`--build` to rebuild)   |
+| `pnpm full:check`       | Smoke-tests the running containers (resets the data)        |
+| `pnpm full:down`        | Stops every container (infra too), keeping the data         |
+| `pnpm full:reset`       | Stops every container and deletes the data                  |
 
 ## Tech stack
 

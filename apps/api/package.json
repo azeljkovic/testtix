@@ -5,6 +5,12 @@
   "description": "TestTix REST API (NestJS).",
   "license": "MIT",
   "type": "module",
+  "files": [
+    "dist",
+    "templates",
+    "prisma",
+    "prisma.config.ts"
+  ],
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
     "dev": "tsc-watch -p tsconfig.build.json --noClear --onSuccess \"node --env-file-if-exists=../../.env --enable-source-maps dist/main.js\"",
@@ -47,6 +53,7 @@
     "pdfkit": "0.20.2",
     "pino": "10.4.0",
     "pino-http": "11.0.0",
+    "prisma": "7.10.1",
     "qrcode": "1.5.4",
     "reflect-metadata": "0.2.2",
     "rxjs": "7.8.2",
@@ -68,7 +75,6 @@
     "jsqr": "1.4.0",
     "pdf-lib": "1.17.1",
     "pngjs": "7.0.0",
-    "prisma": "7.10.1",
     "supertest": "7.3.2",
     "testcontainers": "12.2.1",
     "tsc-watch": "7.2.1",
