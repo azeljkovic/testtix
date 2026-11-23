@@ -8,3 +8,5 @@ apps/api/openapi.json
 apps/web/src/api/generated
 # Email templates: Prettier's Handlebars formatter reflows the plain-text parts and drops the doctype.
 *.hbs
+# Written by release-please (release PRs); its list style isn't Prettier's.
+CHANGELOG.md

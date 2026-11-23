@@ -148,7 +148,7 @@ Notes:
 - **Both generated files are committed**, so building the web app doesn't depend on building the API, and API changes show up as spec diffs in review. Prettier and ESLint skip them. CI runs `pnpm openapi:check` (regenerate, then `git diff --exit-code`, plus a check for untracked files) and uploads `openapi.json` as the `openapi-spec` artifact.
 - **Client:** `openapi-fetch` (`apps/web/src/api/client.ts`). It looks `fetch` up on each call so MSW, installed after import, still intercepts requests in tests. `unwrap()` returns the data or throws an `ApiError` with `status`, the parsed `problem` and its `code`.
 - **`openapi-typescript` 7.13 declares a TypeScript `^5` peer.** It works with TS 6, and `pnpm.peerDependencyRules.allowedVersions` records the exception. Remove it once a release accepts TS 6.
-- **Release note for C6.5:** the spec's `info.version` comes from `apps/api/package.json`. When release-please bumps the version, the release PR must update `openapi.json` too (as a release-please extra file, or by regenerating it), or the check fails.
+- The spec's `info.version` comes from `apps/api/package.json`. Release PRs bump both (`openapi.json` is a release-please extra file, C6.4), so `openapi:check` stays green.
 - **Fixed in C0.7:** since C0.4, `components.schemas.ProblemDetails` had been emitted as a `$ref` to `#/definitions/ProblemDetails`, which doesn't exist in an OpenAPI document (`z.toJSONSchema` nests a schema that has an `id`). It's now generated in Zod's registry mode, and a unit test checks that every `$ref` in the spec resolves. `openapi-typescript` refused the old spec, which is how the bug surfaced.
 
 ### 3.1 Database
@@ -454,9 +454,17 @@ The OpenAPI spec is published as a CI artifact and with each release, so the ext
 | Hosted demo sizing | VPS sized for ticket-drop scenarios (start at ~4 vCPU / 8 GB, adjust from first k6 baselines); API horizontally scalable within compose (`api` replicas behind Caddy)                                      | Proposed |
 | Rate limiting      | `@nestjs/throttler` with Redis storage; limits configurable via env. Authorised load runs send a secret `X-Load-Test-Key` header that lifts limits, so the public demo stays protected from anonymous load | Proposed |
 | Load-run hygiene   | Hosted load runs use dedicated seeded events and are followed by `POST /__test/reset`; run them outside peak hours                                                                                         | Proposed |
-| CI                 | GitHub Actions: lint → typecheck → unit → integration → build images → push on `main`/tags                                                                                                                 | Decided  |
-| Cross-repo         | On release, send a `repository_dispatch` to the tests repo to run e2e against the new image tag                                                                                                            | Proposed |
-| Versioning         | Semver git tags; changelog per release                                                                                                                                                                     | Proposed |
+| CI                 | GitHub Actions: lint → typecheck → unit → integration → build images → push on `main`; releases tag the tested images (C6.4)                                                                               | Decided  |
+| Cross-repo         | On release, send a `repository_dispatch` (`testtix-release`, with the image tag) to the tests repo to run e2e against the new images                                                                       | Decided  |
+| Versioning         | Semver git tags and a changelog per release, from Conventional Commits by release-please; one version for the whole repo                                                                                   | Decided  |
+
+**Implementation notes (C6.4)**
+
+- **release-please** (`googleapis/release-please-action` v5, manifest config: `release-please-config.json`, `.release-please-manifest.json`), one `node` package at the root with every workspace `package.json` and `apps/api/openapi.json` (`$.info.version`) as extra files: one version for the repo, the images and the spec. Tags `v<version>` (no component). `initial-version` 0.1.0 (release-please's default first release is 1.0.0), `bump-minor-pre-major` so a breaking change stays in 0.x, `prerelease` marks 0.x releases as GitHub pre-releases (only those). Changelog sections for `feat`, `fix`, `perf`, `revert`, `docs`. `CHANGELOG.md` is Prettier-ignored (release-please writes `*` lists).
+- **Workflow** (`.github/workflows/release.yml`): `workflow_run` after a successful CI push on `main`, so the release PR follows CI and a release is only created once the release commit's CI run, images included, has passed. With `GITHUB_TOKEN`, neither the release PR nor the tag starts other workflows; that's why CI lost its `v*` tag trigger.
+- **Images are promoted, not rebuilt:** `docker buildx imagetools create` gives `sha-<7>` of the release commit the tags `<version>`, plus `<major>.<minor>` and `latest` when it's the highest release. The images a release ships are the ones CI tested; a missing `sha-<7>` fails the job with instructions. A manual run with a tag repeats tagging, the `openapi.json` upload (`--clobber`) and the dispatch.
+- **Dispatch:** `POST /repos/{TESTS_REPO}/dispatches` with a fine-grained PAT (`TESTS_REPO_DISPATCH_TOKEN`, the tests repo only, Contents: write), skipped while the variable `TESTS_REPO` is unset. The payload (`docs/releasing.md#tests-repo-dispatch`) names the image registry and tag in compose's `TESTTIX_IMAGE_REGISTRY` / `TESTTIX_IMAGE_TAG` terms, plus the release and spec URLs.
+- Needs the repository setting _Allow GitHub Actions to create and approve pull requests_ for the release PR.
 
 **Implementation notes (C6.3)**
 

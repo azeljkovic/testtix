@@ -45,7 +45,8 @@ When a decision changes, update the docs in the same PR so they stay accurate.
 - ✅ C6.1 Dockerfiles + `full` profile + GHCR
 - ✅ C6.2 Observability profile
 - 🟡 C6.3 Hosted demo: repo side done; live check waits for the VPS (see plan)
-- ⏭️ Next: **C6.4** (see plan)
+- 🟡 C6.4 Release automation: repo side done; the first release (live check) follows the merge (see plan)
+- ⏭️ Next: **C6.5** (see plan)
 
 Update this list when a chunk is merged.
 
@@ -128,6 +129,7 @@ Run one package: `pnpm --filter @testtix/api <script>`.
 - Images (C6.1): `apps/{api,web,fake-payments}/Dockerfile`, built from the repo root. The api image is also the worker (`node dist/worker.js`) and the migrations (`migrate` service). New API env vars a container needs go in the `x-api-environment` anchor of `docker/compose.yml` (pass tunables as `${VAR:-}`). New files the API reads at runtime must be in `files` of `apps/api/package.json` (`pnpm deploy` ships only those). The worker serves only health routes (`createWorkerApp()`, `WORKER_PORT`). Check container changes with `pnpm full:up --build && pnpm full:check` (resets the data); CI's `images` job does the same and `publish` pushes to GHCR.
 - Metrics (`/metrics`, C6.2): register on the injected `METRICS_REGISTRY` (`src/metrics/metrics.tokens.ts`; import `MetricsModule`), names `testtix_*`, labels never raw paths or user input. Per-process counts are counters/histograms; values from Postgres/Redis are gauges read in `collect()` at scrape time with the server clock, catching errors so the scrape still answers. BullMQ processors and queues get job metrics automatically (`JobMetrics`). The dashboard is `docker/observability/grafana/dashboards/ticket-drop.json` (`pnpm observability:check` runs each of its queries); document new metrics in `docs/testing-guide.md#metrics`.
 - Hosted demo (C6.3, `docs/hosted-demo.md`): `docker/demo/compose.yml` overlays the `full` profile (run it with `docker/demo/compose.sh`); `edge` (`docker/demo/Caddyfile`) serves `DEMO_DOMAIN`, `api.`, `pay.` and `mail.` with TLS and keeps `/metrics` private. Settings the demo needs go in the overlay (secrets as `${VAR:?}`) and in the `.env` the **Demo deploy** workflow writes from the `demo` environment. A new public path or host needs a check in `docker/demo-smoke-test.sh` (`pnpm demo:check`); test the setup locally with `DEMO_DOMAIN=localhost` (see the runbook).
+- Releases (C6.4, `docs/releasing.md`): release-please keeps a release PR open from the Conventional Commits on `main`; never bump versions, edit `CHANGELOG.md` or push `v*` tags by hand. One version for the repo: a new workspace `package.json` (or another file carrying the version) goes into `extra-files` in `release-please-config.json`. Releases reuse CI's `sha-<7>` images (`.github/workflows/release.yml`); the tests repo gets a `testtix-release` dispatch, whose payload is a documented contract.
 - Local infra is `docker/compose.yml`, driven by `pnpm infra:*` from the repo root (`--project-directory .`, so the root `.env` overrides the compose defaults). Pin image tags to an exact version. New services get a health check, and `docker/smoke-test.sh` checks them.
 
 ## Repo
