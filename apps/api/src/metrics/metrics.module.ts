@@ -3,6 +3,7 @@ import { ApiOkResponse, ApiOperation, ApiProduces, ApiTags } from '@nestjs/swagg
 import { collectDefaultMetrics, Registry } from '@prometheus-io/client';
 
 import { Public } from '../auth/auth.decorators.js';
+import { NoRateLimit } from '../rate-limit/no-rate-limit.decorator.js';
 
 /** The API's own registry (not the library's global one), so each app instance starts clean. */
 export const METRICS_REGISTRY = Symbol('METRICS_REGISTRY');
@@ -12,6 +13,7 @@ const PROMETHEUS_CONTENT_TYPE = Registry.PROMETHEUS_CONTENT_TYPE;
 @ApiTags('metrics')
 @Controller('metrics')
 @Public()
+@NoRateLimit()
 export class MetricsController {
   constructor(@Inject(METRICS_REGISTRY) private readonly registry: Registry) {}
 

@@ -104,7 +104,6 @@ export class EmailVerificationService {
         'This account has already verified its email address.',
       );
     }
-    // TODO(C5.3): rate-limit resends per user.
     const token = await this.issue(user.id);
     try {
       await this.sendEmail(user, token);

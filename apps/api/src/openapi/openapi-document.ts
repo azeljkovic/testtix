@@ -13,9 +13,10 @@ import { parseConfig } from '../config/config.schema.js';
  * process environment is ignored. The result is the document `GET /openapi.json` serves in test mode.
  */
 export async function createOpenApiDocument(): Promise<OpenAPIObject> {
+  const config = parseConfig({ LOG_LEVEL: 'silent', TESTTIX_TEST_MODE: 'true' });
   const app = await NestFactory.create<NestFastifyApplication>(
-    AppModule.forRoot(parseConfig({ LOG_LEVEL: 'silent', TESTTIX_TEST_MODE: 'true' })),
-    createHttpAdapter(),
+    AppModule.forRoot(config),
+    createHttpAdapter(config),
     // eslint-disable-next-line @typescript-eslint/no-unsafe-class-instance-assignment -- Nest declares its options type as a class; a literal is the documented usage.
     { preview: true, logger: false },
   );

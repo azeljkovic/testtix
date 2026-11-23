@@ -5,12 +5,15 @@ import type { FastifyRequest } from 'fastify';
 import { ZodResponse } from 'nestjs-zod';
 
 import { Public, SkipCsrf } from '../auth/auth.decorators.js';
+import { NoRateLimit } from '../rate-limit/no-rate-limit.decorator.js';
 import { PaymentWebhookAckDto, PaymentWebhookEventDto } from './payment-webhooks.schemas.js';
 import { PaymentWebhooksService } from './payment-webhooks.service.js';
 
 @ApiTags('webhooks')
 @Public()
 @SkipCsrf()
+// Signed by the provider, which retries failed deliveries: a limit would only delay payments.
+@NoRateLimit()
 @Controller('webhooks')
 export class PaymentWebhooksController {
   constructor(private readonly webhooks: PaymentWebhooksService) {}

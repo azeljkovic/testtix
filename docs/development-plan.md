@@ -141,7 +141,7 @@ Claude's workspace has no Docker daemon, so Testcontainers can't run there. Beca
 
 - `POST /__test/reset`: truncates everything, reseeds deterministically, resets the clock. Key-guarded when a key is configured.
 - `POST /__test/seed/{scenario}` is additive and returns the created IDs. Starting scenarios: `basic-catalogue`, `sold-out-event`, `one-seat-left`. Later chunks add more.
-- Separate rate limit and logging for `/__test/*` are deferred to C5.3. A TODO points there.
+- Separate rate limit and logging for `/__test/*` were deferred to C5.3 (done there).
 - Verify: integration tests show reset restores the baseline and each scenario returns usable IDs.
 
 **C1.4 Auth API**
@@ -350,6 +350,8 @@ Claude's workspace has no Docker daemon, so Testcontainers can't run there. Beca
 - 429 responses include `Retry-After`.
 - A per-user limit on `POST /auth/verify-email/resend` (C1.5 left a TODO).
 - Verify: integration tests that exceed a limit, bypass it with the key, and check the test API limit.
+- Also added: groups `default` / `auth` (login, register, verify-email) / `testApi` / `verificationResend` with `<requests>/<window>` env vars (`RATE_LIMIT_*`, `RATE_LIMIT_ENABLED`); counting before authentication; 429 `rate-limited` problem type; health, `/metrics` and webhooks unlimited; `TRUST_PROXY` for client addresses behind proxies; fail open without Redis; reset clears the counters; `testtix_rate_limited_requests_total{group}` on `/metrics`; the 429 documented per operation in OpenAPI.
+- For C5.4 and C6: k6 runs and scenario setup that make many calls send `X-Load-Test-Key` (the server's `LOAD_TEST_KEY`); the hosted demo sets `LOAD_TEST_KEY` and `TRUST_PROXY` (Caddy in front of the API).
 
 **C5.4 Drop scenarios + testing guide**
 

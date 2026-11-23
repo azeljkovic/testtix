@@ -60,6 +60,17 @@ describe('parseConfig', () => {
       orderPollIntervalMs: 2000,
       orderProcessingDelayMs: 1000,
       waitingRoom: { admissionIntervalMs: 1000, pollIntervalMs: 2000 },
+      trustProxy: false,
+      rateLimit: {
+        enabled: true,
+        loadTestKey: undefined,
+        groups: {
+          default: { limit: 600, windowMs: 60_000 },
+          auth: { limit: 20, windowMs: 60_000 },
+          testApi: { limit: 300, windowMs: 60_000 },
+          verificationResend: { limit: 3, windowMs: 15 * 60_000 },
+        },
+      },
     });
   });
 
@@ -93,6 +104,13 @@ describe('parseConfig', () => {
       JOB_PROCESSING_DELAY_MS: '0',
       QUEUE_ADMISSION_INTERVAL_MS: '250',
       QUEUE_POLL_INTERVAL_MS: '3000',
+      TRUST_PROXY: '172.16.0.0/12',
+      RATE_LIMIT_ENABLED: 'false',
+      RATE_LIMIT_DEFAULT: '100/30s',
+      RATE_LIMIT_AUTH: '5/2m',
+      RATE_LIMIT_TEST_API: '1000/1h',
+      RATE_LIMIT_VERIFICATION_RESEND: '1/24h',
+      LOAD_TEST_KEY: 'a-long-enough-load-key',
     });
     expect(config).toEqual({
       nodeEnv: 'production',
@@ -123,7 +141,46 @@ describe('parseConfig', () => {
       orderPollIntervalMs: 500,
       orderProcessingDelayMs: 0,
       waitingRoom: { admissionIntervalMs: 250, pollIntervalMs: 3000 },
+      trustProxy: ['172.16.0.0/12'],
+      rateLimit: {
+        enabled: false,
+        loadTestKey: 'a-long-enough-load-key',
+        groups: {
+          default: { limit: 100, windowMs: 30_000 },
+          auth: { limit: 5, windowMs: 120_000 },
+          testApi: { limit: 1000, windowMs: 3_600_000 },
+          verificationResend: { limit: 1, windowMs: 86_400_000 },
+        },
+      },
     });
+  });
+
+  it.each([
+    ['true', true],
+    ['false', false],
+    ['10.0.0.1', ['10.0.0.1']],
+    ['127.0.0.1, 172.16.0.0/12,::1', ['127.0.0.1', '172.16.0.0/12', '::1']],
+  ])('reads TRUST_PROXY=%s', (value, expected) => {
+    expect(parseConfig({ TRUST_PROXY: value }).trustProxy).toEqual(expected);
+  });
+
+  it.each(['yes', 'proxy.local', '10.0.0.1,', 'a b'])('rejects TRUST_PROXY=%s', (value) => {
+    expect(parseError({ TRUST_PROXY: value }).issues[0]?.path).toEqual(['TRUST_PROXY']);
+  });
+
+  it.each(['600', '600/m', '600/1d', '1.5/1m', '0/1m', '10/0s', '10/25h', '-1/1m'])(
+    'rejects RATE_LIMIT_DEFAULT=%s',
+    (value) => {
+      expect(parseError({ RATE_LIMIT_DEFAULT: value }).issues[0]?.path).toEqual([
+        'RATE_LIMIT_DEFAULT',
+      ]);
+    },
+  );
+
+  it('rejects a LOAD_TEST_KEY shorter than 16 characters', () => {
+    expect(parseError({ LOAD_TEST_KEY: 'x'.repeat(15) }).issues[0]?.path).toEqual([
+      'LOAD_TEST_KEY',
+    ]);
   });
 
   it('points the default webhook URL at PORT', () => {

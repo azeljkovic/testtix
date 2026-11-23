@@ -3,6 +3,12 @@ import { z } from 'zod';
 /** Media type of every API error response. */
 export const PROBLEM_CONTENT_TYPE = 'application/problem+json';
 
+/**
+ * Request header that lifts every rate limit when it carries the server's `LOAD_TEST_KEY`, for
+ * authorised load runs. Rate-limited requests get a 429 `rate-limited` with `Retry-After`.
+ */
+export const LOAD_TEST_KEY_HEADER = 'X-Load-Test-Key';
+
 /** `type` of problems that need no more explanation than their HTTP status (RFC 9457 §4.2.1). */
 export const PROBLEM_TYPE_BLANK = 'about:blank';
 
@@ -36,6 +42,7 @@ export const PROBLEM_TYPES = {
   WEBHOOK_SIGNATURE_INVALID: 'urn:testtix:problem:webhook-signature-invalid',
   QUEUE_REQUIRED: 'urn:testtix:problem:queue-required',
   NO_WAITING_ROOM: 'urn:testtix:problem:no-waiting-room',
+  RATE_LIMITED: 'urn:testtix:problem:rate-limited',
 } as const satisfies Record<string, `urn:testtix:problem:${string}`>;
 
 export type ErrorCode = keyof typeof PROBLEM_TYPES;

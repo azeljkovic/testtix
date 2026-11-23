@@ -368,7 +368,7 @@ Order lifecycle: `PENDING_PAYMENT → PROCESSING → CONFIRMED | FAILED | EXPIRE
 - OpenAPI: `@Public()` and `@SkipCsrf()` also leave `x-testtix-*` markers on operations; `addAuthDocs` turns them into the `session` cookie security requirement plus a 401, and the `X-CSRF-Token` header plus a 403, then removes the markers. The spec documents exactly what the guards enforce.
 - Every 401 carries a `WWW-Authenticate` challenge (`ProblemDetailsFilter` adds `Session realm="testtix"` unless a guard set its own, like `TestKey`). New problem codes: `INVALID_CREDENTIALS`, `EMAIL_ALREADY_REGISTERED` (with a field error on `email`), `CSRF_TOKEN_INVALID`.
 - The baseline seed has three accounts (admin, customer, unverified customer). Their argon2 hashes are constants with a fixed salt, so the seed stays deterministic; a unit test checks each matches its documented password.
-- Login rate limiting is part of C5.3 (rate limits).
+- Login, registration and email verification share the `auth` rate-limit group, and verification resends have a per-user limit (C5.3, see §6).
 
 ---
 
@@ -399,11 +399,11 @@ Enabled when `TESTTIX_TEST_MODE=true`.
 
 **Implementation notes (C1.3)**
 
-- `POST /__test/reset` resets the clock first (or freezes it at an optional `freezeAt`), then truncates every table except `_prisma_migrations` and inserts the baseline seed for the clock's UTC day, all in **one transaction** (`resetAndSeedDatabase`). Other requests never see an empty database, a failure changes nothing, and the seed's advisory lock serializes concurrent resets and seeds. The body is optional, so `curl -X POST …/__test/reset` works; the optional `freezeAt` makes a reset fully reproducible (identical data hash). It also empties the waiting rooms (C5.1); later chunks clear their Redis state (rate limits) in `TestResetService` too.
+- `POST /__test/reset` resets the clock first (or freezes it at an optional `freezeAt`), then truncates every table except `_prisma_migrations` and inserts the baseline seed for the clock's UTC day, all in **one transaction** (`resetAndSeedDatabase`). Other requests never see an empty database, a failure changes nothing, and the seed's advisory lock serializes concurrent resets and seeds. The body is optional, so `curl -X POST …/__test/reset` works; the optional `freezeAt` makes a reset fully reproducible (identical data hash). It also empties the waiting rooms (C5.1) and clears the rate-limit counters (C5.3); Redis state of later chunks is cleared in `TestResetService` too.
 - `POST /__test/seed/{scenario}` is **one route per scenario** (not a path parameter), so each documents its own response in OpenAPI and an unknown name is a plain 404. Scenarios are pure builders (`src/test-api/scenarios/scenarios.ts`) that reuse the seed's `buildCatalogue` and return the rows plus the response body; the service inserts the rows in one transaction.
 - Scenarios are additive and isolated: each run creates its own small venue, events and buyer, with random UUIDv7 IDs (`uuidv7(now)`, timestamp from `ClockService`) and a random 8-hex suffix in every slug, title and email. They don't depend on the baseline, so they also work on an empty database.
 - Sold inventory is backed by real data, as checkout will create it (C4): `CONFIRMED` orders of a scenario buyer (at most `maxTicketsPerOrder` items each), one order item and one ticket per unit. Buyers have the password hash `!locked`, which is not an argon2 hash, so nobody can log in as them; C1.4's login must treat a hash that doesn't parse as a wrong password, not a 500.
-- Separate rate limiting and audit logging of `/__test/*` are deferred to C5.3 (TODO in `TestApiModule`).
+- C5.3: `/__test/*` has its own rate-limit group (`testApi`, instead of `default`) and one audit log line per call (`TestApiAudit`, see §6).
 
 **Intentional bugs [Decided]: none in v1.** The first version ships bug-free. Bug toggles (with a `GET/PUT /__test/bugs` endpoint) or versioned buggy deployments come in a later version. Candidate bugs for that version:
 
@@ -457,6 +457,18 @@ The OpenAPI spec is published as a CI artifact and with each release, so the ext
 | CI                 | GitHub Actions: lint → typecheck → unit → integration → build images → push on `main`/tags                                                                                                                 | Proposed |
 | Cross-repo         | On release, send a `repository_dispatch` to the tests repo to run e2e against the new image tag                                                                                                            | Proposed |
 | Versioning         | Semver git tags; changelog per release                                                                                                                                                                     | Proposed |
+
+**Implementation notes (C5.3)**
+
+- `@nestjs/throttler` 6 with one named throttler per **route group** (`src/rate-limit/rate-limit-groups.ts`): `default` (every route), `auth` (login, register, verify-email; on top of `default`), `testApi` (`/__test/*`, instead of `default`) and `verificationResend` (per user). Limits are `<requests>/<window>` env vars (`RATE_LIMIT_DEFAULT=600/1m`, `RATE_LIMIT_AUTH=20/1m`, `RATE_LIMIT_TEST_API=300/1m`, `RATE_LIMIT_VERIFICATION_RESEND=3/15m`), off with `RATE_LIMIT_ENABLED=false`. Each group has one counter per client across all its routes (the library's default key is per route). `@RateLimit(group)` adds a route to a group, `@NoRateLimit()` takes it out of `default` (health, `/metrics`, payment webhooks: signed, and the provider retries).
+- Storage is our own `RateLimitStore` on the shared ioredis client (no extra package): a Lua script `INCR`s a fixed-window counter (`testtix:ratelimit:<group>:<tracker>`) and sets its expiry on the first hit. Fixed windows are predictable for testers ("N per window from the first request"); the price is up to 2× a limit across a window boundary. Windows use Redis' real time, never the test clock. If Redis fails, requests pass (fail open, one warning per outage): the limits protect the demo and shouldn't take the API down with Redis.
+- Guard order: `RateLimitModule` is imported before `AuthModule`, so the global `RateLimitGuard` runs before `AuthGuard` and `CsrfGuard` and counts per client address (IPv6 per /64), failed requests included. The per-user group needs the user, so `@RateLimit('verificationResend')` adds a route guard (`UserRateLimitGuard`, same class with a `user:<id>` tracker), which runs after the global guards.
+- A blocked request gets 429 `rate-limited` (problem+json) with a plain `Retry-After` in seconds; the library's per-group `Retry-After-<name>` and `X-RateLimit-*` headers are off (`setHeaders: false`). `testtix_rate_limited_requests_total{group}` on `/metrics` counts them.
+- `X-Load-Test-Key` (`LOAD_TEST_KEY_HEADER` in `packages/shared`) equal to `LOAD_TEST_KEY` (compared like the test key, in constant time) skips every group and isn't counted. Without `LOAD_TEST_KEY` the header does nothing.
+- Client addresses behind proxies: `TRUST_PROXY` (`false` default, `true`, or addresses / CIDR ranges) is Fastify's `trustProxy`, passed to `createHttpAdapter(config)`. Fastify ignores hop counts (it fails closed), so they aren't accepted. The hosted demo's Caddy (C6) needs it set.
+- Test API audit: a Fastify `onResponse` hook (`TestApiAudit`, added in `onModuleInit`) logs `Test API call` with method, path, status, client address, whether `X-Test-Key` was sent, request ID and duration, for every `/__test/*` response, rejected ones included (Nest interceptors don't see requests a guard rejected).
+- OpenAPI: the decorators leave `x-testtix-rate-limit-*` markers; `addRateLimitDocs` turns them into a 429 response with `Retry-After` on each limited operation, naming its groups and env vars (not numbers, which are server settings), then removes the markers.
+- Test harnesses (`createTestApp()`, `createIntegrationApp()`) turn rate limits off; `src/rate-limit/rate-limit.int.test.ts` turns them on with small limits against real Redis.
 
 ---
 

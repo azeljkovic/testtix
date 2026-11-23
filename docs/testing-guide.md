@@ -155,6 +155,7 @@ Admins only (log in as `admin@testtix.test`, see [Seeded accounts](#seeded-accou
 - JSON in, JSON out. Money is integer cents, currency USD.
 - Send `Content-Type: application/json` only with a body: a request that has the header but an empty body (e.g. `POST /admin/events/{id}/publish`) is a 400. `curl --json` sets the header only when it sends data.
 - Test-only endpoints live under `/__test/*` and are tagged `test` in the spec; see [Test mode](#test-mode).
+- Requests are [rate limited](#rate-limits) per client address; a 429 says how long to wait in `Retry-After`.
 
 ## Request IDs
 
@@ -221,6 +222,49 @@ Problem types so far:
 | `urn:testtix:problem:webhook-signature-invalid`    | 400    | A [payment webhook](#payment-webhooks) without valid signature headers, with a signature that doesn't match, or with a timestamp outside the replay window                          |
 | `urn:testtix:problem:queue-required`               | 403    | The seat map or a hold of a [ticket drop](#ticket-drops-and-the-waiting-room) without a valid, unexpired admission token in `X-Admission-Token`                                     |
 | `urn:testtix:problem:no-waiting-room`              | 409    | Joining the queue of an event without a waiting room                                                                                                                                |
+| `urn:testtix:problem:rate-limited`                 | 429    | Too many requests in a [rate-limit group](#rate-limits). `Retry-After` gives the seconds to wait                                                                                    |
+
+## Rate limits
+
+The API limits how many requests a client sends, so one script can't take the shared demo down. Limits apply to **groups** of routes, each with its own budget, counted per client address in Redis (shared by every API instance):
+
+| Group                | Routes                                                                        | Counted per    | Default (env var)                                   |
+| -------------------- | ----------------------------------------------------------------------------- | -------------- | --------------------------------------------------- |
+| `default`            | Every route not listed below                                                  | client address | 600 per minute (`RATE_LIMIT_DEFAULT`)               |
+| `auth`               | `POST /auth/login`, `/auth/register` and `/auth/verify-email`, together       | client address | 20 per minute (`RATE_LIMIT_AUTH`)                   |
+| `testApi`            | The [test API](#test-mode) (`/__test/*`), **instead of** `default`            | client address | 300 per minute (`RATE_LIMIT_TEST_API`)              |
+| `verificationResend` | `POST /auth/verify-email/resend`                                              | user           | 3 per 15 minutes (`RATE_LIMIT_VERIFICATION_RESEND`) |
+| none                 | `GET /health`, `GET /health/ready`, `GET /metrics`, `POST /webhooks/payments` | –              | never limited                                       |
+
+A request counts towards `default` and its other groups (a login uses up one of `default` and one of `auth`). Every request counts, also those that then fail: limits are checked first, before authentication, CSRF and validation, so 401s and 403s use up the budget too. The per-user resend limit is checked after authentication.
+
+Each counter is a **fixed window** that starts with the client's first request in the group and lasts the window's length (one minute for `600/1m`). Request number limit + 1 within the window gets:
+
+```http
+HTTP/1.1 429 Too Many Requests
+Retry-After: 42
+Content-Type: application/problem+json; charset=utf-8
+
+{"type":"urn:testtix:problem:rate-limited","title":"Too many requests","status":429,
+ "detail":"Too many requests for the API: the limit is 600 per minute. Try again in 42 s.", …}
+```
+
+`Retry-After` is the number of seconds until the window ends; then the client has a full budget again. Windows run on real time, so the [server clock](#the-server-clock) doesn't affect them. [`POST /__test/reset`](#resetting-the-data) clears every counter. The OpenAPI spec documents the 429 and the groups of each operation. `GET /metrics` counts the 429s per group (`testtix_rate_limited_requests_total{group}`).
+
+Things to know when testing:
+
+- **Load runs** send the server's secret in `X-Load-Test-Key` (the server's `LOAD_TEST_KEY`, at least 16 characters) and skip every limit; their requests aren't counted. A wrong key counts as no key. Without `LOAD_TEST_KEY` on the server the header is ignored.
+- **UI suites** that log in through the login form many times a minute from one machine run into the `auth` limit. Log in through [`POST /__test/sessions`](#logging-in-through-the-test-api) instead, or turn the limits off locally with `RATE_LIMIT_ENABLED=false`.
+- **To test the 429 itself**, set a small limit (e.g. `RATE_LIMIT_DEFAULT=5/10s`) on your local server, or use the resend limit: four `POST /auth/verify-email/resend` calls of one unverified user within 15 minutes give a 429 on the fourth.
+- **Behind a proxy** (a load balancer, the web container), set `TRUST_PROXY` (`true`, or the proxies' addresses / CIDR ranges) so the API counts the client address from `X-Forwarded-For`, not the proxy's. Without it, `X-Forwarded-For` is ignored, so it can't be used to get a fresh budget. IPv6 clients are counted by their /64 subnet.
+- If Redis is down, requests aren't limited (the API logs a warning once).
+
+```sh
+# The sixth request within 10 s gets a 429 (with RATE_LIMIT_DEFAULT=5/10s on the server)
+for i in 1 2 3 4 5 6; do curl -s -o /dev/null -w '%{http_code} ' http://localhost:3000/events; done
+# A load run's request: never limited
+curl -s -H "X-Load-Test-Key: $LOAD_TEST_KEY" http://localhost:3000/events
+```
 
 ## Accounts and sessions
 
@@ -839,9 +883,10 @@ Rules worth testing:
 | An unknown or malformed token                                    | 400 `verification-token-invalid`; an empty token is a 400 `validation-error`                                                                     |
 | `POST /auth/verify-email/resend` without a session               | 401                                                                                                                                              |
 | Resend for an already verified user                              | 409 `email-already-verified`, nothing is sent                                                                                                    |
+| A fourth resend of one user within 15 minutes                    | 429 `rate-limited` with `Retry-After`, nothing is sent                                                                                           |
 | The SMTP server is down                                          | Registration still succeeds (the account exists, unverified, and the failure is logged); resend answers 503                                      |
 
-A resend issues a new link with a fresh expiry and emails it. There is no resend limit yet (rate limits come in M5).
+A resend issues a new link with a fresh expiry and emails it. Each user can ask for 3 resends per 15 minutes (`RATE_LIMIT_VERIFICATION_RESEND`); the next one is a 429 `rate-limited` until the window ends (see [Rate limits](#rate-limits)).
 
 Users from [`POST /__test/sessions`](#logging-in-through-the-test-api) with `"emailVerified": false` get no email; call the resend endpoint with their session to get one. [Seeded](#seeded-accounts) `unverified@testtix.test` has no link either until it asks for one.
 
@@ -887,6 +932,8 @@ until curl -sf http://localhost:3000/health/ready > /dev/null; do sleep 1; done
 Test mode gives testers hooks that a real shop would never expose: the test API under `/__test/*` and a server clock you can control. Turn it on with `TESTTIX_TEST_MODE=true` (`.env.example` sets it, so a local `.env` copied from it has test mode on; without a `.env` it is off). With test mode off, every `/__test/*` path answers 404 like any unknown route, and the clock is always the real time.
 
 On startup the API logs a `TestMode` warning saying whether test mode is on and whether the test API is key-protected.
+
+The test API has its own [rate limit](#rate-limits) (`testApi` group, 300 per minute per client address by default; it doesn't use up the `default` budget). Every call to `/__test/*`, rejected ones included (401, 429, 404 for an unknown scenario under `/__test/seed/`), writes an audit line to the API log: message `Test API call`, context `TestApiAudit`, with `testApi: { method, path, status, ip, testKeySent, requestId, durationMs }`. The `X-Test-Key` value is never logged.
 
 ### Test API key
 
@@ -998,6 +1045,7 @@ Unless noted, sales opened at D−30 15:00, and every batch puts all seats (or G
 1. It resets the server clock to the real time, or freezes it at `freezeAt` if the body has one.
 2. It deletes every row (users, sessions, holds, orders and scenario data included) and inserts the [baseline seed](#seed-data) for the clock's UTC date.
 3. It empties every [waiting room](#ticket-drops-and-the-waiting-room): queue and admission tokens stop working.
+4. It clears every [rate-limit](#rate-limits) counter.
 
 The data swap is one database transaction: while it runs, other requests wait or see the old data, never an empty or half-seeded database. Concurrent resets run one after the other. On a server with a [test API key](#test-api-key) it needs `X-Test-Key`.
 

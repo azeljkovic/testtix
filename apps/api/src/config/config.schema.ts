@@ -21,6 +21,54 @@ export const DEV_PAYMENTS_WEBHOOK_URL = 'http://host.docker.internal:{port}/webh
 
 const httpUrl = z.url({ protocol: /^https?$/, error: 'Must be an http:// or https:// URL' });
 
+const WINDOW_UNIT_MS = { s: 1000, m: 60_000, h: 3_600_000 } as const;
+const MAX_WINDOW_MS = 24 * 3_600_000;
+
+/** A rate limit: at most `limit` requests per `windowMs`. */
+export interface RateLimitSetting {
+  limit: number;
+  windowMs: number;
+}
+
+/** `<limit>/<window>` with the window in seconds, minutes or hours, e.g. `600/1m` or `3/15m`. */
+const rateLimit = z
+  .string()
+  .regex(/^\d{1,7}\/\d{1,5}[smh]$/, 'Must look like 600/1m: <requests>/<number><s|m|h>')
+  .transform((value, ctx): RateLimitSetting => {
+    const [limit = '', window = ''] = value.split('/');
+    const unit = window.slice(-1) as keyof typeof WINDOW_UNIT_MS;
+    const setting = {
+      limit: Number(limit),
+      windowMs: Number(window.slice(0, -1)) * WINDOW_UNIT_MS[unit],
+    };
+    if (setting.limit < 1 || setting.windowMs < 1000 || setting.windowMs > MAX_WINDOW_MS) {
+      ctx.addIssue({
+        code: 'custom',
+        message: 'Needs at least 1 request, and a window from 1s to 24h',
+      });
+      return z.NEVER;
+    }
+    return setting;
+  });
+
+/**
+ * Fastify's `trustProxy`: `false` (default, use the connecting address), `true` (trust every
+ * hop), or a comma-separated list of proxy addresses / CIDR ranges. (Fastify ignores hop counts.)
+ */
+const trustProxy = z.string().transform((value, ctx): boolean | string[] => {
+  if (value === 'true') return true;
+  if (value === 'false') return false;
+  const proxies = value.split(',').map((part) => part.trim());
+  if (proxies.some((part) => !/^[0-9a-fA-F.:/]+$/.test(part))) {
+    ctx.addIssue({
+      code: 'custom',
+      message: 'Must be true, false, or comma-separated addresses / CIDR ranges',
+    });
+    return z.NEVER;
+  }
+  return proxies;
+});
+
 /**
  * Environment variables read by the API.
  * Keep in sync with `.env.example` (definition of done, item 4).
@@ -98,6 +146,24 @@ export const envSchema = z
     QUEUE_ADMISSION_INTERVAL_MS: z.coerce.number().int().min(100).max(60_000).default(1000),
     // Longest `retryAfterMs` of a waiting queue entry: how long clients wait between polls.
     QUEUE_POLL_INTERVAL_MS: z.coerce.number().int().min(100).max(60_000).default(2000),
+    // Which proxies in front of the API to trust for the client address (`X-Forwarded-For`).
+    // Rate limits count per client address, so set it when the API runs behind a proxy.
+    TRUST_PROXY: trustProxy.default(false),
+    // Rate limits (Redis, shared by every API replica). Each is `<requests>/<window>`, counted per
+    // client address in a fixed window that starts with the first request.
+    RATE_LIMIT_ENABLED: z
+      .stringbool({ truthy: ['true'], falsy: ['false'], error: 'Must be true or false' })
+      .default(true),
+    // Every route not in another group, except health, metrics and payment webhooks.
+    RATE_LIMIT_DEFAULT: rateLimit.prefault('600/1m'),
+    // Log in, register and verify email, together (on top of the default group).
+    RATE_LIMIT_AUTH: rateLimit.prefault('20/1m'),
+    // The test API (`/__test/*`), instead of the default group.
+    RATE_LIMIT_TEST_API: rateLimit.prefault('300/1m'),
+    // `POST /auth/verify-email/resend`, per user (on top of the default group).
+    RATE_LIMIT_VERIFICATION_RESEND: rateLimit.prefault('3/15m'),
+    // When set, requests with this value in an `X-Load-Test-Key` header skip every rate limit.
+    LOAD_TEST_KEY: z.string().min(16, 'Must be at least 16 characters').optional(),
   })
   .superRefine((env, ctx) => {
     // Dev defaults carry well-known credentials or point at localhost, so production must set
@@ -158,6 +224,17 @@ export const envSchema = z
     waitingRoom: {
       admissionIntervalMs: env.QUEUE_ADMISSION_INTERVAL_MS,
       pollIntervalMs: env.QUEUE_POLL_INTERVAL_MS,
+    },
+    trustProxy: env.TRUST_PROXY,
+    rateLimit: {
+      enabled: env.RATE_LIMIT_ENABLED,
+      loadTestKey: env.LOAD_TEST_KEY,
+      groups: {
+        default: env.RATE_LIMIT_DEFAULT,
+        auth: env.RATE_LIMIT_AUTH,
+        testApi: env.RATE_LIMIT_TEST_API,
+        verificationResend: env.RATE_LIMIT_VERIFICATION_RESEND,
+      },
     },
   }));
 

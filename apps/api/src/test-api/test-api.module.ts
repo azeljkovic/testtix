@@ -8,6 +8,7 @@ import { TestScenariosController } from './scenarios/test-scenarios.controller.j
 import { TestScenariosService } from './scenarios/test-scenarios.service.js';
 import { TestSessionsController } from './sessions/test-sessions.controller.js';
 import { TestSessionsService } from './sessions/test-sessions.service.js';
+import { TestApiAudit } from './test-api-audit.js';
 import { TestClockController } from './test-clock.controller.js';
 import { TestKeyGuard } from './test-key.guard.js';
 import { TestResetController } from './test-reset.controller.js';
@@ -16,8 +17,8 @@ import { TestResetService } from './test-reset.service.js';
 /**
  * The test API (`/__test/*`). `AppModule` imports it only when `TESTTIX_TEST_MODE=true`;
  * otherwise its routes don't exist and answer 404 like any unknown path.
- *
- * TODO(C5.3): give `/__test/*` its own rate limit and an audit log line per call.
+ * Its routes share the `testApi` rate limit (`@TestApiController()`), and every call gets an
+ * audit log line (`TestApiAudit`).
  */
 @Module({
   imports: [AuthModule, WaitingRoomModule],
@@ -27,7 +28,13 @@ import { TestResetService } from './test-reset.service.js';
     TestScenariosController,
     TestSessionsController,
   ],
-  providers: [TestKeyGuard, TestResetService, TestScenariosService, TestSessionsService],
+  providers: [
+    TestApiAudit,
+    TestKeyGuard,
+    TestResetService,
+    TestScenariosService,
+    TestSessionsService,
+  ],
 })
 export class TestApiModule implements OnApplicationBootstrap {
   private readonly logger = new Logger('TestMode');

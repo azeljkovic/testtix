@@ -21,7 +21,7 @@ async function bootstrap(): Promise<void> {
 
   const app = await NestFactory.create<NestFastifyApplication>(
     AppModule.forRoot(config),
-    createHttpAdapter(),
+    createHttpAdapter(config),
     // eslint-disable-next-line @typescript-eslint/no-unsafe-class-instance-assignment -- Nest declares its options type as a class; a literal is the documented usage.
     { bufferLogs: true, ...APP_OPTIONS },
   );

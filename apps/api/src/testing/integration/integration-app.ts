@@ -15,7 +15,8 @@ import './targets-context.js';
 export interface IntegrationAppOptions {
   /**
    * Extra or overriding env vars, e.g. `{ DATABASE_URL: ... }` to simulate an outage, or
-   * `{ WORKER_IN_PROCESS: 'true' }` to run the background worker (off by default).
+   * `{ WORKER_IN_PROCESS: 'true' }` to run the background worker, or `{ RATE_LIMIT_ENABLED: 'true' }`
+   * for rate limits (both off by default).
    */
   env?: Record<string, string>;
   /**
@@ -47,6 +48,9 @@ export async function createIntegrationApp(
     // No background jobs unless a test turns them on: a sweep running at an unexpected moment
     // would change rows other tests assert on.
     WORKER_IN_PROCESS: 'false',
+    // Off unless a test turns it on: many tests log in or call the test API far more often than
+    // the default limits allow from one address.
+    RATE_LIMIT_ENABLED: 'false',
     ...options.env,
   });
   const moduleRef = await Test.createTestingModule({

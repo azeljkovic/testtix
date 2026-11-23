@@ -16,6 +16,7 @@ import { WorkerModule } from './jobs/worker.module.js';
 import { LoggingModule } from './logging/logging.module.js';
 import { MetricsModule } from './metrics/metrics.module.js';
 import { OrdersModule } from './orders/orders.module.js';
+import { RateLimitModule } from './rate-limit/rate-limit.module.js';
 import { TestApiModule } from './test-api/test-api.module.js';
 import { TicketsModule } from './tickets/tickets.module.js';
 import { VenuesModule } from './venues/venues.module.js';
@@ -32,6 +33,9 @@ export class AppModule {
         DatabaseModule,
         RedisModule,
         ClockModule,
+        // The global rate-limit guard. Before AuthModule, so it runs before the auth guard and also
+        // limits requests that fail authentication.
+        RateLimitModule,
         // Registers the global auth and CSRF guards: every route needs a session unless @Public().
         AuthModule,
         HealthModule,

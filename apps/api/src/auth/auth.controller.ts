@@ -5,6 +5,7 @@ import type { FastifyReply, FastifyRequest } from 'fastify';
 import { ZodResponse } from 'nestjs-zod';
 
 import type { User } from '../generated/prisma/client.js';
+import { RateLimit } from '../rate-limit/rate-limit.decorators.js';
 import { AuthCookies } from './auth-cookies.js';
 import { CurrentSession, CurrentUser, Public } from './auth.decorators.js';
 import {
@@ -46,6 +47,7 @@ export class AuthController {
 
   @Post('register')
   @Public()
+  @RateLimit('auth')
   @HttpCode(201)
   @Header('Cache-Control', 'no-store')
   @ApiOperation({
@@ -63,6 +65,7 @@ export class AuthController {
 
   @Post('login')
   @Public()
+  @RateLimit('auth')
   @HttpCode(200)
   @Header('Cache-Control', 'no-store')
   @ApiOperation({
@@ -94,6 +97,7 @@ export class AuthController {
 
   @Post('verify-email')
   @Public()
+  @RateLimit('auth')
   @HttpCode(204)
   @ApiOperation({
     summary: 'Verify an email address',
@@ -105,11 +109,12 @@ export class AuthController {
   }
 
   @Post('verify-email/resend')
+  @RateLimit('verificationResend')
   @HttpCode(204)
   @ApiOperation({
     summary: 'Send a new verification email',
     description:
-      "Emails the logged-in user a new verification link. Links from earlier emails stop working. 409 `email-already-verified` when the user's address is already verified; 503 when the email can't be sent.",
+      "Emails the logged-in user a new verification link. Links from earlier emails stop working. 409 `email-already-verified` when the user's address is already verified; 429 `rate-limited` after too many resends for this account (`RATE_LIMIT_VERIFICATION_RESEND`, default 3 per 15 minutes); 503 when the email can't be sent.",
   })
   @ApiNoContentResponse({ description: 'The email has been sent.' })
   async resendVerification(@CurrentUser() user: User): Promise<void> {
