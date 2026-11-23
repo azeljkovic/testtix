@@ -410,6 +410,9 @@ Claude's workspace has no Docker daemon, so Testcontainers can't run there. Beca
 - Semver tags, a changelog generated from Conventional Commits, and a GitHub Release with `openapi.json` attached.
 - On release, a `repository_dispatch` with the image tag is sent to the tests repo.
 - Verify: a `v0.x` pre-release runs the whole flow.
+- Also added: release-please (`release-please-config.json`, `.release-please-manifest.json`) with one version for the whole repo (every `package.json` and `openapi.json`'s `info.version`), first release 0.1.0, 0.x releases as GitHub pre-releases; workflow **Release** (`.github/workflows/release.yml`) after each passing CI run on `main`: it keeps the release PR up to date, and once a merged release PR's commit passes CI it tags it, creates the release, gives that commit's tested `sha-<7>` images the tags `<version>`, `<major>.<minor>` and `latest` (no rebuild; CI no longer runs on `v*` tags), attaches `openapi.json` and sends `testtix-release` to the tests repo (variable `TESTS_REPO`, secret `TESTS_REPO_DISPATCH_TOKEN`; skipped until set); a manual run with a tag repeats the publishing; runbook and the dispatch payload in `docs/releasing.md`.
+- Live check after merging: the repository setting _Allow GitHub Actions to create and approve pull requests_ must be on; then merge the first release PR (`0.1.0`) and check the release, its asset and the image tags. The dispatch waits for the tests repo.
+- For C6.5: release 1.0 with a `Release-As: 1.0.0` commit footer (release-please would otherwise stay in 0.x); 1.0 releases aren't pre-releases. The README's status note still says "early development".
 
 **C6.5 v1.0 hardening**
 

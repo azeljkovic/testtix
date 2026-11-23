@@ -157,7 +157,7 @@ pnpm full:down         # stop every container (pnpm full:reset also deletes the 
 
 The app's containers use the API's production settings (`NODE_ENV=production`) with test mode on (`TESTTIX_TEST_MODE=true`), so the [test API](docs/testing-guide.md) works and the testing guide's examples run against it. Other API settings from the root `.env` or the shell are passed through (`TEST_API_KEY`, `LOAD_TEST_KEY`, `RATE_LIMIT_*`, `JOB_PROCESSING_DELAY_MS`…; see `docker/compose.yml`); the ones that wire the containers together are fixed. `WEB_PORT` and `PORT` choose the host ports. Stop `pnpm dev` first, since both use the same ports.
 
-**Published images.** CI pushes every commit on `main` to GHCR as `ghcr.io/azeljkovic/testtix/{api,web,fake-payments}:sha-<commit>` (and `:main`), and release tags as `:<version>`, `:<major>.<minor>` and `:latest` (linux/amd64). To run those instead of building:
+**Published images.** CI pushes every commit on `main` to GHCR as `ghcr.io/azeljkovic/testtix/{api,web,fake-payments}:sha-<commit>` (and `:main`), and each release adds `:<version>`, `:<major>.<minor>` and `:latest` to its commit's images (linux/amd64; see [Releasing](docs/releasing.md)). To run those instead of building:
 
 ```sh
 export TESTTIX_IMAGE_REGISTRY=ghcr.io/azeljkovic/testtix TESTTIX_IMAGE_TAG=main
@@ -188,6 +188,10 @@ The dashboard is `docker/observability/grafana/dashboards/ticket-drop.json`. Cha
 ## Hosted demo
 
 A public demo runs the published images on one server behind Caddy with automatic TLS: the shop, the API on its own host name, the payment page and Mailpit (behind a login), with test mode on and the data reset every night. The **Demo deploy** workflow deploys every commit on `main` once CI has pushed its images, and `pnpm demo:check` smoke-tests it from anywhere. Setup, deploys, rollbacks and the nightly reset are in [docs/hosted-demo.md](docs/hosted-demo.md); what testers need to know is in the [testing guide](docs/testing-guide.md#hosted-demo).
+
+## Releases
+
+Releases are cut by [release-please](https://github.com/googleapis/release-please) from the Conventional Commits on `main`: it keeps a release PR open with the next version and `CHANGELOG.md`, and merging it tags the release, creates the GitHub Release with `openapi.json` attached, gives the commit's tested images their version tags on GHCR and notifies the tests repository. `0.x` releases are GitHub pre-releases. How it works, the setup and the tests repo's payload are in [docs/releasing.md](docs/releasing.md).
 
 ## Scripts
 
@@ -237,7 +241,7 @@ TypeScript (strict) everywhere · React + Vite · NestJS · PostgreSQL + Prisma 
 | M3 Seats & holds               | Pick seats or general-admission tickets and hold them with a countdown        |
 | M4 Checkout & tickets          | Pay with test cards; receive an e-ticket with QR code and PDF by email        |
 | M5 Ticket drops                | Queue in a waiting room for a scheduled ticket drop                           |
-| M6 Ship v1.0                   | Docker images, observability dashboards and a hosted demo                     |
+| M6 Ship v1.0                   | Docker images, observability dashboards, a hosted demo and automated releases |
 
 ## License
 

@@ -30,7 +30,7 @@ Once, by hand:
 1. **A VPS** with a public IPv4 address (start at about 4 vCPU / 8 GB, tech-stack §6), Docker Engine with the Compose plugin, and a deploy user in the `docker` group with an SSH key login. Open ports 22, 80 and 443 (443/udp too, for HTTP/3) and nothing else.
 2. **DNS:** `A` (and `AAAA` if the server has IPv6) records pointing at the server for `DEMO_DOMAIN`, `api.`, `pay.` and `mail.` under it (or a wildcard `*.DEMO_DOMAIN` next to the bare name). Caddy can only get certificates once they resolve.
 3. **GHCR packages public:** in GitHub, open each package (`testtix/api`, `testtix/web`, `testtix/fake-payments`) → Package settings → Change visibility → Public. The server pulls without a token.
-4. **A GitHub environment `demo`** (Settings → Environments), with deployment branches limited to `main` (and the release tags, from C6.4). Don't add required reviewers: the nightly reset uses it too. Its secrets:
+4. **A GitHub environment `demo`** (Settings → Environments), with deployment branches limited to `main` (add the `v*` tags to deploy a release by its tag; see [Releasing](releasing.md#cutting-a-release)). Don't add required reviewers: the nightly reset uses it too. Its secrets:
 
    | Secret                    | Value                                                                                   |
    | ------------------------- | --------------------------------------------------------------------------------------- |
