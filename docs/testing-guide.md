@@ -458,7 +458,7 @@ curl -s -X POST http://localhost:3000/orders \
   -H 'Content-Type: application/json' -d '{"holdId":"<hold id>"}'
 ```
 
-The order has its `id`, `status`, `event` (`id`, `slug`, `title`, `startsAt`, `venue.name`, `venue.timezone`), `totalCents`, `ticketCount`, `items` (the hold's items: `inventoryUnitId`, `section`, `seat`, `priceCents`), `expiresAt`, `createdAt`, `updatedAt`, `paymentUrl`, `retryAfterMs` and `refundDue` (see [late payments](#late-and-out-of-order-payments)). Send the customer to `paymentUrl`, the [payment page](#payment-page); afterwards the provider returns them to `<WEB_BASE_URL>/orders/<order id>?session_id=…`. List items (`GET /orders`) have the same fields without `items`, `paymentUrl`, `updatedAt`, `retryAfterMs` and `refundDue`.
+The order has its `id`, `status`, `event` (`id`, `slug`, `title`, `startsAt`, `venue.name`, `venue.timezone`), `totalCents`, `ticketCount`, `items` (the hold's items: `inventoryUnitId`, `section`, `seat`, `priceCents`, and `ticket`: `{ id, code }` once the order is confirmed, else `null`; see [tickets](#tickets)), `expiresAt`, `createdAt`, `updatedAt`, `paymentUrl`, `retryAfterMs` and `refundDue` (see [late payments](#late-and-out-of-order-payments)). Send the customer to `paymentUrl`, the [payment page](#payment-page); afterwards the provider returns them to `<WEB_BASE_URL>/orders/<order id>?session_id=…`. List items (`GET /orders`) have the same fields without `items`, `paymentUrl`, `updatedAt`, `retryAfterMs` and `refundDue`.
 
 Rules of `POST /orders`, checked in this order:
 
@@ -485,7 +485,7 @@ Paying an expired order's payment page anyway is possible (the provider doesn't 
 | ----------------- | -------------------------------------------------------------------------- | ------------- | -------------- |
 | `PENDING_PAYMENT` | Waiting for payment until `expiresAt`                                      | set (or null) | ≤ 2000         |
 | `PROCESSING`      | The provider reported a result; the job finishes it soon. Tickets are sold | null          | 2000           |
-| `CONFIRMED`       | Paid (or free); the tickets stay sold. Ticket issue comes with C4.4        | null          | null           |
+| `CONFIRMED`       | Paid (or free); the tickets stay sold and are issued, the email goes out   | null          | null           |
 | `FAILED`          | The payment was declined; the tickets are available again                  | null          | null           |
 | `EXPIRED`         | Not paid while the hold lasted: it ran out, or you released or replaced it | null          | null           |
 
@@ -530,6 +530,24 @@ sig=$(printf '%s' "$ts.$body" | openssl dgst -sha256 -hmac 'whsec_testtix_local_
 curl -s -X POST http://localhost:3000/webhooks/payments -H 'Content-Type: application/json' \
   -H "X-Payments-Timestamp: $ts" -H "X-Payments-Signature: v1=$sig" --data-raw "$body"
 ```
+
+### Tickets
+
+When the [processing job](#processing) confirms an order (paid or free), it issues **one ticket per item** in the same step: a `CONFIRMED` order always has all its tickets, and a `FAILED` or `EXPIRED` one has none. Each ticket has a **code**, 22 random base64url characters (128 bits, unguessable and unique), which its QR code encodes and nothing else. Running the job again issues nothing new.
+
+`GET /orders/{orderId}` shows each item's `ticket` (`id` and `code`), and right after confirmation the [e-ticket email](#e-ticket-email) goes out.
+
+| Endpoint                      | Session | What it does                                                                                      |
+| ----------------------------- | ------- | ------------------------------------------------------------------------------------------------- |
+| `GET /tickets/{ticketId}/pdf` | yes     | One of your tickets as a one-page PDF (`application/pdf`, download). 404 for anyone else's ticket |
+
+```sh
+curl -s -o ticket.pdf http://localhost:3000/tickets/<ticket id>/pdf -H "Cookie: $(echo "$session" | jq -r .cookie)"
+```
+
+The answer has `Content-Disposition: attachment; filename="testtix-ticket-<ticket id>.pdf"` and `Cache-Control: private, no-store`. A malformed ID is a 400 `validation-error`, an unknown ticket or another customer's a 404 (so nobody learns which IDs exist), and no session a 401. The [`confirmed-order`](#seed-scenarios) scenario gives you a logged-in customer with three tickets to download.
+
+**A ticket page** (A4) shows "TestTix e-ticket", "Ticket n of m", the event title and performer, its start in the venue's time zone (e.g. "Wednesday, March 10, 2027 at 8:00 PM EST"), the venue with its address, the place (**"Seats · Row A · Seat 1"**, or **"General admission – Floor"** for a GA place), the price, the QR with the code printed under it, and the order ID. The PDF uses the standard Helvetica font, so text outside Latin-1 (plus `€ – — “ ” …`) is simplified on the page: accents it can't show are dropped ("Ő" → "O", "Đ" → "D") and other characters print as "?" (emoji, CJK). The email shows the original text.
 
 ## Admin API
 
@@ -664,7 +682,7 @@ The API sends email over SMTP (`SMTP_URL`). Locally that is [Mailpit](https://ma
 
 - Every email has an HTML and a plain-text part, `From` is `MAIL_FROM` (default `TestTix <no-reply@testtix.test>`), and links point at the web app (`WEB_BASE_URL`, default `http://localhost:5173`).
 - The `Date` header follows the [server clock](#the-server-clock), so an email sent while the clock is frozen carries the frozen time.
-- Email is sent while the request is handled: when the request returns, Mailpit has the message. Still poll instead of reading once, since email that comes from background jobs (order confirmation, tickets, from M4) arrives later.
+- The verification email is sent while the request is handled: when the request returns, Mailpit has the message. The [e-ticket email](#e-ticket-email) comes from a background job and arrives later, so poll for email instead of reading once.
 
 ```sh
 # The newest verification email to an address (needs jq)
@@ -697,6 +715,24 @@ Rules worth testing:
 A resend issues a new link with a fresh expiry and emails it. There is no resend limit yet (rate limits come in M5).
 
 Users from [`POST /__test/sessions`](#logging-in-through-the-test-api) with `"emailVerified": false` get no email; call the resend endpoint with their session to get one. [Seeded](#seeded-accounts) `unverified@testtix.test` has no link either until it asks for one.
+
+### E-ticket email
+
+Once an order is `CONFIRMED`, the worker sends the customer **Your tickets for {event title}**, which is both the order confirmation and the e-tickets:
+
+- The HTML part lists each ticket with its QR as an **inline image** (`<img src="cid:qr-<ticket id>@testtix">`, a PNG part with that `Content-ID`), its place, price and code; then the total and a link to `<WEB_BASE_URL>/orders/<order id>`. The text part has the same without the images (`Ticket code: <code>` per ticket).
+- One **PDF attachment**, `testtix-tickets-<order id>.pdf`, with a page per ticket in the order's seat order, the same pages as [`GET /tickets/{ticketId}/pdf`](#tickets). So the PDF's page count is the order's ticket count, seated or GA.
+- It arrives shortly after the order is confirmed, and at most once per order in normal operation. If sending fails (SMTP down) the job retries with backoff, and a recovery job queues it again for any `CONFIRMED` order whose email hasn't gone out 60 seconds (server clock) after confirmation. A crash right after the SMTP server accepted the message can send it twice (at least once), never zero times.
+- Orders from [seed scenarios](#seed-scenarios) send no email.
+
+```sh
+# The PDF of the newest ticket email to an address (needs jq)
+id=$(curl -s 'http://localhost:8025/api/v1/search?query=to:"ada@example.com" subject:"Your tickets for"' | jq -r '.messages[0].ID')
+part=$(curl -s "http://localhost:8025/api/v1/message/$id" | jq -r '.Attachments[0].PartID')
+curl -s -o tickets.pdf "http://localhost:8025/api/v1/message/$id/part/$part"
+```
+
+Inline QR images are under `.Inline` in Mailpit's message JSON, each with its `ContentID`.
 
 ## Health and readiness
 
@@ -871,16 +907,17 @@ Scenario data stays until the next reset. It is real data: scenario events are p
 
 Dates are relative to the clock's UTC day (`D`), like the baseline: every scenario event has been on sale since D−1 15:00 and starts at D+7 to D+14, at 23:00 UTC. Rows get `createdAt` = the server clock. Unknown scenario names answer 404.
 
-| Scenario               | Creates                                                                                                                                                                                                       |
-| ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `basic-catalogue`      | A venue with Seats (rows A–C × 6) and Standing (GA, capacity 20), and three published events on sale: a concert using both ($40.00 seats, $25.00 standing), a seated talk ($15.00) and a GA meetup ($5.00)    |
-| `sold-out-event`       | A published concert on sale whose 12 tickets (Seats rows A–B × 4 at $50.00, Standing GA capacity 4 at $30.00) are all sold, through confirmed orders of a new buyer (at most 6 tickets per order)             |
-| `one-seat-left`        | A published concert on sale with 8 seats (rows A–B × 4, $45.00); all are sold through confirmed orders except row B seat 4                                                                                    |
-| `hold-about-to-expire` | A published concert on sale with 8 seats (rows A–B × 4, $45.00); a new customer (the _holder_) holds row A seats 1–2 until `expiresInSec` from now (body, 1–600, default 60). The response logs the holder in |
-| `ga-meetup`            | A published GA-only meetup on sale with Floor (40 places: 20 at $10.00, then 20 at $15.00) and Balcony (10 places at $20.00)                                                                                  |
-| `ga-last-ticket`       | A published GA meetup on sale whose Floor (10 places, $8.00) has one place left; the other nine are sold through confirmed orders                                                                             |
+| Scenario               | Creates                                                                                                                                                                                                                                         |
+| ---------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `basic-catalogue`      | A venue with Seats (rows A–C × 6) and Standing (GA, capacity 20), and three published events on sale: a concert using both ($40.00 seats, $25.00 standing), a seated talk ($15.00) and a GA meetup ($5.00)                                      |
+| `sold-out-event`       | A published concert on sale whose 12 tickets (Seats rows A–B × 4 at $50.00, Standing GA capacity 4 at $30.00) are all sold, through confirmed orders of a new buyer (at most 6 tickets per order)                                               |
+| `one-seat-left`        | A published concert on sale with 8 seats (rows A–B × 4, $45.00); all are sold through confirmed orders except row B seat 4                                                                                                                      |
+| `hold-about-to-expire` | A published concert on sale with 8 seats (rows A–B × 4, $45.00); a new customer (the _holder_) holds row A seats 1–2 until `expiresInSec` from now (body, 1–600, default 60). The response logs the holder in                                   |
+| `ga-meetup`            | A published GA-only meetup on sale with Floor (40 places: 20 at $10.00, then 20 at $15.00) and Balcony (10 places at $20.00)                                                                                                                    |
+| `ga-last-ticket`       | A published GA meetup on sale whose Floor (10 places, $8.00) has one place left; the other nine are sold through confirmed orders                                                                                                               |
+| `confirmed-order`      | A published concert on sale (Seats rows A–B × 4 at $45.00, Standing GA of 10 at $25.00); a new customer has a `CONFIRMED` order ($115.00) for row A seats 1–2 and one Standing place, with its three tickets. The response logs the customer in |
 
-Buyers are customers with a verified email `buyer-<suffix>@scenario.testtix.test` and no usable password: nobody can log in as them. The holder of `hold-about-to-expire` (`holder-<suffix>@scenario.testtix.test`) has no password either, but the response includes a session for them (`holder`, the same shape as [`POST /__test/sessions`](#logging-in-through-the-test-api)), so a test can act as the holder at once, e.g. watch the countdown and the expiry. Their orders are `CONFIRMED` and every sold ticket has a ticket code.
+Buyers are customers with a verified email `buyer-<suffix>@scenario.testtix.test` and no usable password: nobody can log in as them. The holder of `hold-about-to-expire` (`holder-<suffix>@scenario.testtix.test`) has no password either, but the response includes a session for them (`holder`, the same shape as [`POST /__test/sessions`](#logging-in-through-the-test-api)), so a test can act as the holder at once, e.g. watch the countdown and the expiry. The same goes for the customer of `confirmed-order` (`customer-<suffix>@scenario.testtix.test`, session in `customer`), whose response also lists the order's tickets (`id`, `code`, section, seat, price) for [downloading](#tickets). Scenario orders are `CONFIRMED`, every sold ticket has a ticket code, and no [e-ticket email](#e-ticket-email) is sent for them.
 
 ```sh
 curl -s -X POST http://localhost:3000/__test/seed/one-seat-left

@@ -313,12 +313,21 @@ Order lifecycle: `PENDING_PAYMENT → PROCESSING → CONFIRMED | FAILED | EXPIRE
 
 - `MailModule` (`apps/api/src/mail/`): `MailService.send({ to, template, data })` renders and sends over SMTP with Nodemailer (`SMTP_URL`, a new connection per message, 10 s timeouts). Templates are typed: `MailTemplateData` lists each email and its variables.
 - Templates live in `apps/api/templates/mail/` (`<name>.html.hbs`, `<name>.text.hbs`, plus a `layout.*.hbs` for each part), outside `src` so `src/` and `dist/` find them at the same relative path. They compile at startup in strict mode (a missing variable throws), HTML parts escape values and text parts don't. Prettier ignores `*.hbs`: its Handlebars formatter reflows the text parts.
-- Sending is synchronous for now: the request waits for SMTP to accept the message. Order and ticket emails move to BullMQ jobs in M4. The `Date` header comes from `ClockService`.
+- The verification email is sent from the request: it waits for SMTP to accept the message. The e-ticket email is sent from a BullMQ job (C4.4, below). The `Date` header comes from `ClockService`.
 - Verification links: one `email_verification_tokens` row per user (upserted, so a resend replaces the link and concurrent resends can't collide). Like sessions, the link carries 32 random bytes and the table stores their SHA-256. A used link stays valid as a no-op (people click twice) until replaced. Expiry is `EMAIL_VERIFICATION_TTL_HOURS` (default 24) on the server clock.
 - Registration writes the user and the token in one transaction, then sends the email. A send failure is logged and doesn't fail the registration (the user can resend); a failed resend answers 503.
 - `POST /auth/verify-email` is public (the link may open in another browser) but needs CSRF. `POST /auth/verify-email/resend` needs a session, so it can't be used to send email to arbitrary addresses. Per-user resend limits come with C5.3.
 - New problem codes: `VERIFICATION_TOKEN_INVALID`, `VERIFICATION_TOKEN_EXPIRED` (both 400, so the web app can offer a resend for the second), `EMAIL_ALREADY_VERIFIED` (409).
 - Integration tests: the harness starts Mailpit with Testcontainers (or uses `TEST_SMTP_URL` + `TEST_MAILPIT_URL`), and `waitForEmail(to, subject)` polls Mailpit's API. Mailpit is never emptied, so tests use unique recipients.
+
+**Implementation notes (C4.4)**
+
+- One email, **"Your tickets for {event title}"** (template `order-confirmed`), is both the order confirmation and the e-ticket: the plan's two emails would carry the same content twice. HTML and text parts, each ticket's QR as an inline PNG (`Content-ID: qr-<ticket id>@testtix`, `cid:` in the HTML), and one PDF attachment for the order. `MailService.send()` takes `attachments` (inline when a `cid` is given). Subjects can use the template data.
+- **Tickets are issued in `OrderProcessingService.finalize()`**, in the transaction that confirms the order (`issueTickets()`, `src/tickets/`): a `CONFIRMED` order always has its tickets, and the job stays idempotent (`tickets.order_item_id` is unique, and `finalize()` only acts on `PROCESSING` orders). Codes are 128 random bits, base64url (`newTicketCode()`); the QR encodes the code only.
+- **The email is its own job** (`send-tickets`, on the order processing queue, job ID per order), enqueued after the confirmation commits, so SMTP trouble never undoes or repeats a confirmation. `orders.tickets_emailed_at` records that it went out; the recovery job (every minute) enqueues it for `CONFIRMED` orders without it 60 s after confirmation (server clock). Delivery is at least once: the column is set after SMTP accepts the message. Scenario orders are created with the column set, so they never send email.
+- PDFs: `pdfkit` with the built-in Helvetica (no font files to ship), one A4 page per ticket (QR, code, event, time in the venue's zone, venue, seat or "General admission – {section}", price, order ID), dated by the server clock, so the same input gives the same bytes. Helvetica covers WinAnsi only; `pdfText()` drops accents it can't show and prints other characters as "?". Embedding a Unicode font is the fix if that ever matters.
+- `GET /tickets/{ticketId}/pdf` (owner only, 404 otherwise) renders the same page on request; nothing is stored. Order items carry `ticket: { id, code } | null`.
+- Tests decode QR codes with `jsqr` + `pngjs` and read PDFs with `pdf-lib` (dev dependencies; `src/testing/documents.ts`), including the QR images inside the PDF.
 
 ### 3.8 Auth and roles
 
