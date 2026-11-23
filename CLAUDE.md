@@ -43,7 +43,8 @@ When a decision changes, update the docs in the same PR so they stay accurate.
 - ✅ C5.3 Rate limiting + test API limits
 - ✅ C5.4 Drop scenarios + testing guide pass
 - ✅ C6.1 Dockerfiles + `full` profile + GHCR
-- ⏭️ Next: **C6.2** (see plan)
+- ✅ C6.2 Observability profile
+- ⏭️ Next: **C6.3** (see plan)
 
 Update this list when a chunk is merged.
 
@@ -124,6 +125,7 @@ Run one package: `pnpm --filter @testtix/api <script>`.
 - Email: send through `MailService.send({ to, template, data })` (`src/mail/`); add the template's variables to `MailTemplateData` and its `<name>.html.hbs` / `<name>.text.hbs` to `apps/api/templates/mail/` (Prettier ignores `*.hbs`). Integration tests read mail with `waitForEmail(to, subject)` (`src/testing/integration/mailpit.ts`); Mailpit is never emptied, so use a unique recipient. `createTestApp()` swaps SMTP for a JSON transport.
 - Fake payments (`apps/fake-payments`, NestJS on Fastify, port 4000): in-memory sessions, test cards in `src/cards/test-cards.ts` (keep `docs/testing-guide.md#payments` in sync), webhooks via `WebhookDispatcher`. The contract (request/session/event schemas, signature headers) is in `packages/shared/src/payments.ts`; the API must use it rather than its own copies. The payment page is built with the `markup` tagged template (`src/page/html.ts`), which escapes every value; don't rename it `html` (Prettier would reformat the templates). App tests use `createTestApp()` + `app.inject()` (`src/testing/test-app.ts`, `FakeClock` to move time); `*.int.test.ts` deliver real webhooks to `WebhookReceiver` (`src/testing/webhook-receiver.ts`). Compose builds its image from `apps/fake-payments/Dockerfile`; `pnpm infra:up --build` after code changes.
 - Images (C6.1): `apps/{api,web,fake-payments}/Dockerfile`, built from the repo root. The api image is also the worker (`node dist/worker.js`) and the migrations (`migrate` service). New API env vars a container needs go in the `x-api-environment` anchor of `docker/compose.yml` (pass tunables as `${VAR:-}`). New files the API reads at runtime must be in `files` of `apps/api/package.json` (`pnpm deploy` ships only those). The worker serves only health routes (`createWorkerApp()`, `WORKER_PORT`). Check container changes with `pnpm full:up --build && pnpm full:check` (resets the data); CI's `images` job does the same and `publish` pushes to GHCR.
+- Metrics (`/metrics`, C6.2): register on the injected `METRICS_REGISTRY` (`src/metrics/metrics.tokens.ts`; import `MetricsModule`), names `testtix_*`, labels never raw paths or user input. Per-process counts are counters/histograms; values from Postgres/Redis are gauges read in `collect()` at scrape time with the server clock, catching errors so the scrape still answers. BullMQ processors and queues get job metrics automatically (`JobMetrics`). The dashboard is `docker/observability/grafana/dashboards/ticket-drop.json` (`pnpm observability:check` runs each of its queries); document new metrics in `docs/testing-guide.md#metrics`.
 - Local infra is `docker/compose.yml`, driven by `pnpm infra:*` from the repo root (`--project-directory .`, so the root `.env` overrides the compose defaults). Pin image tags to an exact version. New services get a health check, and `docker/smoke-test.sh` checks them.
 
 ## Repo

@@ -974,6 +974,35 @@ Wait for readiness before a test run instead of sleeping:
 until curl -sf http://localhost:3000/health/ready > /dev/null; do sleep 1; done
 ```
 
+## Metrics
+
+`GET /metrics` (no session, never rate-limited) answers in the Prometheus text format. A standalone worker serves its own on `WORKER_PORT` (3001). Besides the Node.js process defaults (`process_*`, `nodejs_*`), it has:
+
+| Metric                                  | Type      | Labels                      | What it counts                                                                                                                                             |
+| --------------------------------------- | --------- | --------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `testtix_http_requests_total`           | counter   | `method`, `route`, `status` | Responses, those of rejected requests included. `route` is the route pattern (`/events/:eventId/holds`), `(unmatched)` for 404s of unknown paths           |
+| `testtix_http_request_duration_seconds` | histogram | `method`, `route`           | Time from request to response                                                                                                                              |
+| `testtix_hold_requests_total`           | counter   | `outcome`                   | `POST /events/{eventId}/holds` that got past validation: `created`, `tickets_unavailable` (the 409 with the taken tickets) or `rejected` (any other error) |
+| `testtix_held_tickets`                  | gauge     | `event_id`                  | Tickets in unexpired holds right now (events with none are left out)                                                                                       |
+| `testtix_orders`                        | gauge     | `status`                    | Every order by the status you'd see (an unpaid order past its expiry is `EXPIRED`), all five statuses                                                      |
+| `testtix_waiting_room_*`                | see below | `event_id`                  | Queue length, admissions and the admission rate ([waiting room](#ticket-drops-and-the-waiting-room))                                                       |
+| `testtix_rate_limited_requests_total`   | counter   | `group`                     | 429s per [rate-limit group](#rate-limits)                                                                                                                  |
+| `testtix_job_wait_seconds`              | histogram | `queue`, `name`             | Job lag: from when a background job was due until a worker started it (first attempts only; retries wait out a backoff)                                    |
+| `testtix_job_duration_seconds`          | histogram | `queue`, `name`, `outcome`  | Run time of a job attempt, `completed` or `failed`                                                                                                         |
+| `testtix_job_queue_jobs`                | gauge     | `queue`, `state`            | Jobs per queue (`hold-sweeper`, `order-processing`, `waiting-room`) that are `waiting`, `active`, `delayed` or `failed`                                    |
+
+Where the numbers come from matters when you compare them across API instances:
+
+- **Counters and histograms** (`*_total`, `*_seconds`) count what one process did; add instances up (`sum(rate(…))`). A restart starts them at 0, which `rate()` handles.
+- **Gauges read from Postgres or Redis** (`testtix_held_tickets`, `testtix_orders`, `testtix_waiting_room_*`, `testtix_job_queue_jobs`) are read at scrape time, so every instance reports the same value: take one (`max(…)`), don't add them up. They follow the [server clock](#the-server-clock) like the API does: after `advanceBy` past a hold's expiry, its tickets leave `testtix_held_tickets` before any sweep. If Postgres or Redis is down, they are left out and the rest of the scrape still answers.
+- **Job metrics** come from the process that runs the jobs: the API with the worker inside (`WORKER_IN_PROCESS=true`, the default), else the worker.
+
+`POST /__test/reset` doesn't reset counters (they're per process), but the gauges read from the data follow it. To watch these on a dashboard, run the [observability profile](../README.md#dashboards-prometheus-and-grafana).
+
+```sh
+curl -s http://localhost:3000/metrics | grep -E '^testtix_(orders|hold_requests_total)'
+```
+
 ## Test mode
 
 Test mode gives testers hooks that a real shop would never expose: the test API under `/__test/*` and a server clock you can control. Turn it on with `TESTTIX_TEST_MODE=true` (`.env.example` sets it, so a local `.env` copied from it has test mode on; without a `.env` it is off). With test mode off, every `/__test/*` path answers 404 like any unknown route, and the clock is always the real time.
