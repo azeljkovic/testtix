@@ -1,4 +1,4 @@
-import { DEV_PAYMENTS_API_KEY } from '@testtix/shared';
+import { DEV_PAYMENTS_API_KEY, DEV_PAYMENTS_WEBHOOK_SECRET } from '@testtix/shared';
 import { describe, expect, it } from 'vitest';
 
 import {
@@ -16,6 +16,7 @@ const PRODUCTION_URLS = {
   PAYMENTS_BASE_URL: 'https://payments.example.com',
   PAYMENTS_API_KEY: 'sk_live_long_enough',
   PAYMENTS_WEBHOOK_URL: 'https://api.example.com/webhooks/payments',
+  PAYMENTS_WEBHOOK_SECRET: 'whsec_live_long_enough',
 };
 
 function parseError(env: Record<string, string>): ConfigValidationError {
@@ -53,8 +54,11 @@ describe('parseConfig', () => {
         apiKey: DEV_PAYMENTS_API_KEY,
         webhookUrl: 'http://host.docker.internal:3000/webhooks/payments',
         timeoutMs: 5000,
+        webhookSecret: DEV_PAYMENTS_WEBHOOK_SECRET,
+        webhookToleranceMs: 300_000,
       },
       orderPollIntervalMs: 2000,
+      orderProcessingDelayMs: 1000,
     });
   });
 
@@ -82,7 +86,10 @@ describe('parseConfig', () => {
       PAYMENTS_API_KEY: 'sk_live_long_enough',
       PAYMENTS_WEBHOOK_URL: 'https://api.example.com/webhooks/payments',
       PAYMENTS_TIMEOUT_MS: '1500',
+      PAYMENTS_WEBHOOK_SECRET: 'whsec_live_long_enough',
+      PAYMENTS_WEBHOOK_TOLERANCE_SEC: '60',
       ORDER_POLL_INTERVAL_MS: '500',
+      JOB_PROCESSING_DELAY_MS: '0',
     });
     expect(config).toEqual({
       nodeEnv: 'production',
@@ -107,8 +114,11 @@ describe('parseConfig', () => {
         apiKey: 'sk_live_long_enough',
         webhookUrl: 'https://api.example.com/webhooks/payments',
         timeoutMs: 1500,
+        webhookSecret: 'whsec_live_long_enough',
+        webhookToleranceMs: 60_000,
       },
       orderPollIntervalMs: 500,
+      orderProcessingDelayMs: 0,
     });
   });
 
@@ -124,6 +134,10 @@ describe('parseConfig', () => {
     ['PAYMENTS_API_KEY', 'short'],
     ['PAYMENTS_TIMEOUT_MS', '99'],
     ['ORDER_POLL_INTERVAL_MS', '60001'],
+    ['PAYMENTS_WEBHOOK_SECRET', 'short'],
+    ['PAYMENTS_WEBHOOK_TOLERANCE_SEC', '0'],
+    ['JOB_PROCESSING_DELAY_MS', '-1'],
+    ['JOB_PROCESSING_DELAY_MS', '600001'],
   ])('rejects %s=%s', (key, value) => {
     expect(parseError({ [key]: value }).issues[0]?.path).toEqual([key]);
   });
@@ -237,6 +251,7 @@ describe('parseConfig', () => {
       'PAYMENTS_BASE_URL',
       'PAYMENTS_API_KEY',
       'PAYMENTS_WEBHOOK_URL',
+      'PAYMENTS_WEBHOOK_SECRET',
     ]);
     expect(error.issues[0]?.message).toBe('Required when NODE_ENV is production');
   });

@@ -1,33 +1,36 @@
 import type { NestFastifyApplication } from '@nestjs/platform-fastify';
-import { DEV_PAYMENTS_API_KEY, PROBLEM_TYPES, ProblemDetailsSchema } from '@testtix/shared';
+import { DEV_PAYMENTS_API_KEY, PROBLEM_TYPES } from '@testtix/shared';
 import request from 'supertest';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 
 import { ClockService } from '../clock/clock.service.js';
-import { type Hold, HoldSchema } from '../holds/holds.schemas.js';
+import { APP_CONFIG } from '../config/config.module.js';
 import { HoldSweeperService } from '../holds/hold-sweeper.service.js';
 import { PrismaService } from '../infra/prisma.service.js';
 import { uuidv7 } from '../infra/uuid.js';
-import type { BatchSpec, DayTime, SectionSpec } from '../seed/fixtures.js';
-import { insertRows } from '../seed/seed.js';
+import type { BatchSpec } from '../seed/fixtures.js';
+import type { SessionClient } from '../testing/auth.js';
 import {
-  buildScenarioCatalogue,
-  newScenarioSuffix,
-  newTicketCode,
-  type ScenarioContext,
-  scenarioVenue,
-} from '../test-api/scenarios/scenario-data.js';
-import { createTestSession, type SessionClient, sessionClient } from '../testing/auth.js';
+  CHECKOUT_SALES_OPEN as OPEN,
+  type CheckoutEvent,
+  checkout,
+  checkoutCustomer,
+  expectProblem,
+  holdTickets,
+  insertCheckoutEvent,
+  parseOrder,
+} from '../testing/integration/checkout.js';
 import { createIntegrationApp } from '../testing/integration/integration-app.js';
 import {
   type PaymentProviderStub,
   startPaymentProviderStub,
 } from '../testing/payment-provider-stub.js';
-import { type Order, OrderPageSchema, OrderSchema } from './orders.schemas.js';
+import { OrderJobs } from './order-jobs.js';
+import { OrderProcessingService } from './order-processing.service.js';
+import { OrderPageSchema, OrderSchema } from './orders.schemas.js';
 
 /** The server clock while testing. Events are relative to the start of its UTC day. */
 const NOW = new Date('2027-03-01T12:00:00.000Z');
-const OPEN: DayTime = [-1, '10:00'];
 const HOLD_SEC = 600;
 const POLL_MS = 2000;
 const WEB = 'http://shop.test';
@@ -65,96 +68,12 @@ afterAll(async () => {
   await provider.close();
 });
 
-interface TestEvent {
-  id: string;
-  title: string;
-  seat: (label: string) => string;
-  section: (name: string) => string;
+function insertEvent(batches?: BatchSpec[]): Promise<CheckoutEvent> {
+  return insertCheckoutEvent(app, { now: NOW, holdDurationSec: HOLD_SEC, batches });
 }
 
-const SECTIONS: SectionSpec[] = [
-  { name: 'Seats', type: 'SEATED', rows: 2, seatsPerRow: 3 },
-  { name: 'Floor', type: 'GA', capacity: 5 },
-];
-const BATCHES: BatchSpec[] = [
-  { name: 'Seats', priceCents: 4000, sections: ['Seats'], releases: OPEN },
-  { name: 'Floor', priceCents: 2500, sections: ['Floor'], releases: OPEN },
-];
-
-/** Inserts a venue (2×3 seats `Seats`, GA `Floor`) and one published event on sale. */
-async function insertEvent(batches: BatchSpec[] = BATCHES): Promise<TestEvent> {
-  const ctx: ScenarioContext = {
-    now: NOW,
-    suffix: newScenarioSuffix(),
-    newId: () => uuidv7(NOW),
-    newTicketCode,
-  };
-  const title = `Orders Test ${ctx.suffix}`;
-  const rows = buildScenarioCatalogue(ctx, scenarioVenue(ctx, SECTIONS), [
-    {
-      slug: `orders-test-${ctx.suffix}`,
-      title,
-      performer: 'Someone',
-      description: 'Orders integration test.',
-      category: 'CONCERT',
-      status: 'PUBLISHED',
-      venue: `scenario-venue-${ctx.suffix}`,
-      starts: [10, '20:00'],
-      durationMin: 120,
-      salesOpen: OPEN,
-      batches,
-    },
-  ]);
-  const [event] = rows.events;
-  if (event?.id === undefined) throw new Error('no event');
-  event.holdDurationSec = HOLD_SEC;
-  await prisma.$transaction(async (tx) => {
-    await insertRows(tx, rows);
-  });
-  const section = (name: string) => {
-    const id = rows.sections.find((s) => s.name === name)?.id;
-    if (id === undefined) throw new Error(`no section ${name}`);
-    return id;
-  };
-  return {
-    id: event.id,
-    title,
-    section,
-    seat: (label) => {
-      const match = /^([A-Z]+)(\d+)$/.exec(label);
-      const seat = rows.seats.find(
-        (s) =>
-          s.sectionId === section('Seats') && s.row === match?.[1] && s.number === Number(match[2]),
-      );
-      if (seat?.id === undefined) throw new Error(`no seat ${label}`);
-      return seat.id;
-    },
-  };
-}
-
-async function customer(options: { emailVerified?: boolean } = {}): Promise<SessionClient> {
-  return sessionClient(app, await createTestSession(app, { role: 'CUSTOMER', ...options }));
-}
-
-async function holdTickets(client: SessionClient, eventId: string, body: object): Promise<Hold> {
-  const res = await client.post(`/events/${eventId}/holds`, body);
-  expect(res.status).toBe(201);
-  return HoldSchema.parse(res.body);
-}
-
-function checkout(client: SessionClient, holdId: string) {
-  return client.post('/orders', { holdId });
-}
-
-function parseOrder(res: request.Response, status: number): Order {
-  expect(res.status, JSON.stringify(res.body)).toBe(status);
-  return OrderSchema.parse(res.body);
-}
-
-function expectProblem(res: request.Response, status: number, type: string) {
-  expect(res.status, JSON.stringify(res.body)).toBe(status);
-  expect(res.headers['content-type']).toMatch(/^application\/problem\+json/);
-  expect(ProblemDetailsSchema.parse(res.body).type).toBe(type);
+function customer(options: { emailVerified?: boolean } = {}): Promise<SessionClient> {
+  return checkoutCustomer(app, options);
 }
 
 async function storedStatus(orderId: string) {
@@ -316,8 +235,28 @@ describe('POST /orders', () => {
 
     const order = parseOrder(await checkout(client, hold.id), 201);
 
-    expect(order).toMatchObject({ status: 'PENDING_PAYMENT', totalCents: 0, paymentUrl: null });
+    // No payment to wait for: it is processing at once, and the hold is used up.
+    expect(order).toMatchObject({
+      status: 'PROCESSING',
+      totalCents: 0,
+      paymentUrl: null,
+      retryAfterMs: POLL_MS,
+    });
     expect(provider.requests).toHaveLength(0);
+    expect(await prisma.hold.findUnique({ where: { id: hold.id } })).toBeNull();
+    expect(await prisma.inventoryUnit.findMany({ where: { seatId: event.seat('B1') } })).toEqual([
+      expect.objectContaining({ status: 'SOLD', holdId: null, heldUntil: null }),
+    ]);
+
+    const processing = new OrderProcessingService(
+      prisma,
+      clock,
+      app.get(OrderJobs),
+      app.get(APP_CONFIG),
+    );
+    expect(await processing.finalize(order.id)).toBe('CONFIRMED');
+    const confirmed = parseOrder(await client.get(`/orders/${order.id}`), 200);
+    expect(confirmed).toMatchObject({ status: 'CONFIRMED', retryAfterMs: null });
   });
 });
 

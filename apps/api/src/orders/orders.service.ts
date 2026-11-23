@@ -10,6 +10,8 @@ import { lockHoldUnits, lockUserEvent } from '../holds/hold-locks.js';
 import { PrismaService } from '../infra/prisma.service.js';
 import { uuidv7 } from '../infra/uuid.js';
 import { PaymentProviderError, PaymentsClient } from '../payments/payments.client.js';
+import { OrderJobs } from './order-jobs.js';
+import { startProcessing } from './order-transitions.js';
 import { effectiveStatus, listOrderSummaries, loadOrder } from './order-views.js';
 import type { Order, OrderSummary } from './orders.schemas.js';
 
@@ -35,6 +37,9 @@ export interface CreatedOrder {
  *   provider can't hold locks or a pooled connection. If the provider fails, the order stays
  *   `PENDING_PAYMENT` without a session and the request answers 503; checking out the hold again
  *   retries the provider.
+ * - A **free order** (total 0) needs no payment: it goes straight to `PROCESSING` in the same
+ *   transaction (`startProcessing()`, which uses up the hold) and the processing job confirms it
+ *   (C4.3).
  */
 @Injectable()
 export class OrdersService {
@@ -44,6 +49,7 @@ export class OrdersService {
     private readonly prisma: PrismaService,
     private readonly clock: ClockService,
     private readonly payments: PaymentsClient,
+    private readonly jobs: OrderJobs,
     @Inject(APP_CONFIG) private readonly config: AppConfig,
   ) {}
 
@@ -57,10 +63,11 @@ export class OrdersService {
       );
     }
     const now = await this.clock.now();
-    const { orderId, created } = await this.prisma.$transaction((tx) =>
+    const { orderId, created, free } = await this.prisma.$transaction((tx) =>
       createFromHold(tx, user.id, holdId, now),
     );
-    await this.ensurePaymentSession(user.id, orderId);
+    if (free) await this.jobs.enqueueFinalize(orderId);
+    else await this.ensurePaymentSession(user.id, orderId);
     return { order: await this.get(user.id, orderId), created };
   }
 
@@ -87,7 +94,7 @@ export class OrdersService {
 
   /**
    * Gives an unpaid order its payment page, unless it has one already. Free orders get none: the
-   * provider can't take a payment of 0, so C4.3 confirms them without one.
+   * provider can't take a payment of 0, and they are confirmed without one.
    */
   private async ensurePaymentSession(userId: string, orderId: string): Promise<void> {
     const now = await this.clock.now();
@@ -150,14 +157,15 @@ export class OrdersService {
 /**
  * Creates the order of a hold in one transaction, or finds the one it already has. Throws 404 for
  * holds that aren't the user's or are gone, 409 `hold-expired` for an expired hold, and 409
- * `event-not-on-sale` once the event is no longer on sale.
+ * `event-not-on-sale` once the event is no longer on sale. A new free order is `PROCESSING`
+ * already (`free`), so the caller enqueues its processing job.
  */
 async function createFromHold(
   tx: Db,
   userId: string,
   holdId: string,
   now: Date,
-): Promise<{ orderId: string; created: boolean }> {
+): Promise<{ orderId: string; created: boolean; free: boolean }> {
   const hold = await tx.hold.findFirst({
     where: { id: holdId, userId },
     select: { eventId: true },
@@ -183,7 +191,7 @@ async function createFromHold(
   if (locked.expiresAt.getTime() <= now.getTime()) {
     throw holdExpired('Your hold has expired and its tickets were released. Hold them again.');
   }
-  if (locked.order !== null) return { orderId: locked.order.id, created: false };
+  if (locked.order !== null) return { orderId: locked.order.id, created: false, free: false };
   if (event === undefined || event.status !== 'PUBLISHED') {
     throw notOnSale('The event is no longer on sale.');
   }
@@ -195,13 +203,14 @@ async function createFromHold(
   }
 
   const orderId = uuidv7(now);
+  const totalCents = locked.inventoryUnits.reduce((sum, unit) => sum + unit.priceCents, 0);
   await tx.order.create({
     data: {
       id: orderId,
       userId,
       eventId: hold.eventId,
       status: 'PENDING_PAYMENT',
-      totalCents: locked.inventoryUnits.reduce((sum, unit) => sum + unit.priceCents, 0),
+      totalCents,
       expiresAt: locked.expiresAt,
       holdId,
       createdAt: now,
@@ -216,7 +225,9 @@ async function createFromHold(
       priceCents: unit.priceCents,
     })),
   });
-  return { orderId, created: true };
+  // Under the hold's locks, which `startProcessing()` needs.
+  if (totalCents === 0) await startProcessing(tx, orderId, holdId, now);
+  return { orderId, created: true, free: totalCents === 0 };
 }
 
 function holdNotFound(): NotFoundException {

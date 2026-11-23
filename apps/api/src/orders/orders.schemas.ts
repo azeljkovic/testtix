@@ -61,6 +61,11 @@ export const OrderSchema = OrderSummarySchema.extend({
     .describe(
       'While the order can still change: wait this long before polling it again (never past `expiresAt` while it is unpaid). Null once the status is final (`CONFIRMED`, `FAILED`, `EXPIRED`).',
     ),
+  refundDue: z
+    .boolean()
+    .describe(
+      'True when a payment for this order arrived that it could not use (e.g. after the order expired, or after its payment had failed): the payment is recorded and due a refund, and sold no tickets.',
+    ),
 }).meta({ id: 'Order' });
 
 export type OrderSummary = z.infer<typeof OrderSummarySchema>;

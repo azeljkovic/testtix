@@ -13,6 +13,7 @@ import type { TestProject } from 'vitest/node';
 import {
   checkTestDatabaseUrl,
   checkTestMailpitUrl,
+  checkTestPaymentsUrl,
   checkTestRedisUrl,
   checkTestSmtpUrl,
 } from './targets.js';
@@ -28,7 +29,8 @@ type Stop = () => Promise<unknown>;
  * Runs once before the integration tests:
  * 1. Uses `TEST_DATABASE_URL` / `TEST_REDIS_URL` / `TEST_SMTP_URL` + `TEST_MAILPIT_URL` when
  *    set, and starts a Testcontainers container for each service that isn't (images from
- *    `docker/compose.yml`).
+ *    `docker/compose.yml`). `TEST_PAYMENTS_URL` is passed on as is: the fake payment provider is
+ *    only started by the tests that need it (`startFakePayments()`).
  * 2. Applies the migrations with `prisma migrate deploy`.
  * 3. Hands the URLs to the tests (`inject('integration')`).
  * The returned teardown stops the containers it started.
@@ -47,7 +49,10 @@ export default async function setup(project: TestProject): Promise<Stop> {
       startMailpit(stops, process.env.TEST_SMTP_URL, process.env.TEST_MAILPIT_URL),
     ]);
     await migrate(databaseUrl);
-    project.provide('integration', { databaseUrl, redisUrl, ...mailpit });
+    const paymentsUrl = process.env.TEST_PAYMENTS_URL
+      ? checkTestPaymentsUrl(process.env.TEST_PAYMENTS_URL)
+      : undefined;
+    project.provide('integration', { databaseUrl, redisUrl, ...mailpit, paymentsUrl });
   } catch (err) {
     await teardown();
     throw err;

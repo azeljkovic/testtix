@@ -38,6 +38,15 @@ export class ClockService {
     return new Date((await this.read()).nowMs);
   }
 
+  /**
+   * The real time, ignoring the test clock. Only for checks against timestamps that other systems
+   * stamp with their own real clocks, such as a webhook's signed timestamp (replay window): moving
+   * the test clock must not make every such message look stale. Business rules use `now()`.
+   */
+  realNow(): Date {
+    return new Date();
+  }
+
   /** The current server time together with how it was derived. */
   async read(): Promise<ClockReading> {
     const realNowMs = Date.now();

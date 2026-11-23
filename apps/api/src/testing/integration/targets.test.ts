@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   checkTestDatabaseUrl,
   checkTestMailpitUrl,
+  checkTestPaymentsUrl,
   checkTestRedisUrl,
   checkTestSmtpUrl,
 } from './targets.js';
@@ -59,5 +60,15 @@ describe('checkTestMailpitUrl', () => {
 
   it('rejects another protocol', () => {
     expect(() => checkTestMailpitUrl('smtp://localhost:8025')).toThrow(/http:\/\/ or https:\/\//);
+  });
+});
+
+describe('checkTestPaymentsUrl', () => {
+  it('accepts an http:// URL and drops a trailing slash', () => {
+    expect(checkTestPaymentsUrl('http://localhost:4000/')).toBe('http://localhost:4000');
+  });
+
+  it('rejects another protocol', () => {
+    expect(() => checkTestPaymentsUrl('ftp://localhost:4000')).toThrow(/http:\/\/ or https:\/\//);
   });
 });
