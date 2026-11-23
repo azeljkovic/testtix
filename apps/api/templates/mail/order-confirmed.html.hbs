@@ -1,0 +1,30 @@
+<h1 style="margin: 0 0 16px; font-size: 22px;">Your order is confirmed</h1>
+<p style="margin: 0 0 16px;">Hi {{name}},</p>
+<p style="margin: 0 0 24px;">Thanks for your order. Here are your tickets for <strong>{{eventTitle}}</strong>. Show a ticket’s QR code at the door, on your phone or printed: the attached PDF has one page per ticket.</p>
+<table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin: 0 0 24px; font-size: 15px;">
+  <tr><td style="padding: 0 0 4px; color: #52525b;">When</td></tr>
+  <tr><td style="padding: 0 0 12px;">{{eventTime}}</td></tr>
+  <tr><td style="padding: 0 0 4px; color: #52525b;">Where</td></tr>
+  <tr><td style="padding: 0 0 12px;">{{venue}}</td></tr>
+  <tr><td style="padding: 0 0 4px; color: #52525b;">Order</td></tr>
+  <tr><td style="padding: 0; font-family: monospace;">{{orderId}}</td></tr>
+</table>
+{{#each tickets}}
+<table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin: 0 0 16px; border: 1px solid #e4e4e7; border-radius: 8px;">
+  <tr>
+    <td width="180" style="padding: 16px; vertical-align: top;">
+      <img src="cid:{{qrCid}}" width="160" height="160" alt="QR code for ticket {{code}}" style="display: block; width: 160px; height: 160px;" />
+    </td>
+    <td style="padding: 16px 16px 16px 0; vertical-align: top;">
+      <p style="margin: 0 0 8px; font-weight: 600;">{{place}}</p>
+      <p style="margin: 0 0 8px;">{{price}}</p>
+      <p style="margin: 0; font-family: monospace; font-size: 14px; word-break: break-all;">{{code}}</p>
+    </td>
+  </tr>
+</table>
+{{/each}}
+<p style="margin: 8px 0 24px; font-weight: 600;">Total: {{total}}</p>
+<p style="margin: 0 0 24px;">
+  <a href="{{orderUrl}}" style="display: inline-block; padding: 12px 24px; background-color: #4f46e5; color: #ffffff; text-decoration: none; border-radius: 6px; font-weight: 600;">View your order</a>
+</p>
+<p style="margin: 0; color: #52525b;">Each code gets one person in, once. Don’t share your tickets.</p>

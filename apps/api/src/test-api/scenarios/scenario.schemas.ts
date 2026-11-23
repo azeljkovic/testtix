@@ -155,6 +155,34 @@ export const GaLastTicketResultSchema = z.object({
   section: ScenarioGaSectionSchema.describe('The GA section with one place left'),
 });
 
+export const ConfirmedOrderResultSchema = z.object({
+  venue: ScenarioVenueSchema,
+  event: ScenarioEventSchema,
+  customer: TestSessionResponseSchema.describe(
+    'The customer who bought the tickets, logged in: send `cookie` (and `csrfToken` on writes) to act as them',
+  ),
+  order: z.object({
+    id,
+    status: z.literal('CONFIRMED'),
+    totalCents: z.number().int().describe('$115.00: two seats at $45.00 and a place at $25.00'),
+    tickets: z
+      .array(
+        z.object({
+          id: id.describe('Download it with `GET /tickets/{ticketId}/pdf`'),
+          code: z.string().describe('What the ticket’s QR encodes'),
+          inventoryUnitId: id,
+          section: z.object({ id, name: z.string(), type: SectionTypeSchema }),
+          seat: z
+            .object({ row: z.string(), number: z.number().int() })
+            .nullable()
+            .describe('Null for the GA place'),
+          priceCents: z.number().int(),
+        }),
+      )
+      .describe('Row A seats 1 and 2, then one Standing place'),
+  }),
+});
+
 export type ScenarioVenue = z.infer<typeof ScenarioVenueSchema>;
 export type ScenarioEvent = z.infer<typeof ScenarioEventSchema>;
 export type BasicCatalogueResult = z.infer<typeof BasicCatalogueResultSchema>;
@@ -173,6 +201,14 @@ export type HoldAboutToExpireScenario = Omit<
 export type HoldAboutToExpireResult = z.infer<typeof HoldAboutToExpireResultSchema>;
 export type GaMeetupResult = z.infer<typeof GaMeetupResultSchema>;
 export type GaLastTicketResult = z.infer<typeof GaLastTicketResultSchema>;
+/** The result before the service adds the customer's session. */
+export type ConfirmedOrderScenario = Omit<
+  z.infer<typeof ConfirmedOrderResultSchema>,
+  'customer'
+> & {
+  customerId: string;
+};
+export type ConfirmedOrderResult = z.infer<typeof ConfirmedOrderResultSchema>;
 
 export class BasicCatalogueResultDto extends createZodDto(BasicCatalogueResultSchema) {}
 export class SoldOutEventResultDto extends createZodDto(SoldOutEventResultSchema) {}
@@ -181,3 +217,4 @@ export class HoldAboutToExpireRequestDto extends createZodDto(HoldAboutToExpireR
 export class HoldAboutToExpireResultDto extends createZodDto(HoldAboutToExpireResultSchema) {}
 export class GaMeetupResultDto extends createZodDto(GaMeetupResultSchema) {}
 export class GaLastTicketResultDto extends createZodDto(GaLastTicketResultSchema) {}
+export class ConfirmedOrderResultDto extends createZodDto(ConfirmedOrderResultSchema) {}

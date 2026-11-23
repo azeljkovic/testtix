@@ -4,6 +4,7 @@ import { ZodResponse, ZodValidationPipe } from 'nestjs-zod';
 
 import {
   BasicCatalogueResultDto,
+  ConfirmedOrderResultDto,
   GaLastTicketResultDto,
   GaMeetupResultDto,
   type HoldAboutToExpireRequest,
@@ -90,5 +91,15 @@ export class TestScenariosController {
   @ZodResponse({ status: 201, type: GaLastTicketResultDto, description: 'What was created.' })
   async gaLastTicket() {
     return this.scenarios.create(gaLastTicket);
+  }
+
+  @Post('confirmed-order')
+  @ApiOperation({
+    summary: 'Seed scenario: a confirmed order with tickets',
+    description: `A published concert on sale (Seats rows A–B × 4 at $45.00, Standing GA of 10 at $25.00) and a new customer’s \`CONFIRMED\` order for row A seats 1 and 2 and one Standing place, with three tickets (IDs and codes in the response). No e-ticket email is sent; download a ticket with \`GET /tickets/{ticketId}/pdf\`. The response logs the customer in, like \`POST /__test/sessions\`. ${ADDITIVE}`,
+  })
+  @ZodResponse({ status: 201, type: ConfirmedOrderResultDto, description: 'What was created.' })
+  async confirmedOrder() {
+    return this.scenarios.confirmedOrder();
   }
 }

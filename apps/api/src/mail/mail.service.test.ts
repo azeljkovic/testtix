@@ -62,4 +62,34 @@ describe('MailService', () => {
     expect(headers).not.toMatch(/^X-Injected:/m);
     expect(headers.match(/^To: .*$/m)?.[0]).toMatch(/<eve@example\.com>$/);
   });
+
+  it('sends attachments, with inline images referenced by Content-ID', async () => {
+    const { service, sent } = mailService();
+    await service.send({
+      to: { name: 'Ada', address: 'ada@example.com' },
+      template: 'verify-email',
+      data: DATA,
+      attachments: [
+        {
+          filename: 'qr.png',
+          content: Buffer.from('png-bytes'),
+          contentType: 'image/png',
+          cid: 'qr-1@testtix',
+        },
+        {
+          filename: 'tickets.pdf',
+          content: Buffer.from('%PDF-1.3'),
+          contentType: 'application/pdf',
+        },
+      ],
+    });
+    const raw = (sent[0] ?? '').replace(/\n[ \t]+/g, ' ');
+    expect(headersOf(raw)).toMatch(/^Content-Type: multipart\/mixed;/m);
+    expect(raw).toMatch(/Content-Type: multipart\/related;/);
+    expect(raw).toMatch(/^Content-Type: image\/png; name=qr\.png$/m);
+    expect(raw).toMatch(/^Content-ID: <qr-1@testtix>$/m);
+    expect(raw).toMatch(/^Content-Disposition: inline; filename=qr\.png$/m);
+    expect(raw).toMatch(/^Content-Type: application\/pdf; name=tickets\.pdf$/m);
+    expect(raw).toMatch(/^Content-Disposition: attachment; filename=tickets\.pdf$/m);
+  });
 });

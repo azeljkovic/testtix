@@ -33,6 +33,18 @@ export function retryAfterMs(
   return Math.max(1, Math.min(pollIntervalMs, expiresAt.getTime() - now.getTime()));
 }
 
+/**
+ * How an order's items are listed everywhere (the order, its tickets PDF, the e-ticket email):
+ * the venue's section order, then row and seat; GA places by price, then by inventory unit.
+ */
+export const ORDER_ITEM_ORDER = [
+  { inventoryUnit: { section: { sortOrder: 'asc' } } },
+  { inventoryUnit: { seat: { rowIndex: 'asc' } } },
+  { inventoryUnit: { seat: { number: 'asc' } } },
+  { priceCents: 'asc' },
+  { inventoryUnitId: 'asc' },
+] as const satisfies Prisma.OrderItemOrderByWithRelationInput[];
+
 const eventSelect = {
   id: true,
   slug: true,
@@ -110,6 +122,7 @@ export async function loadOrder(
       items: {
         select: {
           priceCents: true,
+          ticket: { select: { id: true, code: true } },
           inventoryUnit: {
             select: {
               id: true,
@@ -118,13 +131,7 @@ export async function loadOrder(
             },
           },
         },
-        orderBy: [
-          { inventoryUnit: { section: { sortOrder: 'asc' } } },
-          { inventoryUnit: { seat: { rowIndex: 'asc' } } },
-          { inventoryUnit: { seat: { number: 'asc' } } },
-          { priceCents: 'asc' },
-          { inventoryUnitId: 'asc' },
-        ],
+        orderBy: [...ORDER_ITEM_ORDER],
       },
     },
   });
@@ -137,6 +144,7 @@ export async function loadOrder(
       section: item.inventoryUnit.section,
       seat: item.inventoryUnit.seat,
       priceCents: item.priceCents,
+      ticket: item.ticket,
     })),
     paymentUrl: summary.status === 'PENDING_PAYMENT' ? row.paymentUrl : null,
     updatedAt: row.updatedAt.toISOString(),

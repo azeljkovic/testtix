@@ -41,7 +41,18 @@ export const OrderSummarySchema = z
   })
   .meta({ id: 'OrderSummary' });
 
-export const OrderItemSchema = HoldItemSchema.meta({ id: 'OrderItem' });
+export const OrderTicketSchema = z
+  .object({
+    id: id.describe('Download it with `GET /tickets/{ticketId}/pdf`'),
+    code: z.string().describe('The unguessable code the ticket’s QR encodes'),
+  })
+  .meta({ id: 'OrderTicket' });
+
+export const OrderItemSchema = HoldItemSchema.extend({
+  ticket: OrderTicketSchema.nullable().describe(
+    'Issued when the order is confirmed; null until then (and for orders that never are)',
+  ),
+}).meta({ id: 'OrderItem' });
 
 export const OrderSchema = OrderSummarySchema.extend({
   items: z

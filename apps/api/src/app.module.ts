@@ -17,6 +17,7 @@ import { LoggingModule } from './logging/logging.module.js';
 import { MetricsModule } from './metrics/metrics.module.js';
 import { OrdersModule } from './orders/orders.module.js';
 import { TestApiModule } from './test-api/test-api.module.js';
+import { TicketsModule } from './tickets/tickets.module.js';
 import { VenuesModule } from './venues/venues.module.js';
 
 @Module({})
@@ -38,6 +39,7 @@ export class AppModule {
         EventsModule,
         HoldsModule,
         OrdersModule,
+        TicketsModule,
         // Background jobs in this process, unless the worker runs on its own (`src/worker.ts`).
         ...(config.workerInProcess ? [WorkerModule] : []),
         // Not even loaded outside test mode, so `/__test/*` is a plain 404 there.

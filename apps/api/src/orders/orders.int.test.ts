@@ -108,7 +108,8 @@ describe('POST /orders', () => {
       retryAfterMs: POLL_MS,
       paymentUrl: `${provider.url}/pay/ps_test_1`,
     });
-    expect(order.items).toEqual(hold.items);
+    // The hold's items, without tickets until the order is confirmed.
+    expect(order.items).toEqual(hold.items.map((item) => ({ ...item, ticket: null })));
 
     expect(provider.requests).toHaveLength(1);
     expect(provider.requests[0]?.headers.authorization).toBe(`Bearer ${DEV_PAYMENTS_API_KEY}`);

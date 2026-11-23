@@ -308,6 +308,7 @@ Claude's workspace has no Docker daemon, so Testcontainers can't run there. Beca
 - Checkout review page (seats, total, hold countdown) → redirect to the payment page.
 - The return page polls the order using `retryAfterMs`, with clear processing, confirmed, failed and expired states and retry or "back to event" actions.
 - My orders and tickets pages with PDF download.
+- From C4.4: the e-ticket email links to `<WEB_BASE_URL>/orders/<order id>` (the same page the provider returns to), so that route shows the order. Each order item has `ticket: { id, code } | null`; download with `GET /tickets/{ticketId}/pdf` (needs the session cookie, so link to it through the API base URL). The `confirmed-order` scenario gives a logged-in customer with three tickets.
 - Verify: component tests for every status (MSW), and a manual full purchase showing the ticket email in Mailpit.
 
 **M4 demo:** a full purchase end to end; a decline card gives a failed order with the seats released; a delayed card shows "processing" for a while.

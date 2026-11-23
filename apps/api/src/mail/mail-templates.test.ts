@@ -45,6 +45,56 @@ describe('MailRenderer (real templates)', () => {
   });
 });
 
+describe('MailRenderer: order-confirmed', () => {
+  const renderer = new MailRenderer();
+  const data = {
+    name: 'Ada',
+    orderId: '019ac6b2-0000-7000-8000-0000000000aa',
+    orderUrl: 'https://shop.example.com/orders/019ac6b2-0000-7000-8000-0000000000aa',
+    eventTitle: 'Night Owls <Live>',
+    eventTime: 'Wednesday, March 10, 2027 at 8:00 PM EST',
+    venue: 'Riverside Hall, 12 River Road, Springfield',
+    total: '$115.00',
+    tickets: [
+      {
+        place: 'Stalls · Row A · Seat 1',
+        price: '$45.00',
+        code: 'code-one',
+        qrCid: 'qr-1@testtix',
+      },
+      {
+        place: 'General admission – Floor',
+        price: '$25.00',
+        code: 'code-two',
+        qrCid: 'qr-2@testtix',
+      },
+    ],
+  };
+
+  it('names the event in the subject', () => {
+    expect(renderer.render('order-confirmed', data).subject).toBe(
+      'Your tickets for Night Owls <Live>',
+    );
+  });
+
+  it('shows every ticket with its inline QR image, place, price and code', () => {
+    const { html, text } = renderer.render('order-confirmed', data);
+    expect(html).toContain('<title>Your tickets for Night Owls &lt;Live&gt;</title>');
+    expect(html).toContain('<strong>Night Owls &lt;Live&gt;</strong>');
+    for (const ticket of data.tickets) {
+      expect(html).toContain(`src="cid:${ticket.qrCid}"`);
+      expect(html).toContain(`alt="QR code for ticket ${ticket.code}"`);
+      expect(html).toContain(ticket.place);
+      expect(text).toContain(`- ${ticket.place} (${ticket.price})\n  Ticket code: ${ticket.code}`);
+    }
+    expect(html).toContain('Total: $115.00');
+    expect(text).toContain('Total: $115.00');
+    expect(text).toContain(`Order: ${data.orderId}`);
+    expect(text).toContain(`View your order: ${data.orderUrl}`);
+    expect(text).toContain('Night Owls <Live>');
+  });
+});
+
 describe('MailRenderer (template files)', () => {
   let dir: string | undefined;
 

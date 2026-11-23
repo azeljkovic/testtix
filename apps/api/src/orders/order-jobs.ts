@@ -12,16 +12,27 @@ export const ORDER_PROCESSING_QUEUE = 'order-processing';
 
 /** Confirms or fails one `PROCESSING` order (`OrderProcessingService.finalize()`). */
 export const FINALIZE_ORDER_JOB = 'finalize';
-/** Re-enqueues `PROCESSING` orders whose finalize job went missing (scheduled). */
+/** Sends a `CONFIRMED` order's e-ticket email (`TicketEmailService.send()`, C4.4). */
+export const SEND_TICKETS_JOB = 'send-tickets';
+/**
+ * Re-enqueues `PROCESSING` orders whose finalize job went missing, and `CONFIRMED` orders whose
+ * e-ticket email is overdue (scheduled).
+ */
 export const RECOVER_ORDERS_JOB = 'recover';
 
-export interface FinalizeOrderJobData {
+/** Data of `FINALIZE_ORDER_JOB` and `SEND_TICKETS_JOB`. */
+export interface OrderJobData {
   orderId: string;
 }
 
 /** One job per order: enqueueing it again while it waits is a no-op. */
 export function finalizeJobId(orderId: string): string {
   return `finalize-${orderId}`;
+}
+
+/** One e-ticket email job per order, like `finalizeJobId()`. */
+export function sendTicketsJobId(orderId: string): string {
+  return `send-tickets-${orderId}`;
 }
 
 /**
@@ -52,12 +63,34 @@ export class OrderJobs implements OnApplicationShutdown {
     orderId: string,
     delayMs = this.config.orderProcessingDelayMs,
   ): Promise<boolean> {
+    return this.enqueue(FINALIZE_ORDER_JOB, finalizeJobId(orderId), orderId, delayMs);
+  }
+
+  /**
+   * Schedules the order's e-ticket email (`SEND_TICKETS_JOB`) now. Returns false, after logging,
+   * when the job could not be enqueued.
+   */
+  async enqueueSendTickets(orderId: string): Promise<boolean> {
+    return this.enqueue(SEND_TICKETS_JOB, sendTicketsJobId(orderId), orderId, 0);
+  }
+
+  async onApplicationShutdown(): Promise<void> {
+    // Closes the queue only: the shared Redis client belongs to `RedisModule`.
+    await this.queue?.close();
+  }
+
+  private async enqueue(
+    name: string,
+    jobId: string,
+    orderId: string,
+    delayMs: number,
+  ): Promise<boolean> {
     try {
       // Without a connection BullMQ would wait for one; the recovery job catches up instead.
       if (this.redis.status !== 'ready') throw new Error(`Redis is ${this.redis.status}`);
-      const data: FinalizeOrderJobData = { orderId };
-      await this.getQueue().add(FINALIZE_ORDER_JOB, data, {
-        jobId: finalizeJobId(orderId),
+      const data: OrderJobData = { orderId };
+      await this.getQueue().add(name, data, {
+        jobId,
         delay: delayMs,
         attempts: 5,
         backoff: { type: 'exponential', delay: 1000 },
@@ -69,15 +102,10 @@ export class OrderJobs implements OnApplicationShutdown {
       return true;
     } catch (err) {
       this.logger.warn(
-        `Could not enqueue processing of order ${orderId} (${describeError(err)}); the recovery job will retry`,
+        `Could not enqueue ${name} of order ${orderId} (${describeError(err)}); the recovery job will retry`,
       );
       return false;
     }
-  }
-
-  async onApplicationShutdown(): Promise<void> {
-    // Closes the queue only: the shared Redis client belongs to `RedisModule`.
-    await this.queue?.close();
   }
 
   private getQueue(): Queue {

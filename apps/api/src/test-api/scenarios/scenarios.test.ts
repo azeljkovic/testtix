@@ -8,6 +8,7 @@ import {
 } from './scenario-data.js';
 import {
   BasicCatalogueResultSchema,
+  ConfirmedOrderResultSchema,
   GaLastTicketResultSchema,
   GaMeetupResultSchema,
   HoldAboutToExpireResultSchema,
@@ -16,6 +17,7 @@ import {
 } from './scenario.schemas.js';
 import {
   basicCatalogue,
+  confirmedOrder,
   gaLastTicket,
   gaMeetup,
   holdAboutToExpire,
@@ -260,6 +262,38 @@ describe('ga-last-ticket', () => {
       prices: [{ priceCents: 800, available: 1 }],
     });
     expect(result.orderIds).toHaveLength(2);
+  });
+});
+
+describe('confirmed-order', () => {
+  const { rows, result } = confirmedOrder(context());
+
+  it('sells row A seats 1 and 2 and one Standing place to a new customer, in one order', () => {
+    expectConsistent(rows);
+    expect(ConfirmedOrderResultSchema.omit({ customer: true }).parse(result)).toMatchObject({
+      event: { title: 'Confirmed Order abc12345', tickets: { total: 18, available: 15, sold: 3 } },
+      order: { status: 'CONFIRMED', totalCents: 11500 },
+    });
+    expect(rows.orders).toHaveLength(1);
+    expect(rows.orders[0]).toMatchObject({ id: result.order.id, userId: result.customerId });
+    expect(rows.users).toEqual([
+      expect.objectContaining({
+        id: result.customerId,
+        email: 'customer-abc12345@scenario.testtix.test',
+      }),
+    ]);
+    expect(
+      result.order.tickets.map(({ section, seat, priceCents }) => [section.name, seat, priceCents]),
+    ).toEqual([
+      ['Seats', { row: 'A', number: 1 }, 4500],
+      ['Seats', { row: 'A', number: 2 }, 4500],
+      ['Standing', null, 2500],
+    ]);
+    expect(result.order.tickets.map((t) => t.code)).toEqual(rows.tickets.map((t) => t.code));
+  });
+
+  it('sends no e-ticket email: its orders count as emailed', () => {
+    for (const order of rows.orders) expect(order.ticketsEmailedAt).toEqual(NOW);
   });
 });
 
