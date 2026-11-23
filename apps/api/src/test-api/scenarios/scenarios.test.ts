@@ -9,6 +9,7 @@ import {
 import {
   BasicCatalogueResultSchema,
   ConfirmedOrderResultSchema,
+  DropResultSchema,
   GaLastTicketResultSchema,
   GaMeetupResultSchema,
   HoldAboutToExpireResultSchema,
@@ -18,9 +19,12 @@ import {
 import {
   basicCatalogue,
   confirmedOrder,
+  dropInFiveMin,
+  dropOpenNow,
   gaLastTicket,
   gaMeetup,
   holdAboutToExpire,
+  largeVenueDrop,
   oneSeatLeft,
   soldOutEvent,
 } from './scenarios.js';
@@ -83,11 +87,22 @@ function expectConsistent(rows: ScenarioRows) {
   }
   for (const event of rows.events) {
     expect(event).toMatchObject({ status: 'PUBLISHED', createdAt: NOW });
-    expect(new Date(event.salesOpenAt).getTime()).toBeLessThan(NOW.getTime());
+    const salesOpenAt = new Date(event.salesOpenAt).getTime();
+    expect(new Date(event.startsAt).getTime()).toBeGreaterThan(salesOpenAt);
     expect(new Date(event.startsAt).getTime()).toBeGreaterThan(NOW.getTime());
-  }
-  for (const batch of rows.ticketBatches) {
-    expect(new Date(batch.releasesAt).getTime()).toBeLessThan(NOW.getTime());
+    // Drops open now or later and release their batches at the opening; the rest are on sale.
+    if (event.waitingRoomEnabled === true) {
+      expect(salesOpenAt).toBeGreaterThanOrEqual(NOW.getTime() - 1000);
+    } else {
+      expect(salesOpenAt).toBeLessThan(NOW.getTime());
+    }
+    for (const batch of rows.ticketBatches.filter((b) => b.eventId === event.id)) {
+      if (event.waitingRoomEnabled === true) {
+        expect(new Date(batch.releasesAt)).toEqual(new Date(event.salesOpenAt));
+      } else {
+        expect(new Date(batch.releasesAt).getTime()).toBeLessThan(NOW.getTime());
+      }
+    }
   }
 }
 
@@ -303,4 +318,106 @@ it('keeps runs with different suffixes apart', () => {
   expect(first.event.slug).not.toBe(second.event.slug);
   expect(first.venue.slug).not.toBe(second.venue.slug);
   expect(first.buyer.email).not.toBe(second.buyer.email);
+});
+
+describe('drop-in-5-min', () => {
+  const { rows, result } = dropInFiveMin(context(), {});
+
+  it('creates a drop of 100 tickets whose sales open in five minutes, in whole seconds', () => {
+    expectConsistent(rows);
+    expect(DropResultSchema.parse(result)).toEqual(result);
+    expect(result.event).toMatchObject({
+      slug: 'drop-in-5-min-abc12345',
+      title: 'Drop In Five abc12345',
+      status: 'PUBLISHED',
+      startsAt: '2026-12-05T23:00:00.000Z',
+      salesOpenAt: '2026-11-21T10:20:00.000Z',
+      waitingRoomEnabled: true,
+      admissionRatePerSec: 5,
+      admissionTokenTtlSec: 600,
+      tickets: { total: 100, available: 100, held: 0, sold: 0 },
+    });
+    expect(result.venue.sections).toMatchObject([
+      { name: 'Seats', type: 'SEATED', capacity: null },
+      { name: 'Standing', type: 'GA', capacity: 50 },
+    ]);
+    expect(rows.users).toEqual([]);
+  });
+
+  it('drops the milliseconds of now and takes the admission settings from the body', () => {
+    const ctx = { ...context(), now: new Date('2026-11-21T10:15:00.987Z') };
+    const { result: custom } = dropInFiveMin(ctx, {
+      admissionRatePerSec: 1,
+      admissionTokenTtlSec: 60,
+    });
+    expect(custom.event).toMatchObject({
+      salesOpenAt: '2026-11-21T10:20:00.000Z',
+      admissionRatePerSec: 1,
+      admissionTokenTtlSec: 60,
+    });
+  });
+});
+
+describe('drop-open-now', () => {
+  it('creates the same drop with sales open from now', () => {
+    const ctx = { ...context(), now: new Date('2026-11-21T10:15:00.987Z') };
+    const { rows, result } = dropOpenNow(ctx, {});
+    expect(DropResultSchema.parse(result)).toEqual(result);
+    expect(result.event).toMatchObject({
+      slug: 'drop-open-now-abc12345',
+      salesOpenAt: '2026-11-21T10:15:00.000Z',
+      waitingRoomEnabled: true,
+      admissionRatePerSec: 5,
+      tickets: { total: 100, available: 100 },
+    });
+    expect(rows.ticketBatches.map((b) => b.releasesAt)).toEqual([
+      new Date('2026-11-21T10:15:00.000Z'),
+      new Date('2026-11-21T10:15:00.000Z'),
+    ]);
+  });
+});
+
+describe('large-venue-drop', () => {
+  it('creates a drop of 10 000 tickets with load-test defaults', () => {
+    const { rows, result } = largeVenueDrop(context(), {});
+    expectConsistent(rows);
+    expect(DropResultSchema.parse(result)).toEqual(result);
+    expect(result.event).toMatchObject({
+      slug: 'large-venue-drop-abc12345',
+      salesOpenAt: '2026-11-21T10:20:00.000Z',
+      waitingRoomEnabled: true,
+      admissionRatePerSec: 100,
+      admissionTokenTtlSec: 600,
+      tickets: { total: 10_000, available: 10_000, held: 0, sold: 0 },
+    });
+    expect(result.venue.sections).toMatchObject([
+      { name: 'Stalls', type: 'SEATED' },
+      { name: 'Floor', type: 'GA', capacity: 8000 },
+    ]);
+    expect(rows.seats).toHaveLength(2000);
+    expect(rows.seats.at(-1)).toMatchObject({ row: 'AN', number: 50 });
+  });
+
+  it('opens when the body says, at the rate it sets', () => {
+    const { result } = largeVenueDrop(context(), {
+      salesOpenInSec: 0,
+      admissionRatePerSec: 1000,
+      admissionTokenTtlSec: 3600,
+    });
+    expect(result.event).toMatchObject({
+      salesOpenAt: '2026-11-21T10:15:00.000Z',
+      admissionRatePerSec: 1000,
+      admissionTokenTtlSec: 3600,
+    });
+  });
+});
+
+describe('non-drop scenarios', () => {
+  it('have no waiting room', () => {
+    expect(basicCatalogue(context()).result.events.concert).toMatchObject({
+      waitingRoomEnabled: false,
+      admissionRatePerSec: 10,
+      admissionTokenTtlSec: 600,
+    });
+  });
 });

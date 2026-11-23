@@ -5,18 +5,39 @@ import { ZodResponse, ZodValidationPipe } from 'nestjs-zod';
 import {
   BasicCatalogueResultDto,
   ConfirmedOrderResultDto,
+  type DropRequest,
+  DropRequestDto,
+  DropResultDto,
   GaLastTicketResultDto,
   GaMeetupResultDto,
   type HoldAboutToExpireRequest,
   HoldAboutToExpireRequestDto,
   HoldAboutToExpireResultDto,
+  LARGE_DROP_ADMISSION_RATE,
+  LARGE_DROP_SALES_OPEN_IN_SEC,
+  type LargeVenueDropRequest,
+  LargeVenueDropRequestDto,
   OneSeatLeftResultDto,
+  OptionalDropRequestSchema,
   OptionalHoldAboutToExpireRequestSchema,
+  OptionalLargeVenueDropRequestSchema,
+  SMALL_DROP_ADMISSION_RATE,
   SoldOutEventResultDto,
 } from './scenario.schemas.js';
-import { basicCatalogue, gaLastTicket, gaMeetup, oneSeatLeft, soldOutEvent } from './scenarios.js';
+import {
+  basicCatalogue,
+  dropInFiveMin,
+  dropOpenNow,
+  gaLastTicket,
+  gaMeetup,
+  largeVenueDrop,
+  oneSeatLeft,
+  soldOutEvent,
+} from './scenarios.js';
 import { TestApiController } from '../test-api.decorator.js';
 import { TestScenariosService } from './test-scenarios.service.js';
+
+const SMALL_DROP = `A ticket drop at a new venue: a published concert with a waiting room (\`waitingRoomEnabled\`), Seats rows A–E × 10 at $60.00 and Standing GA of 50 at $35.00, all released when sales open. Customers join its queue through \`POST /events/{eventId}/queue\`; the body may set \`admissionRatePerSec\` (default ${String(SMALL_DROP_ADMISSION_RATE)}) and \`admissionTokenTtlSec\` (default 600).`;
 
 const ADDITIVE =
   'Test mode only. Adds a new venue, events (and orders) with fresh IDs on every call; the slugs and titles end in a random suffix, so calls never collide and existing data is not touched. Open even when the server has a test API key, since it only adds data.';
@@ -101,5 +122,45 @@ export class TestScenariosController {
   @ZodResponse({ status: 201, type: ConfirmedOrderResultDto, description: 'What was created.' })
   async confirmedOrder() {
     return this.scenarios.confirmedOrder();
+  }
+
+  @Post('drop-in-5-min')
+  @ApiOperation({
+    summary: 'Seed scenario: a ticket drop opening in 5 minutes',
+    description: `${SMALL_DROP} Sales open 5 minutes from now (server clock, whole seconds): everyone who joins before then is let in in a random order at the opening. ${ADDITIVE}`,
+  })
+  @ApiBody({ type: DropRequestDto, required: false })
+  @ZodResponse({ status: 201, type: DropResultDto, description: 'What was created.' })
+  async dropInFiveMin(
+    @Body(new ZodValidationPipe(OptionalDropRequestSchema)) body: DropRequest | undefined,
+  ) {
+    return this.scenarios.create((ctx) => dropInFiveMin(ctx, body ?? {}));
+  }
+
+  @Post('drop-open-now')
+  @ApiOperation({
+    summary: 'Seed scenario: a ticket drop that has just opened',
+    description: `${SMALL_DROP} Sales open now (server clock, whole seconds): customers are let in in join order, from the admission job's next run. ${ADDITIVE}`,
+  })
+  @ApiBody({ type: DropRequestDto, required: false })
+  @ZodResponse({ status: 201, type: DropResultDto, description: 'What was created.' })
+  async dropOpenNow(
+    @Body(new ZodValidationPipe(OptionalDropRequestSchema)) body: DropRequest | undefined,
+  ) {
+    return this.scenarios.create((ctx) => dropOpenNow(ctx, body ?? {}));
+  }
+
+  @Post('large-venue-drop')
+  @ApiOperation({
+    summary: 'Seed scenario: a large ticket drop for load tests',
+    description: `A ticket drop sized for load tests at a new venue: a published concert with a waiting room and 10 000 tickets (Stalls rows A–AN × 50 seats at $75.00, Floor GA of 8 000 at $50.00), all released when sales open. Sales open \`salesOpenInSec\` from now (default ${String(LARGE_DROP_SALES_OPEN_IN_SEC)}; 0 opens them at once), and the waiting room lets in \`admissionRatePerSec\` customers per second (default ${String(LARGE_DROP_ADMISSION_RATE)}). Load runs create their customers with \`POST /__test/sessions\` and send \`X-Load-Test-Key\`. ${ADDITIVE}`,
+  })
+  @ApiBody({ type: LargeVenueDropRequestDto, required: false })
+  @ZodResponse({ status: 201, type: DropResultDto, description: 'What was created.' })
+  async largeVenueDrop(
+    @Body(new ZodValidationPipe(OptionalLargeVenueDropRequestSchema))
+    body: LargeVenueDropRequest | undefined,
+  ) {
+    return this.scenarios.create((ctx) => largeVenueDrop(ctx, body ?? {}));
   }
 }

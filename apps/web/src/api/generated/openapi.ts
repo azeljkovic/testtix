@@ -830,6 +830,66 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/__test/seed/drop-in-5-min": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Seed scenario: a ticket drop opening in 5 minutes
+         * @description A ticket drop at a new venue: a published concert with a waiting room (`waitingRoomEnabled`), Seats rows A–E × 10 at $60.00 and Standing GA of 50 at $35.00, all released when sales open. Customers join its queue through `POST /events/{eventId}/queue`; the body may set `admissionRatePerSec` (default 5) and `admissionTokenTtlSec` (default 600). Sales open 5 minutes from now (server clock, whole seconds): everyone who joins before then is let in in a random order at the opening. Test mode only. Adds a new venue, events (and orders) with fresh IDs on every call; the slugs and titles end in a random suffix, so calls never collide and existing data is not touched. Open even when the server has a test API key, since it only adds data.
+         */
+        post: operations["TestScenariosController_dropInFiveMin"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/__test/seed/drop-open-now": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Seed scenario: a ticket drop that has just opened
+         * @description A ticket drop at a new venue: a published concert with a waiting room (`waitingRoomEnabled`), Seats rows A–E × 10 at $60.00 and Standing GA of 50 at $35.00, all released when sales open. Customers join its queue through `POST /events/{eventId}/queue`; the body may set `admissionRatePerSec` (default 5) and `admissionTokenTtlSec` (default 600). Sales open now (server clock, whole seconds): customers are let in in join order, from the admission job's next run. Test mode only. Adds a new venue, events (and orders) with fresh IDs on every call; the slugs and titles end in a random suffix, so calls never collide and existing data is not touched. Open even when the server has a test API key, since it only adds data.
+         */
+        post: operations["TestScenariosController_dropOpenNow"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/__test/seed/large-venue-drop": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Seed scenario: a large ticket drop for load tests
+         * @description A ticket drop sized for load tests at a new venue: a published concert with a waiting room and 10 000 tickets (Stalls rows A–AN × 50 seats at $75.00, Floor GA of 8 000 at $50.00), all released when sales open. Sales open `salesOpenInSec` from now (default 300; 0 opens them at once), and the waiting room lets in `admissionRatePerSec` customers per second (default 100). Load runs create their customers with `POST /__test/sessions` and send `X-Load-Test-Key`. Test mode only. Adds a new venue, events (and orders) with fresh IDs on every call; the slugs and titles end in a random suffix, so calls never collide and existing data is not touched. Open even when the server has a test API key, since it only adds data.
+         */
+        post: operations["TestScenariosController_largeVenueDrop"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/__test/sessions": {
         parameters: {
             query?: never;
@@ -1767,6 +1827,12 @@ export interface components {
             holdDurationSec: number;
             /** @description Most tickets in one hold or order */
             maxTicketsPerOrder: number;
+            /** @description A ticket drop: customers queue first (`POST /events/{eventId}/queue`) */
+            waitingRoomEnabled: boolean;
+            /** @description Customers the waiting room lets in per second of server time */
+            admissionRatePerSec: number;
+            /** @description How long an admission lasts */
+            admissionTokenTtlSec: number;
             /** @description Inventory units (seats and GA places) of the event, by status */
             tickets: {
                 total: number;
@@ -1940,6 +2006,27 @@ export interface components {
                     priceCents: number;
                 }[];
             };
+        };
+        /** @description Optional. Send no body (or `{}`) for the defaults. */
+        DropRequestDto: {
+            /** @description Customers let in per second of server time, 1–1000. Default 5. */
+            admissionRatePerSec?: number;
+            /** @description How long an admission lasts, in seconds, 60–3600. Default 600. */
+            admissionTokenTtlSec?: number;
+        };
+        DropResultDto_Output: {
+            venue: components["schemas"]["ScenarioVenue_Output"];
+            /** @description The drop: `waitingRoomEnabled`, with every ticket released when sales open */
+            event: components["schemas"]["ScenarioEvent_Output"];
+        };
+        /** @description Optional. Send no body (or `{}`) for the defaults. */
+        LargeVenueDropRequestDto: {
+            /** @description Seconds from now (server clock) until sales open, 0–86400. 0 opens them at once. Default 300. */
+            salesOpenInSec?: number;
+            /** @description Customers let in per second of server time, 1–1000. Default 100. */
+            admissionRatePerSec?: number;
+            /** @description How long an admission lasts, in seconds, 60–3600. Default 600. */
+            admissionTokenTtlSec?: number;
         };
         /** @enum {string} */
         Role: "CUSTOMER" | "ADMIN";
@@ -4584,6 +4671,138 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ConfirmedOrderResultDto_Output"];
+                };
+            };
+            /** @description Rate limited (type `rate-limited`): too many requests in the rate-limit group `testApi` (per client address, `RATE_LIMIT_TEST_API`). Wait `Retry-After` seconds. Requests with the server's `X-Load-Test-Key` skip every limit. */
+            429: {
+                headers: {
+                    /** @description Seconds until the limit resets. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Error. The body is an RFC 9457 problem details object. */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    TestScenariosController_dropInFiveMin: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["DropRequestDto"];
+            };
+        };
+        responses: {
+            /** @description What was created. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DropResultDto_Output"];
+                };
+            };
+            /** @description Rate limited (type `rate-limited`): too many requests in the rate-limit group `testApi` (per client address, `RATE_LIMIT_TEST_API`). Wait `Retry-After` seconds. Requests with the server's `X-Load-Test-Key` skip every limit. */
+            429: {
+                headers: {
+                    /** @description Seconds until the limit resets. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Error. The body is an RFC 9457 problem details object. */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    TestScenariosController_dropOpenNow: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["DropRequestDto"];
+            };
+        };
+        responses: {
+            /** @description What was created. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DropResultDto_Output"];
+                };
+            };
+            /** @description Rate limited (type `rate-limited`): too many requests in the rate-limit group `testApi` (per client address, `RATE_LIMIT_TEST_API`). Wait `Retry-After` seconds. Requests with the server's `X-Load-Test-Key` skip every limit. */
+            429: {
+                headers: {
+                    /** @description Seconds until the limit resets. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Error. The body is an RFC 9457 problem details object. */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    TestScenariosController_largeVenueDrop: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["LargeVenueDropRequestDto"];
+            };
+        };
+        responses: {
+            /** @description What was created. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DropResultDto_Output"];
                 };
             };
             /** @description Rate limited (type `rate-limited`): too many requests in the rate-limit group `testApi` (per client address, `RATE_LIMIT_TEST_API`). Wait `Retry-After` seconds. Requests with the server's `X-Load-Test-Key` skip every limit. */

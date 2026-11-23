@@ -6,10 +6,15 @@
  *
  * Event dates are relative to the start of the clock's UTC day (`D`), like the baseline seed.
  */
-import { HOLD_DURATION_SEC, MAX_TICKETS_PER_ORDER } from '@testtix/shared';
+import {
+  ADMISSION_RATE_PER_SEC,
+  ADMISSION_TOKEN_TTL_SEC,
+  HOLD_DURATION_SEC,
+  MAX_TICKETS_PER_ORDER,
+} from '@testtix/shared';
 
 import type { Prisma } from '../../generated/prisma/client.js';
-import type { DayTime } from '../../seed/fixtures.js';
+import type { DayTime, VenueSpec } from '../../seed/fixtures.js';
 import type { CatalogueEventSpec } from '../../seed/seed-data.js';
 import {
   addBuyer,
@@ -22,19 +27,25 @@ import {
   scenarioVenue,
   sellUnits,
 } from './scenario-data.js';
-import type {
-  BasicCatalogueResult,
-  ConfirmedOrderScenario,
-  GaLastTicketResult,
-  GaMeetupResult,
-  HoldAboutToExpireRequest,
-  HoldAboutToExpireScenario,
-  OneSeatLeftResult,
-  ScenarioEvent,
-  ScenarioGaSection,
-  ScenarioSeat,
-  ScenarioVenue,
-  SoldOutEventResult,
+import {
+  type BasicCatalogueResult,
+  type ConfirmedOrderScenario,
+  type DropRequest,
+  type DropResult,
+  type GaLastTicketResult,
+  type GaMeetupResult,
+  type HoldAboutToExpireRequest,
+  type HoldAboutToExpireScenario,
+  LARGE_DROP_ADMISSION_RATE,
+  LARGE_DROP_SALES_OPEN_IN_SEC,
+  type LargeVenueDropRequest,
+  type OneSeatLeftResult,
+  SMALL_DROP_ADMISSION_RATE,
+  type ScenarioEvent,
+  type ScenarioGaSection,
+  type ScenarioSeat,
+  type ScenarioVenue,
+  type SoldOutEventResult,
 } from './scenario.schemas.js';
 
 export interface Scenario<TResult> {
@@ -391,6 +402,130 @@ export function confirmedOrder(ctx: ScenarioContext): Scenario<ConfirmedOrderSce
   };
 }
 
+/** The venue of `drop-in-5-min` and `drop-open-now`: 100 tickets. */
+const SMALL_DROP_SECTIONS: VenueSpec['sections'] = [
+  { name: 'Seats', type: 'SEATED', rows: 5, seatsPerRow: 10 },
+  { name: 'Standing', type: 'GA', capacity: 50 },
+];
+
+/**
+ * A ticket drop at a small venue (Seats rows A–E × 10 at $60.00, Standing GA of 50 at $35.00)
+ * whose sales open 5 minutes from now (server clock, whole seconds). Customers who join its
+ * waiting room before then are let in in a random order at the opening.
+ */
+export function dropInFiveMin(ctx: ScenarioContext, input: DropRequest): Scenario<DropResult> {
+  return smallDrop(ctx, input, {
+    slug: 'drop-in-5-min',
+    title: 'Drop In Five',
+    description: 'Test scenario drop-in-5-min: a ticket drop whose sales open in five minutes.',
+    opensInSec: 300,
+  });
+}
+
+/**
+ * The same drop as `dropInFiveMin`, with sales open from now (server clock, whole seconds):
+ * customers are let in in join order.
+ */
+export function dropOpenNow(ctx: ScenarioContext, input: DropRequest): Scenario<DropResult> {
+  return smallDrop(ctx, input, {
+    slug: 'drop-open-now',
+    title: 'Drop Open Now',
+    description: 'Test scenario drop-open-now: a ticket drop whose sales have just opened.',
+    opensInSec: 0,
+  });
+}
+
+function smallDrop(
+  ctx: ScenarioContext,
+  input: DropRequest,
+  spec: { slug: string; title: string; description: string; opensInSec: number },
+): Scenario<DropResult> {
+  const rows = buildScenarioCatalogue(ctx, scenarioVenue(ctx, SMALL_DROP_SECTIONS), [
+    scenarioEvent(ctx, {
+      slug: spec.slug,
+      title: spec.title,
+      description: spec.description,
+      category: 'CONCERT',
+      starts: [14, '23:00'],
+      durationMin: 150,
+      batches: [
+        { name: 'Seats', priceCents: 6000, sections: ['Seats'], releases: ON_SALE },
+        { name: 'Standing', priceCents: 3500, sections: ['Standing'], releases: ON_SALE },
+      ],
+    }),
+  ]);
+  makeDrop(rows, ctx, {
+    opensInSec: spec.opensInSec,
+    admissionRatePerSec: input.admissionRatePerSec ?? SMALL_DROP_ADMISSION_RATE,
+    admissionTokenTtlSec: input.admissionTokenTtlSec ?? ADMISSION_TOKEN_TTL_SEC.default,
+  });
+  return {
+    rows,
+    result: { venue: describeVenue(rows), event: describeEvent(rows, onlyEventId(rows)) },
+  };
+}
+
+/**
+ * A ticket drop sized for load tests: 10 000 tickets (Stalls rows A–AN × 50 seats = 2 000 at
+ * $75.00, Floor GA of 8 000 at $50.00), opening `salesOpenInSec` from now (default 300) and
+ * letting in `admissionRatePerSec` customers per second (default 100).
+ */
+export function largeVenueDrop(
+  ctx: ScenarioContext,
+  input: LargeVenueDropRequest,
+): Scenario<DropResult> {
+  const rows = buildScenarioCatalogue(
+    ctx,
+    scenarioVenue(ctx, [
+      { name: 'Stalls', type: 'SEATED', rows: 40, seatsPerRow: 50 },
+      { name: 'Floor', type: 'GA', capacity: 8000 },
+    ]),
+    [
+      scenarioEvent(ctx, {
+        slug: 'large-venue-drop',
+        title: 'Large Venue Drop',
+        description: 'Test scenario large-venue-drop: a ticket drop of 10 000 tickets.',
+        category: 'CONCERT',
+        starts: [14, '23:00'],
+        durationMin: 180,
+        batches: [
+          { name: 'Stalls', priceCents: 7500, sections: ['Stalls'], releases: ON_SALE },
+          { name: 'Floor', priceCents: 5000, sections: ['Floor'], releases: ON_SALE },
+        ],
+      }),
+    ],
+  );
+  makeDrop(rows, ctx, {
+    opensInSec: input.salesOpenInSec ?? LARGE_DROP_SALES_OPEN_IN_SEC,
+    admissionRatePerSec: input.admissionRatePerSec ?? LARGE_DROP_ADMISSION_RATE,
+    admissionTokenTtlSec: input.admissionTokenTtlSec ?? ADMISSION_TOKEN_TTL_SEC.default,
+  });
+  return {
+    rows,
+    result: { venue: describeVenue(rows), event: describeEvent(rows, onlyEventId(rows)) },
+  };
+}
+
+/**
+ * Turns the scenario's one event into a drop: a waiting room, and sales (and the release of
+ * every batch, as an admin preparing a drop would set them) opening `opensInSec` from now,
+ * rounded down to the second.
+ */
+function makeDrop(
+  rows: ScenarioRows,
+  ctx: ScenarioContext,
+  drop: { opensInSec: number; admissionRatePerSec: number; admissionTokenTtlSec: number },
+): void {
+  const [event] = rows.events;
+  if (event === undefined) throw new Error('Drop scenario without an event');
+  const opensAt = new Date(Math.floor(ctx.now.getTime() / 1000) * 1000 + drop.opensInSec * 1000);
+  event.salesOpenAt = opensAt;
+  event.waitingRoomEnabled = true;
+  event.admissionRatePerSec = drop.admissionRatePerSec;
+  event.admissionTokenTtlSec = drop.admissionTokenTtlSec;
+  for (const batch of rows.ticketBatches) batch.releasesAt = opensAt;
+}
+
 function requireSection(rows: ScenarioRows, name: string): string {
   const section = rows.sections.find((s) => s.name === name);
   if (section === undefined) throw new Error(`Scenario without section ${name}`);
@@ -470,6 +605,9 @@ function describeEvent(rows: ScenarioRows, eventId: string | undefined): Scenari
     salesOpenAt: new Date(event.salesOpenAt).toISOString(),
     holdDurationSec: event.holdDurationSec ?? HOLD_DURATION_SEC.default,
     maxTicketsPerOrder: event.maxTicketsPerOrder ?? MAX_TICKETS_PER_ORDER.default,
+    waitingRoomEnabled: event.waitingRoomEnabled ?? false,
+    admissionRatePerSec: event.admissionRatePerSec ?? ADMISSION_RATE_PER_SEC.default,
+    admissionTokenTtlSec: event.admissionTokenTtlSec ?? ADMISSION_TOKEN_TTL_SEC.default,
     tickets: {
       total: units.length,
       available: count('AVAILABLE'),

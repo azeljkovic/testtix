@@ -278,6 +278,25 @@ describe('admission', () => {
     });
   });
 
+  it('keeps join order for joins in the same millisecond after the opening', async () => {
+    await clock.freezeAt(new Date(OPEN.getTime() + 5000));
+    const event = await insertDropEvent({ rate: 1 });
+    const clients = await customers(8);
+    const entries: QueueEntry[] = [];
+    for (const client of clients) entries.push(await join(client, event.id));
+    expect(entries.map((entry) => entry.position)).toEqual([1, 2, 3, 4, 5, 6, 7, 8]);
+    expect(entries.map((entry) => entry.joinedAt)).toEqual(
+      Array(8).fill(new Date(OPEN.getTime() + 5000).toISOString()),
+    );
+
+    // One per second, first come first served.
+    for (const [index, client] of clients.entries()) {
+      expect(await admit(event.id)).toBe(1);
+      expect(await poll(client, entries[index]?.token ?? '')).toMatchObject({ status: 'ADMITTED' });
+      await advance(1000);
+    }
+  });
+
   it('lets in every batch that fell due when the clock jumps', async () => {
     await clock.freezeAt(OPEN);
     const event = await insertDropEvent({ rate: 3 });

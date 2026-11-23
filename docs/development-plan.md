@@ -359,6 +359,8 @@ Claude's workspace has no Docker daemon, so Testcontainers can't run there. Beca
 - From C5.1: scenario events set `waitingRoomEnabled`, `admissionRatePerSec` and `admissionTokenTtlSec` on the event row; queues live in Redis, so a scenario can't pre-fill one (customers join through the API).
 - `docs/testing-guide.md` is completed: test mode, test API reference, all scenarios, test cards, the clock, data-isolation patterns and the polling contract (`retryAfterMs`).
 - Verify: each scenario runs from a clean reset, and the guide examples run as written (a script runs the curl examples in CI).
+- Also added: drop bodies (`admissionRatePerSec`, `admissionTokenTtlSec`; `salesOpenInSec` for `large-venue-drop`, default 300) and defaults (100 tickets at 5 per second for the small drops; 10 000 at 100 per second for the large one); drop openings in whole seconds, with every batch released at the opening; every scenario event reports its waiting-room settings. `pnpm docs:examples` (`scripts/check-guide-examples.mjs`) runs each `sh` block after a reset, failing on curl 4xx/5xx; HTML comments group blocks (`group=…`), allow errors (`http-errors`) or skip them. Guide sections for the test API reference, drop scenarios, polling and test isolation. Fixed: joins in the same millisecond after a drop's opening (every join, with a frozen clock) lost their join order.
+- For C6: the examples spell out `http://localhost:3000` and reset the data, so they run against local or CI servers, not the hosted demo. The tests repo's k6 drop test starts from `large-venue-drop` and sends `X-Load-Test-Key`.
 
 **M5 demo:** schedule a drop 5 minutes ahead, fast-forward the clock, many clients queue and get admitted at the configured rate.
 
