@@ -3,6 +3,7 @@ import { Inject, Logger, Module, type OnApplicationBootstrap } from '@nestjs/com
 import { AuthModule } from '../auth/auth.module.js';
 import { APP_CONFIG } from '../config/config.module.js';
 import type { AppConfig } from '../config/config.schema.js';
+import { WaitingRoomModule } from '../waiting-room/waiting-room.module.js';
 import { TestScenariosController } from './scenarios/test-scenarios.controller.js';
 import { TestScenariosService } from './scenarios/test-scenarios.service.js';
 import { TestSessionsController } from './sessions/test-sessions.controller.js';
@@ -19,7 +20,7 @@ import { TestResetService } from './test-reset.service.js';
  * TODO(C5.3): give `/__test/*` its own rate limit and an audit log line per call.
  */
 @Module({
-  imports: [AuthModule],
+  imports: [AuthModule, WaitingRoomModule],
   controllers: [
     TestClockController,
     TestResetController,

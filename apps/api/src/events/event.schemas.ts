@@ -82,6 +82,11 @@ export const AdminEventSchema = z
     description: z.string(),
     holdDurationSec: count,
     maxTicketsPerOrder: count,
+    waitingRoomEnabled: z
+      .boolean()
+      .describe('A ticket drop: the seat map and holds need an admission from the waiting room'),
+    admissionRatePerSec: count.describe('Customers the waiting room lets in per second'),
+    admissionTokenTtlSec: count.describe('How long an admission lasts, in seconds'),
     batches: z.array(AdminBatchSchema).describe('By release time, then ID'),
   })
   .meta({ id: 'AdminEvent' });

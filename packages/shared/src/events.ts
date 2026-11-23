@@ -33,6 +33,12 @@ export const HOLD_DURATION_SEC = { min: 60, max: 3600, default: 600 } as const;
 /** Most tickets in one hold or order (resolved question 4 of the plan). */
 export const MAX_TICKETS_PER_ORDER = { min: 1, max: 20, default: 6 } as const;
 
+/** Customers a drop's waiting room lets in per second of server time (C5.1). */
+export const ADMISSION_RATE_PER_SEC = { min: 1, max: 1000, default: 10 } as const;
+
+/** How long an admission from the waiting room lasts, in seconds (C5.1). */
+export const ADMISSION_TOKEN_TTL_SEC = { min: 60, max: 3600, default: 600 } as const;
+
 const dateTime = (label: string) =>
   z.iso.datetime({
     offset: true,
@@ -101,6 +107,22 @@ const eventFields = {
     .optional()
     .describe(
       `Most tickets in one hold or order (${MAX_TICKETS_PER_ORDER.min}–${MAX_TICKETS_PER_ORDER.max}, default ${MAX_TICKETS_PER_ORDER.default})`,
+    ),
+  waitingRoomEnabled: z
+    .boolean({ error: 'Waiting room must be true or false' })
+    .optional()
+    .describe(
+      'A ticket drop (default false): customers join a queue (`POST /events/{eventId}/queue`) and need an admission token for the seat map and holds. Turning it off lets everyone waiting in at once.',
+    ),
+  admissionRatePerSec: intBetween(ADMISSION_RATE_PER_SEC, 'Admission rate')
+    .optional()
+    .describe(
+      `Customers the waiting room lets in per second of server time (${ADMISSION_RATE_PER_SEC.min}–${ADMISSION_RATE_PER_SEC.max}, default ${ADMISSION_RATE_PER_SEC.default})`,
+    ),
+  admissionTokenTtlSec: intBetween(ADMISSION_TOKEN_TTL_SEC, 'Admission time')
+    .optional()
+    .describe(
+      `How long an admission lasts, in seconds (${ADMISSION_TOKEN_TTL_SEC.min}–${ADMISSION_TOKEN_TTL_SEC.max}, default ${ADMISSION_TOKEN_TTL_SEC.default})`,
     ),
 };
 

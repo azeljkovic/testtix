@@ -34,6 +34,8 @@ export const PROBLEM_TYPES = {
   HOLD_EXPIRED: 'urn:testtix:problem:hold-expired',
   PAYMENT_PROVIDER_UNAVAILABLE: 'urn:testtix:problem:payment-provider-unavailable',
   WEBHOOK_SIGNATURE_INVALID: 'urn:testtix:problem:webhook-signature-invalid',
+  QUEUE_REQUIRED: 'urn:testtix:problem:queue-required',
+  NO_WAITING_ROOM: 'urn:testtix:problem:no-waiting-room',
 } as const satisfies Record<string, `urn:testtix:problem:${string}`>;
 
 export type ErrorCode = keyof typeof PROBLEM_TYPES;

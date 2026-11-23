@@ -48,6 +48,9 @@ export async function loadAdminEvent(
     description: event.description,
     holdDurationSec: event.holdDurationSec,
     maxTicketsPerOrder: event.maxTicketsPerOrder,
+    waitingRoomEnabled: event.waitingRoomEnabled,
+    admissionRatePerSec: event.admissionRatePerSec,
+    admissionTokenTtlSec: event.admissionTokenTtlSec,
     batches: event.batches.map((batch) => toAdminBatch(batch, event.venue.sections, counts, now)),
   };
 }

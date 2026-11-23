@@ -42,6 +42,7 @@ export class CatalogueService {
         select: {
           description: true,
           maxTicketsPerOrder: true,
+          waitingRoomEnabled: true,
           venue: { select: { address: true } },
         },
       }),
@@ -54,6 +55,7 @@ export class CatalogueService {
       description: details.description,
       venue: { ...summary.venue, address: details.venue.address },
       maxTicketsPerOrder: details.maxTicketsPerOrder,
+      waitingRoomEnabled: details.waitingRoomEnabled,
       tickets: sumCounts(sections.map((section) => section.tickets)),
       sections,
     };

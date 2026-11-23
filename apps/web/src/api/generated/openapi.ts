@@ -442,6 +442,46 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/events/{eventId}/queue": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Join an event’s waiting room
+         * @description For events with `waitingRoomEnabled` (ticket drops). One entry per customer: joining again while you wait or are admitted returns your entry with 200. Once an admission has expired, joining again puts you at the back of the queue with new tokens (201). Everyone who joins before `salesOpenAt` is let in in a random order once sales open; after that, in join order. Customers are let in at the event’s `admissionRatePerSec` per second of server time. 404 unless the event is published; 409 `no-waiting-room` for events without one; 409 `event-not-on-sale` once the event has started.
+         */
+        post: operations["WaitingRoomController_join"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/queue/{token}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get your place in a waiting room
+         * @description Poll it while you wait: wait `retryAfterMs` between requests and stop once it is null. `PRE_SALE` (before sales open; no position yet) → `WAITING` (with `position` and `estimatedWaitMs`) → `ADMITTED` (with `admission.token`, valid until `admission.expiresAt`) → `EXPIRED`. 404 for unknown tokens, tokens replaced by joining again, and other customers’ tokens.
+         */
+        get: operations["WaitingRoomController_status"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/events/{eventId}/seats": {
         parameters: {
             query?: never;
@@ -451,7 +491,7 @@ export interface paths {
         };
         /**
          * Get an event’s seat map
-         * @description Every section of the venue in order: seated sections with each seat’s status and price, GA sections with the places a hold could take. Statuses are at the server clock; a seat whose hold expired is `AVAILABLE`. 404 unless the event is published.
+         * @description Every section of the venue in order: seated sections with each seat’s status and price, GA sections with the places a hold could take. Statuses are at the server clock; a seat whose hold expired is `AVAILABLE`. 404 unless the event is published. For an event with a waiting room, 403 `queue-required` without an unexpired admission token for the event (`X-Admission-Token`).
          */
         get: operations["HoldsController_seatMap"];
         put?: never;
@@ -473,7 +513,7 @@ export interface paths {
         put?: never;
         /**
          * Hold seats and GA places
-         * @description All or nothing: either every requested ticket is held until `expiresAt` (now + the event’s hold duration), or nothing is. Replaces your previous hold for this event (a failed request keeps it). 400 `validation-error` for more tickets than the event’s `maxTicketsPerOrder`, or seats and sections that aren’t at the event’s venue. 404 unless the event is published. 409 `event-not-on-sale` before sales open or once the event has started; 409 `tickets-unavailable` when a seat is sold, held or not on sale, or a GA section has fewer places left than requested.
+         * @description All or nothing: either every requested ticket is held until `expiresAt` (now + the event’s hold duration), or nothing is. Replaces your previous hold for this event (a failed request keeps it). 400 `validation-error` for more tickets than the event’s `maxTicketsPerOrder`, or seats and sections that aren’t at the event’s venue. 404 unless the event is published. 409 `event-not-on-sale` before sales open or once the event has started; 409 `tickets-unavailable` when a seat is sold, held or not on sale, or a GA section has fewer places left than requested. For an event with a waiting room, 403 `queue-required` without your unexpired admission token for the event (`X-Admission-Token`).
          */
         post: operations["HoldsController_create"];
         delete?: never;
@@ -641,7 +681,7 @@ export interface paths {
         put?: never;
         /**
          * Reset all data to the baseline seed and reset the clock
-         * @description Test mode only. Deletes every row (users, sessions, holds, orders and scenario data included), resets the clock (or freezes it at `freezeAt`) and inserts the baseline seed for the clock date. The swap is atomic: other requests see the old data or the new baseline, never a half-empty database. Affects every client of this server, so it needs `X-Test-Key` when the server has a test API key.
+         * @description Test mode only. Deletes every row (users, sessions, holds, orders and scenario data included) and empties every waiting room, resets the clock (or freezes it at `freezeAt`) and inserts the baseline seed for the clock date. The swap is atomic: other requests see the old data or the new baseline, never a half-empty database. Affects every client of this server, so it needs `X-Test-Key` when the server has a test API key.
          */
         post: operations["TestResetController_reset"];
         delete?: never;
@@ -1122,6 +1162,12 @@ export interface components {
             holdDurationSec?: number;
             /** @description Most tickets in one hold or order (1–20, default 6) */
             maxTicketsPerOrder?: number;
+            /** @description A ticket drop (default false): customers join a queue (`POST /events/{eventId}/queue`) and need an admission token for the seat map and holds. Turning it off lets everyone waiting in at once. */
+            waitingRoomEnabled?: boolean;
+            /** @description Customers the waiting room lets in per second of server time (1–1000, default 10) */
+            admissionRatePerSec?: number;
+            /** @description How long an admission lasts, in seconds (60–3600, default 600) */
+            admissionTokenTtlSec?: number;
         };
         AdminBatch_Output: {
             /** Format: uuid */
@@ -1169,6 +1215,12 @@ export interface components {
             description: string;
             holdDurationSec: number;
             maxTicketsPerOrder: number;
+            /** @description A ticket drop: the seat map and holds need an admission from the waiting room */
+            waitingRoomEnabled: boolean;
+            /** @description Customers the waiting room lets in per second */
+            admissionRatePerSec: number;
+            /** @description How long an admission lasts, in seconds */
+            admissionTokenTtlSec: number;
             /** @description By release time, then ID */
             batches: components["schemas"]["AdminBatch_Output"][];
         };
@@ -1202,6 +1254,12 @@ export interface components {
             holdDurationSec?: number;
             /** @description Most tickets in one hold or order (1–20, default 6) */
             maxTicketsPerOrder?: number;
+            /** @description A ticket drop (default false): customers join a queue (`POST /events/{eventId}/queue`) and need an admission token for the seat map and holds. Turning it off lets everyone waiting in at once. */
+            waitingRoomEnabled?: boolean;
+            /** @description Customers the waiting room lets in per second of server time (1–1000, default 10) */
+            admissionRatePerSec?: number;
+            /** @description How long an admission lasts, in seconds (60–3600, default 600) */
+            admissionTokenTtlSec?: number;
         };
         ReleaseBatchRequestDto: {
             /** @description e.g. "Early bird" or "Balcony" */
@@ -1313,10 +1371,49 @@ export interface components {
             description: string;
             /** @description Most tickets in one hold or order */
             maxTicketsPerOrder: number;
+            /** @description A ticket drop: join the waiting room (`POST /events/{eventId}/queue`) before choosing seats */
+            waitingRoomEnabled: boolean;
             /** @description Released tickets by state, across all sections */
             tickets: components["schemas"]["TicketCounts_Output"];
             /** @description Sections with tickets for this event, in the venue’s order */
             sections: components["schemas"]["CatalogueSection_Output"][];
+        };
+        /** @enum {string} */
+        QueueStatus_Output: "PRE_SALE" | "WAITING" | "ADMITTED" | "EXPIRED";
+        QueueEntry_Output: {
+            /** @description Your queue token: poll `GET /queue/{token}` with it. Only works for you. */
+            token: string;
+            /** Format: uuid */
+            eventId: string;
+            status: components["schemas"]["QueueStatus_Output"];
+            /**
+             * Format: date-time
+             * @description When you joined (server clock)
+             */
+            joinedAt: string;
+            /**
+             * Format: date-time
+             * @description When sales open: nobody is let in before
+             */
+            salesOpenAt: string;
+            /** @description Your place in the queue (1 = next in) while `WAITING`; null otherwise. Before sales open there is no position yet: everyone who joins before then is let in in a random order. */
+            position: number | null;
+            /** @description Customers still waiting for this event */
+            queueLength: number;
+            /** @description Roughly how long until you are let in, from `position` and the event’s admission rate, while `WAITING`; null otherwise */
+            estimatedWaitMs: number | null;
+            /** @description Wait this long before polling again. Null once `ADMITTED` or `EXPIRED`: stop polling. */
+            retryAfterMs: number | null;
+            /** @description Set while `ADMITTED` */
+            admission: {
+                /** @description Send it in the `X-Admission-Token` header to `GET /events/{eventId}/seats` and `POST /events/{eventId}/holds` */
+                token: string;
+                /**
+                 * Format: date-time
+                 * @description When the admission ends (server clock)
+                 */
+                expiresAt: string;
+            } | null;
         };
         SeatMapSeatedSection_Output: {
             /** Format: uuid */
@@ -3184,10 +3281,114 @@ export interface operations {
             };
         };
     };
-    HoldsController_seatMap: {
+    WaitingRoomController_join: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description The CSRF token from `GET /auth/csrf`. Must equal the `testtix_csrf` cookie, which must be sent too. */
+                "X-CSRF-Token": string;
+            };
+            path: {
+                eventId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Your existing queue entry. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["QueueEntry_Output"];
+                };
+            };
+            /** @description Your new queue entry. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["QueueEntry_Output"];
+                };
+            };
+            /** @description No session cookie, or the session has expired or was ended. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description The `X-CSRF-Token` header is missing or doesn't match the `testtix_csrf` cookie (type `csrf-token-invalid`). */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Error. The body is an RFC 9457 problem details object. */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    WaitingRoomController_status: {
         parameters: {
             query?: never;
             header?: never;
+            path: {
+                token: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Your queue entry. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["QueueEntry_Output"];
+                };
+            };
+            /** @description No session cookie, or the session has expired or was ended. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Error. The body is an RFC 9457 problem details object. */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    HoldsController_seatMap: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Admission token from the waiting room (`GET /queue/{token}`), for events with `waitingRoomEnabled`. Ignored for other events. */
+                "X-Admission-Token"?: string;
+            };
             path: {
                 eventId: string;
             };
@@ -3219,6 +3420,8 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
+                /** @description Admission token from the waiting room (`GET /queue/{token}`), for events with `waitingRoomEnabled`. Ignored for other events. */
+                "X-Admission-Token"?: string;
                 /** @description The CSRF token from `GET /auth/csrf`. Must equal the `testtix_csrf` cookie, which must be sent too. */
                 "X-CSRF-Token": string;
             };

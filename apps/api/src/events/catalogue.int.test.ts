@@ -592,6 +592,7 @@ describe('GET /events/:slug', () => {
       venue: { ...summary?.venue, address: '1 Hall Road' },
       description: 'Catalogue test event alpha-night.',
       maxTicketsPerOrder: 6,
+      waitingRoomEnabled: false,
       tickets: { total: 10, available: 10, held: 0, sold: 0 },
       sections: [
         {
