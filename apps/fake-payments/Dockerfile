@@ -15,6 +15,10 @@ RUN pnpm install --offline --frozen-lockfile --filter "@testtix/fake-payments...
   && pnpm --filter @testtix/fake-payments deploy --prod --legacy /out
 
 FROM node:24.16.0-alpine
+# GHCR links the package to the repository through `source`.
+LABEL org.opencontainers.image.source="https://github.com/azeljkovic/testtix" \
+  org.opencontainers.image.description="TestTix fake hosted payment provider" \
+  org.opencontainers.image.licenses="MIT"
 ENV NODE_ENV=production HOST=0.0.0.0 PORT=4000
 WORKDIR /app
 COPY --from=build --chown=node:node /out ./

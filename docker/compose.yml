@@ -10,12 +10,64 @@
 # fake-payments is built from apps/fake-payments/Dockerfile. After changing its code, rebuild with
 #   pnpm infra:up --build
 #
-# Profiles (placeholders, filled in by later chunks):
-#   full           api, worker and web as containers (C6.1)
+# Profiles:
+#   full           the whole shop as containers: migrations + seed, API replicas, worker, and the web
+#                  app behind Caddy (`pnpm full:up`, `pnpm full:check`; see the README)
 #   observability  Prometheus + Grafana for k6 runs (C6.2)
-# Services without a profile, the ones below, always start.
+# Services without a profile (postgres, redis, mailpit, fake-payments) always start.
+#
+# Images are built from the Dockerfiles, or pulled from a registry instead (`full:up` without
+# `--build`): TESTTIX_IMAGE_REGISTRY=ghcr.io/azeljkovic/testtix TESTTIX_IMAGE_TAG=<tag>.
 
 name: testtix
+
+# The API's environment in the `full` profile, shared by migrate, api and worker. Fixed values wire
+# the containers together; `${VAR:-}` passes a value from `.env` or the shell through (empty = the
+# API's default, see .env.example).
+x-api-environment: &api-environment
+  NODE_ENV: production
+  DATABASE_URL: postgresql://${POSTGRES_USER:-testtix}:${POSTGRES_PASSWORD:-testtix}@postgres:5432/${POSTGRES_DB:-testtix}
+  REDIS_URL: redis://redis:6379
+  SMTP_URL: smtp://mailpit:1025
+  # The web app as the browser reaches it (the `web` service's port).
+  WEB_BASE_URL: http://localhost:${WEB_PORT:-5173}
+  # Served over plain HTTP, where browsers would drop Secure cookies. Set true behind TLS.
+  COOKIE_SECURE: ${COOKIE_SECURE:-false}
+  PAYMENTS_BASE_URL: http://fake-payments:4000
+  PAYMENTS_API_KEY: ${PAYMENTS_API_KEY:-sk_test_testtix_local_only}
+  PAYMENTS_WEBHOOK_SECRET: ${PAYMENTS_WEBHOOK_SECRET:-whsec_testtix_local_only}
+  # Through Caddy, so webhooks reach whichever API replica is up.
+  PAYMENTS_WEBHOOK_URL: http://web:3000/webhooks/payments
+  # Only Caddy reaches the API, and it sets X-Forwarded-For to the address it saw.
+  TRUST_PROXY: 'true'
+  WORKER_IN_PROCESS: 'false'
+  TESTTIX_TEST_MODE: ${TESTTIX_TEST_MODE:-true}
+  TEST_API_KEY: ${TEST_API_KEY:-}
+  LOAD_TEST_KEY: ${LOAD_TEST_KEY:-}
+  LOG_LEVEL: ${LOG_LEVEL:-}
+  HEALTH_CHECK_TIMEOUT_MS: ${HEALTH_CHECK_TIMEOUT_MS:-}
+  SESSION_TTL_HOURS: ${SESSION_TTL_HOURS:-}
+  MAIL_FROM: ${MAIL_FROM:-}
+  EMAIL_VERIFICATION_TTL_HOURS: ${EMAIL_VERIFICATION_TTL_HOURS:-}
+  HOLD_SWEEPER_ENABLED: ${HOLD_SWEEPER_ENABLED:-}
+  HOLD_SWEEPER_INTERVAL_MS: ${HOLD_SWEEPER_INTERVAL_MS:-}
+  PAYMENTS_TIMEOUT_MS: ${PAYMENTS_TIMEOUT_MS:-}
+  PAYMENTS_WEBHOOK_TOLERANCE_SEC: ${PAYMENTS_WEBHOOK_TOLERANCE_SEC:-}
+  ORDER_POLL_INTERVAL_MS: ${ORDER_POLL_INTERVAL_MS:-}
+  JOB_PROCESSING_DELAY_MS: ${JOB_PROCESSING_DELAY_MS:-}
+  QUEUE_ADMISSION_INTERVAL_MS: ${QUEUE_ADMISSION_INTERVAL_MS:-}
+  QUEUE_POLL_INTERVAL_MS: ${QUEUE_POLL_INTERVAL_MS:-}
+  RATE_LIMIT_ENABLED: ${RATE_LIMIT_ENABLED:-}
+  RATE_LIMIT_DEFAULT: ${RATE_LIMIT_DEFAULT:-}
+  RATE_LIMIT_AUTH: ${RATE_LIMIT_AUTH:-}
+  RATE_LIMIT_TEST_API: ${RATE_LIMIT_TEST_API:-}
+  RATE_LIMIT_VERIFICATION_RESEND: ${RATE_LIMIT_VERIFICATION_RESEND:-}
+
+x-api-image: &api-image
+  image: ${TESTTIX_IMAGE_REGISTRY:-testtix}/api:${TESTTIX_IMAGE_TAG:-dev}
+  build:
+    context: .
+    dockerfile: apps/api/Dockerfile
 
 services:
   postgres:
@@ -78,7 +130,7 @@ services:
     build:
       context: .
       dockerfile: apps/fake-payments/Dockerfile
-    image: testtix/fake-payments:dev
+    image: ${TESTTIX_IMAGE_REGISTRY:-testtix}/fake-payments:${TESTTIX_IMAGE_TAG:-dev}
     environment:
       PUBLIC_BASE_URL: http://localhost:${FAKE_PAYMENTS_PORT:-4000}
       # The API must use the same two values (PAYMENTS_API_KEY / PAYMENTS_WEBHOOK_SECRET in `.env`).
@@ -92,7 +144,8 @@ services:
       WEBHOOK_TIMEOUT_MS: ${FAKE_PAYMENTS_WEBHOOK_TIMEOUT_MS:-5000}
     ports:
       - 127.0.0.1:${FAKE_PAYMENTS_PORT:-4000}:4000
-    # Webhooks go to the API on the host (`pnpm dev`): http://host.docker.internal:3000/...
+    # Webhooks go where the API asks: to the API on the host (`pnpm dev`) at
+    # http://host.docker.internal:3000/..., or to the `web` service in the `full` profile.
     # Docker Desktop provides the name; on Linux this line maps it to the host.
     extra_hosts:
       - host.docker.internal:host-gateway
@@ -104,6 +157,99 @@ services:
         - "fetch('http://127.0.0.1:4000/health').then((r) => process.exit(r.ok ? 0 : 1), () => process.exit(1))"
       interval: 2s
       timeout: 5s
+      retries: 30
+      start_period: 5s
+    restart: unless-stopped
+
+  # --- `full` profile -------------------------------------------------------------------------
+
+  # Applies the migrations, then seeds the database if it is empty. Runs to completion before the
+  # API and the worker start.
+  migrate:
+    <<: *api-image
+    profiles: [full]
+    command: ['sh', '-c', 'prisma migrate deploy && node dist/seed/main.js --if-empty']
+    environment: *api-environment
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      disable: true
+    restart: 'no'
+
+  # API replicas, reached only through `web` (Caddy), which spreads requests over them.
+  api:
+    <<: *api-image
+    profiles: [full]
+    environment: *api-environment
+    deploy:
+      replicas: ${API_REPLICAS:-2}
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+      mailpit:
+        condition: service_healthy
+      fake-payments:
+        condition: service_healthy
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - "fetch('http://127.0.0.1:3000/health/ready').then((r) => process.exit(r.ok ? 0 : 1), () => process.exit(1))"
+      interval: 5s
+      timeout: 3s
+      retries: 30
+      start_period: 10s
+    restart: unless-stopped
+
+  # Background jobs (hold sweeper, order processing, e-tickets, waiting-room admission).
+  worker:
+    <<: *api-image
+    profiles: [full]
+    command: ['node', '--enable-source-maps', 'dist/worker.js']
+    environment: *api-environment
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+      mailpit:
+        condition: service_healthy
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - "fetch('http://127.0.0.1:3001/health/ready').then((r) => process.exit(r.ok ? 0 : 1), () => process.exit(1))"
+      interval: 5s
+      timeout: 3s
+      retries: 30
+      start_period: 10s
+    restart: unless-stopped
+
+  # Caddy: the web app at http://localhost:5173 (API under /api) and the API at http://localhost:3000,
+  # the same addresses as `pnpm dev`.
+  web:
+    image: ${TESTTIX_IMAGE_REGISTRY:-testtix}/web:${TESTTIX_IMAGE_TAG:-dev}
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+    profiles: [full]
+    ports:
+      - 127.0.0.1:${WEB_PORT:-5173}:8080
+      - 127.0.0.1:${PORT:-3000}:3000
+    depends_on:
+      api:
+        condition: service_healthy
+    healthcheck:
+      test: ['CMD', 'wget', '-q', '--spider', 'http://127.0.0.1:8080/']
+      interval: 5s
+      timeout: 3s
       retries: 30
       start_period: 5s
     restart: unless-stopped
