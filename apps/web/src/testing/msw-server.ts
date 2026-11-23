@@ -41,6 +41,17 @@ export const handlers = [
   }),
   // Nobody has a hold; `mockCurrentHold()` from `./holds.js` changes that.
   http.get('/api/holds/current', () => problemResponse({ status: 404 })),
+  // Nobody has orders; `mockOrderList()` / `mockOrder()` from `./orders.js` answer others.
+  http.get('/api/orders', () =>
+    HttpResponse.json({
+      items: [],
+      page: 1,
+      pageSize: 20,
+      total: 0,
+      totalPages: 0,
+    } satisfies Schemas['OrderPage_Output']),
+  ),
+  http.get('/api/orders/:orderId', () => problemResponse({ status: 404 })),
   http.get('/api/venues', () =>
     HttpResponse.json({
       items: catalogueVenues,

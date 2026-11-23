@@ -62,6 +62,9 @@ export function AccountMenu() {
             <MenuItem href="/account" className={ITEM_CLASS}>
               Account
             </MenuItem>
+            <MenuItem href="/orders" className={ITEM_CLASS}>
+              Your orders
+            </MenuItem>
             {user.role === 'ADMIN' && (
               <MenuItem href="/admin" className={ITEM_CLASS}>
                 Admin

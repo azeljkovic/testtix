@@ -5,13 +5,16 @@ import { vi } from 'vitest';
 const realSetTimeout = globalThis.setTimeout;
 
 /**
- * Fakes the browser clock at `now`: `Date`, `setTimeout` and `clearTimeout`, as Playwright's
- * `page.clock` does. Undo with `vi.useRealTimers()` (in `afterEach`). While it is on, wait with
+ * Fakes the browser clock at `now`: `Date` and the timers (`setTimeout`, `setInterval` and their
+ * `clear…`, which React Query's `refetchInterval` uses), as Playwright's `page.clock` does. Undo with `vi.useRealTimers()` (in `afterEach`). While it is on, wait with
  * `settleWithFakeClock()` and type with `fireEvent`: Testing Library's `waitFor` / `findBy…` and
  * user-event wait on a `setTimeout` that a faked one never fires.
  */
 export function fakeClockAt(now: number): void {
-  vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'], now });
+  vi.useFakeTimers({
+    toFake: ['setTimeout', 'clearTimeout', 'setInterval', 'clearInterval', 'Date'],
+    now,
+  });
 }
 
 /**
