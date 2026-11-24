@@ -23,6 +23,22 @@
 	}
 }
 
+# Security headers of the web app (C6.5). The build needs nothing but its own origin: no inline
+# scripts or <style> elements (React sets style attributes through the DOM, which CSP allows), no
+# fonts, images or calls elsewhere; checkout leaves for the payment page by navigation, which CSP
+# doesn't restrict. HSTS is the hosted demo edge's job, since only it speaks HTTPS.
+(security-headers) {
+	header {
+		Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self'; connect-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'"
+		X-Content-Type-Options nosniff
+		X-Frame-Options DENY
+		Referrer-Policy strict-origin-when-cross-origin
+		Permissions-Policy "camera=(), microphone=(), geolocation=(), payment=(), usb=()"
+		Cross-Origin-Opener-Policy same-origin
+		-Server
+	}
+}
+
 (api) {
 	# Caddy replaces any X-Forwarded-For from an untrusted client with the address it saw (see
 	# trusted_proxies above), so the API (TRUST_PROXY=true) counts rate limits per real client.
@@ -43,18 +59,22 @@
 	encode zstd gzip
 	root * /srv
 
+	# The API's responses keep its own (stricter) security headers.
 	handle_path /api/* {
+		header -Server
 		import api
 	}
 
 	# Built assets have content hashes in their names, so they never change. A missing one is a
 	# 404, not the app's index.html.
 	handle /assets/* {
+		import security-headers
 		header Cache-Control "public, max-age=31536000, immutable"
 		file_server
 	}
 
 	handle {
+		import security-headers
 		header Cache-Control no-cache
 		# Client-side routes (/events/…, /orders/…) all get the app's index.html.
 		try_files {path} /index.html
@@ -63,5 +83,6 @@
 }
 
 :3000 {
+	header -Server
 	import api
 }

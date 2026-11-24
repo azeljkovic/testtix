@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Checks the hosted demo from the outside, over its public addresses: HTTPS and the redirect to it,
-# Secure cookies, what stays private (metrics, the test API without its key, Mailpit without a
+# Secure cookies, security headers, what stays private (metrics, the test API without its key, Mailpit without a
 # login, the provider's API), and a test purchase that goes all the way to an e-ticket email.
 # It only adds data (a seed scenario), unless --reset is passed.
 #
@@ -110,6 +110,28 @@ if [[ -z "$cookie" ]] || ! grep -qi '; *secure' <<< "$cookie"; then
   echo "FAIL (GET /auth/csrf set: ${cookie:-no cookie})"
   exit 1
 fi
+echo ok
+
+# `has_header <header line regex> <curl args>`: the response has a matching header (any case).
+has_header() {
+  local pattern="$1" headers
+  shift
+  headers="$(curl "${opts[@]}" -f -o /dev/null -D - "$@")"
+  if ! grep -qiE "^${pattern}" <<< "$headers"; then
+    echo "FAIL ($* has no header matching '${pattern}')"
+    exit 1
+  fi
+}
+
+step "Security headers"
+hsts='strict-transport-security: max-age=[0-9]+'
+for url in "${WEB_URL}/" "${API_URL}/health" "${PAY_URL}/assets/pay.css"; do
+  has_header "$hsts" "$url"
+done
+has_header "$hsts" "${mail_auth[@]}" "${MAIL_URL}/api/v1/messages?limit=1"
+has_header "content-security-policy: default-src 'self'" "${WEB_URL}/"
+has_header 'x-content-type-options: nosniff' "${WEB_URL}/"
+has_header "content-security-policy: default-src 'none'" "${API_URL}/health"
 echo ok
 
 step "Metrics not public"

@@ -80,6 +80,19 @@ curl -fsS "${WEB_URL}/" | grep -q '<div id="root">'
 curl -fsS "${WEB_URL}/events/some-event" | grep -q '<div id="root">'
 echo "ok (${WEB_URL})"
 
+step "Security headers"
+web_headers="$(curl -fsS -o /dev/null -D - "${WEB_URL}/")"
+grep -qi "^content-security-policy: default-src 'self'" <<< "$web_headers"
+grep -qi '^x-content-type-options: nosniff' <<< "$web_headers"
+if grep -qi '^server:' <<< "$web_headers"; then
+  echo "FAIL (the web app names its server)"
+  exit 1
+fi
+for url in "${API_URL}/health" "${WEB_URL}/api/health"; do
+  curl -fsS -o /dev/null -D - "$url" | grep -qi "^content-security-policy: default-src 'none'"
+done
+echo ok
+
 step "API under the web app's /api"
 curl -fsS "${WEB_URL}/api/health" | jq -e '.status == "ok"' > /dev/null
 echo ok
