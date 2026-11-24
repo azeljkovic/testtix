@@ -21,7 +21,7 @@ export function AccountMenu() {
       <div className="flex items-center gap-4">
         <Link
           to={authPagePath('/login', location)}
-          className="font-medium text-slate-700 hover:text-indigo-700"
+          className="font-medium whitespace-nowrap text-slate-700 hover:text-indigo-700"
         >
           Log in
         </Link>

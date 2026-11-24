@@ -1,6 +1,7 @@
 import { APP_NAME } from '@testtix/shared';
 import { Link, NavLink } from 'react-router';
 
+import { ThemeMenu } from '../theme/ThemeMenu.js';
 import { AccountMenu } from './AccountMenu.js';
 
 const NAV_ITEMS = [{ to: '/events', label: 'Events' }] as const;
@@ -8,7 +9,7 @@ const NAV_ITEMS = [{ to: '/events', label: 'Events' }] as const;
 export function SiteHeader() {
   return (
     <header className="border-b border-slate-200 bg-white">
-      <div className="mx-auto flex max-w-5xl items-center justify-between gap-6 px-4 py-4">
+      <div className="mx-auto flex max-w-5xl items-center justify-between gap-4 px-4 py-4 sm:gap-6">
         <Link to="/" className="text-xl font-bold tracking-tight text-indigo-700">
           {APP_NAME}
           <span className="sr-only"> home</span>
@@ -28,7 +29,10 @@ export function SiteHeader() {
             ))}
           </ul>
         </nav>
-        <AccountMenu />
+        <div className="flex items-center gap-2 sm:gap-4">
+          <ThemeMenu />
+          <AccountMenu />
+        </div>
       </div>
     </header>
   );

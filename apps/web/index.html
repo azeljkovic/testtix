@@ -3,9 +3,12 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="color-scheme" content="light dark" />
     <meta name="description" content="TestTix: tickets for concerts, talks and meetups." />
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
     <title>TestTix</title>
+    <!-- Not a module: it must set the stored colour theme before the first paint. -->
+    <script src="/theme-init.js"></script>
   </head>
   <body>
     <div id="root"></div>
