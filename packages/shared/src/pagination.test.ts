@@ -27,6 +27,17 @@ describe('PageQuerySchema', () => {
   ])('rejects %j', (query) => {
     expect(PageQuerySchema.safeParse(query).success).toBe(false);
   });
+
+  it.each([
+    [{ page: 'abc' }, 'Page must be a whole number of at least 1'],
+    [{ page: '0' }, 'Page must be a whole number of at least 1'],
+    [{ pageSize: 'abc' }, `Page size must be a whole number from 1 to ${PAGE_SIZE_MAX}`],
+    [{ pageSize: '2.5' }, `Page size must be a whole number from 1 to ${PAGE_SIZE_MAX}`],
+    [{ pageSize: '1000' }, `Page size must be a whole number from 1 to ${PAGE_SIZE_MAX}`],
+  ])('explains what is wrong with %j in one message', (query, message) => {
+    const result = PageQuerySchema.safeParse(query);
+    expect(result.error?.issues.map((issue) => issue.message)).toEqual([message]);
+  });
 });
 
 describe('pageWindow', () => {
