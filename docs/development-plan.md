@@ -417,6 +417,8 @@ Claude's workspace has no Docker daemon, so Testcontainers can't run there. Beca
 **C6.5 v1.0 hardening**
 
 - Pass through security headers, error messages, edge-case review, dependency audit, a README polish and a full accessibility audit of the main flows. Then tag `v1.0.0`.
+- Also added: security headers on the web image (strict `'self'`-only CSP, `nosniff`, `DENY`, referrer and permissions policies, COOP, no `Server`), on every API response (`default-src 'none'` except Swagger UI) and HSTS on every demo host, checked by `pnpm full:check` and `pnpm demo:check`; `src/csp.ts` in the web app so React Aria's injected `<style>` and Zod's `new Function` probe stay inside the policy; a route error page ("Something went wrong") inside the layout; readable `page` / `pageSize` messages; `pnpm.overrides` for `effect` (high, via Prisma) and `glob` (moderate, via Testcontainers) and a CI `audit` job (`pnpm audit --audit-level high`); no `__Host-` cookie prefix (names stay a contract, see tech-stack C6.5 notes); a "Security headers" section in the testing guide; README status and a v1 summary.
+- Verified: unit and component tests, `pnpm full:check`, headless Chrome on the `full` profile with no CSP violations, and an axe-core audit (WCAG 2.2 AA + best practices) of every main page and state with no violations (Swagger UI aside; see tech-stack C6.5 notes). A `Release-As: 1.0.0` footer makes release-please's next release PR propose 1.0.0; merging it tags `v1.0.0`.
 
 ---
 
