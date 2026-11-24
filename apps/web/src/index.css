@@ -1,9 +1,35 @@
 @layer react-aria;
 @import 'tailwindcss';
+@import './theme/dark-palette.css';
+
+/*
+ * Dark theme: the palette colours adapt (theme/dark-palette.css), so write light-mode classes.
+ * `dark:` is for the rare exception and follows the same choice as the palette: `data-theme` on
+ * <html> (src/theme/theme.ts), else the device setting.
+ */
+@custom-variant dark {
+  &:where([data-theme='dark'], [data-theme='dark'] *) {
+    @slot;
+  }
+  @media (prefers-color-scheme: dark) {
+    &:where(:root:not([data-theme]), :root:not([data-theme]) *) {
+      @slot;
+    }
+  }
+}
 
 @layer base {
   html {
     @apply bg-white text-slate-900 antialiased;
+    color-scheme: light dark;
+  }
+
+  html[data-theme='light'] {
+    color-scheme: light;
+  }
+
+  html[data-theme='dark'] {
+    color-scheme: dark;
   }
 
   /* One visible focus style for every focusable element, including React Aria components. */

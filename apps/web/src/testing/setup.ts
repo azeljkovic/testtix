@@ -5,6 +5,7 @@ import { afterAll, afterEach, beforeAll, expect } from 'vitest';
 // `vitest-axe/matchers` is typed as type-only at the package root; the dist module has the value.
 import { toHaveNoViolations } from 'vitest-axe/dist/matchers.js';
 
+import { resetThemeForTests } from '../theme/theme.js';
 import { server } from './msw-server.js';
 
 expect.extend({ toHaveNoViolations });
@@ -18,6 +19,8 @@ afterEach(() => {
   // Vitest globals are off, so Testing Library can't register its own cleanup.
   cleanup();
   server.resetHandlers();
+  localStorage.clear();
+  resetThemeForTests();
 });
 
 afterAll(() => {

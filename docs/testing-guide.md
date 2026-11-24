@@ -8,6 +8,7 @@ How to test TestTix from the outside: what the API promises, and the hooks it gi
 
 - URL locally: `http://localhost:5173` (`pnpm --filter @testtix/web dev`). The page calls the API on its own origin under `/api` (`/api/health` → `GET /health`).
 - Every page has the same landmarks: a header (`banner`) with the main navigation (`navigation` named "Main"), one `main` and a footer (`contentinfo`). The current navigation link has `aria-current="page"`.
+- The footer has a "Theme" radio group: System (the default, follows the device's light or dark setting), Light and Dark. The choice is stored in `localStorage` (`testtix-theme`: `light` or `dark`; absent for System), applied before the page first paints and shared by every tab; it shows as `data-theme="light|dark"` on `<html>` (absent for System). Both themes meet WCAG AA contrast.
 - The first Tab stop is a "Skip to main content" link. Activating it moves focus to `main` without changing the URL.
 - Each route sets the document title to `<page> · TestTix` (just `TestTix` on the home page). Unknown paths render a "Page not found" page with that title; the server still answers 200, since routing happens in the browser.
 - A page that fails to render shows "Something went wrong" (title `Something went wrong · TestTix`) inside the usual header and footer, with a "Reload the page" button and a link home; the error itself goes to the browser console, never the page. v1 has no way to trigger it on purpose.

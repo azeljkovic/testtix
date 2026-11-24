@@ -36,7 +36,7 @@ export function ConfirmButton({
       </Button>
       <ModalOverlay
         isDismissable
-        className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4"
+        className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 dark:bg-black/60 p-4"
       >
         <Modal className="w-full max-w-md rounded-lg bg-white p-6 shadow-xl">
           <Dialog role="alertdialog" className="outline-none">
