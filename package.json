@@ -62,6 +62,10 @@
       "allowedVersions": {
         "openapi-typescript>typescript": "6"
       }
+    },
+    "overrides": {
+      "@prisma/config>effect": "3.22.5",
+      "archiver-utils>glob": "14.0.6"
     }
   }
 }
