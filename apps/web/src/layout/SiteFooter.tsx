@@ -1,6 +1,5 @@
 import { APP_NAME } from '@testtix/shared';
 
-import { ThemeSwitcher } from '../theme/ThemeSwitcher.js';
 import { ApiStatus } from './ApiStatus.js';
 
 export const REPOSITORY_URL = 'https://github.com/azeljkovic/testtix';
@@ -12,8 +11,7 @@ export function SiteFooter() {
         <p>
           {APP_NAME} is a practice target for software testing. Tickets and payments are not real.
         </p>
-        <div className="flex flex-wrap items-center gap-4">
-          <ThemeSwitcher />
+        <div className="flex items-center gap-4">
           <ApiStatus />
           <a href={REPOSITORY_URL} className="underline underline-offset-4 hover:text-indigo-700">
             Source code
