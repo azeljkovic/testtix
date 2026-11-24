@@ -5,6 +5,7 @@ import { Link, Navigate, useSearchParams } from 'react-router';
 
 import { authPagePath, safeRedirectPath } from '../auth/redirect.js';
 import { useLogin, useSession } from '../auth/session.js';
+import { TestAccounts } from '../auth/TestAccounts.js';
 import { FormAlert } from '../forms/FormAlert.js';
 import { showSubmitError } from '../forms/form-errors.js';
 import { SubmitButton } from '../forms/SubmitButton.js';
@@ -67,6 +68,7 @@ export function LoginPage() {
           Create an account
         </Link>
       </p>
+      <TestAccounts />
     </div>
   );
 }

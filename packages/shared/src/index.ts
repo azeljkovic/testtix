@@ -10,6 +10,7 @@ export * from './pagination.js';
 export * from './payments.js';
 export * from './problems.js';
 export * from './roles.js';
+export * from './seeded-accounts.js';
 export * from './slugs.js';
 export * from './venues.js';
 export * from './waiting-room.js';

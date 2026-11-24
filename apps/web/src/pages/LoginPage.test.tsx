@@ -1,7 +1,9 @@
-import { screen, waitFor } from '@testing-library/react';
+import { screen, waitFor, within } from '@testing-library/react';
+import { SEEDED_ACCOUNTS } from '@testtix/shared';
 import { http, HttpResponse } from 'msw';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
+import { axe } from '../testing/axe.js';
 import { csrfHeaderOf, customer, loggedInResponse, logInAs } from '../testing/auth.js';
 import { MOCK_CSRF_TOKEN, server } from '../testing/msw-server.js';
 import { problemResponse } from '../testing/problems.js';
@@ -134,5 +136,65 @@ describe('login page', () => {
 
     expect(router.state.location.pathname).toBe('/register');
     expect(router.state.location.search).toBe('?redirectTo=%2Fevents');
+  });
+
+  describe('test accounts', () => {
+    const panel = async () => within(await screen.findByRole('region', { name: 'Test accounts' }));
+
+    it('lists every seeded account with its email and password', async () => {
+      renderApp('/login');
+      const accounts = (await panel()).getAllByRole('listitem');
+
+      expect(accounts).toHaveLength(SEEDED_ACCOUNTS.length);
+      SEEDED_ACCOUNTS.forEach((account, index) => {
+        expect(accounts[index]).toHaveTextContent(account.email);
+        expect(accounts[index]).toHaveTextContent(account.password);
+      });
+      expect(accounts.map((account) => within(account).getByRole('heading').textContent)).toEqual([
+        'Admin',
+        'Customer',
+        'Unverified customer',
+      ]);
+    });
+
+    it.each([
+      ['admin email', 'admin@testtix.test'],
+      ['admin password', 'TestTix-admin-1'],
+      ['customer email', 'customer@testtix.test'],
+      ['customer password', 'TestTix-customer-1'],
+      ['unverified customer email', 'unverified@testtix.test'],
+      ['unverified customer password', 'TestTix-unverified-1'],
+    ])('copies the %s to the clipboard and says so', async (what, value) => {
+      const { user } = renderApp('/login');
+
+      await user.click((await panel()).getByRole('button', { name: `Copy ${what}` }));
+
+      expect(await navigator.clipboard.readText()).toBe(value);
+      expect((await panel()).getByRole('status')).toHaveTextContent(`Copied the ${what}.`);
+    });
+
+    it('says so when the clipboard refuses, and has no axe violations', async () => {
+      const { user } = renderApp('/login');
+      const accounts = await panel();
+      vi.spyOn(navigator.clipboard, 'writeText').mockRejectedValueOnce(new Error('Denied'));
+
+      await user.click(accounts.getByRole('button', { name: 'Copy admin password' }));
+
+      await waitFor(() => {
+        expect(accounts.getByRole('status')).toHaveTextContent(
+          'Couldn’t copy the admin password. Select the text and copy it instead.',
+        );
+      });
+      expect(await axe(document.body)).toHaveNoViolations();
+    });
+
+    it('copying fills nothing in: the form stays empty', async () => {
+      const { user } = renderApp('/login');
+
+      await user.click((await panel()).getByRole('button', { name: 'Copy customer email' }));
+
+      expect(screen.getByLabelText('Email')).toHaveValue('');
+      expect(screen.getByLabelText('Password')).toHaveValue('');
+    });
   });
 });
