@@ -8,20 +8,25 @@ export const PAGE_SIZE_MAX = 100;
  * is not an error: it has no items, and `total` / `totalPages` still describe the whole list.
  */
 export const PageQuerySchema = z.object({
-  page: z.coerce
-    .number()
-    .int()
-    .min(1)
+  page: wholeNumber(`Page must be a whole number of at least 1`, 1)
     .default(1)
     .describe('Page number, from 1. A page past the last one returns no items.'),
-  pageSize: z.coerce
-    .number()
-    .int()
-    .min(1)
-    .max(PAGE_SIZE_MAX)
+  pageSize: wholeNumber(
+    `Page size must be a whole number from 1 to ${PAGE_SIZE_MAX}`,
+    1,
+    PAGE_SIZE_MAX,
+  )
     .default(PAGE_SIZE_DEFAULT)
     .describe(`Items per page, 1–${PAGE_SIZE_MAX}`),
 });
+
+/**
+ * A query-string number with one message for every way it can be wrong (not a number, a fraction,
+ * out of range), instead of Zod's defaults ("expected number, received NaN").
+ */
+function wholeNumber(error: string, min: number, max = Number.MAX_SAFE_INTEGER) {
+  return z.coerce.number({ error }).int({ error }).min(min, { error }).max(max, { error });
+}
 
 export type PageQuery = z.infer<typeof PageQuerySchema>;
 

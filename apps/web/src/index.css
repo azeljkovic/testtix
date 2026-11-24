@@ -1,3 +1,4 @@
+@layer react-aria;
 @import 'tailwindcss';
 
 @layer base {
@@ -9,5 +10,16 @@
   :focus-visible,
   [data-focus-visible] {
     @apply outline-2 outline-offset-2 outline-indigo-600;
+  }
+}
+
+/*
+ * React Aria's rule for pressable elements (lets the browser handle panning and zooming without a
+ * tap delay). React Aria would inject it as an inline <style>, which the Content-Security-Policy
+ * blocks; src/csp.ts stops the injection, so it lives here. Lowest priority, like React Aria's own.
+ */
+@layer react-aria {
+  [data-react-aria-pressable] {
+    touch-action: pan-x pan-y pinch-zoom;
   }
 }

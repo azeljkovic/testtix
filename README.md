@@ -4,7 +4,16 @@ A sample event ticket shop — concerts, talks and meetups — built as a realis
 
 Ticket sales naturally produce the failure modes worth practising on: race conditions on the last seat, time-dependent seat holds, ticket drops with a waiting room, asynchronous checkout with emailed tickets, and a seat map that is hard to make accessible.
 
-> **Status:** early development. The app is being built in small, verifiable chunks — see the [development plan](docs/development-plan.md) and [tech stack decisions](docs/tech-stack-decisions.md).
+> **Status:** v1. Every feature below works and ships without intentional bugs; planned additions (switchable bugs to hunt, live updates over SSE) are listed in the [development plan](docs/development-plan.md#later-post-v1-already-decided-as-deferred). How it's built and why: [tech stack decisions](docs/tech-stack-decisions.md).
+
+## What's in it
+
+- **Catalogue:** concerts, talks and meetups with search, filters, sorting and pagination; seated, general-admission and mixed venues.
+- **Seats and holds:** an accessible seat map (keyboard grid, screen-reader labels), holds with a server-side countdown, and a 409 when two customers want the last seat.
+- **Checkout:** a separate fake payment provider with test cards for success, declines, missing and duplicate webhooks; orders go `PENDING_PAYMENT` → `PROCESSING` → `CONFIRMED`, and tickets (QR code + PDF) arrive by email.
+- **Ticket drops:** scheduled sales with a waiting room that admits customers at a set rate.
+- **Accounts and admin:** registration with email verification, cookie sessions with CSRF protection, and an admin area for venues, events and ticket releases.
+- **Built for testing:** a test API (reset, seed scenarios, test sessions, a controllable clock), a deterministic seed, problem+json errors with request IDs, rate limits with a load-test key, Prometheus metrics and a Grafana dashboard. The [testing guide](docs/testing-guide.md) is the reference.
 
 ## Repository layout
 
@@ -167,6 +176,8 @@ pnpm full:up
 
 The api image runs the API by default (`node dist/main.js`, port 3000); the same image is the worker (`node dist/worker.js`) and runs the migrations (`prisma migrate deploy`, then `node dist/seed/main.js --if-empty`). Every image runs as a non-root user and has a health check.
 
+The web image's Caddy sends a strict `Content-Security-Policy` (nothing but the app's own origin) and the usual security headers; the API sends its own on every response. `pnpm dev` has no CSP, so check CSP-related changes with `pnpm full:up --build`. The headers are listed in the [testing guide](docs/testing-guide.md#security-headers).
+
 ## Dashboards (Prometheus and Grafana)
 
 The `observability` compose profile runs Prometheus and Grafana with a provisioned **Ticket drop** dashboard: request rate, latency and status codes per route, 409s and 429s, waiting-room queues and admissions, hold outcomes and held tickets, orders by status, background job lag, queue depth and run time, and each process' event loop, CPU and memory. It's meant for watching k6 runs and drops.
@@ -191,7 +202,7 @@ A public demo runs the published images on one server behind Caddy with automati
 
 ## Releases
 
-Releases are cut by [release-please](https://github.com/googleapis/release-please) from the Conventional Commits on `main`: it keeps a release PR open with the next version and `CHANGELOG.md`, and merging it tags the release, creates the GitHub Release with `openapi.json` attached, gives the commit's tested images their version tags on GHCR and notifies the tests repository. `0.x` releases are GitHub pre-releases. How it works, the setup and the tests repo's payload are in [docs/releasing.md](docs/releasing.md).
+Releases are cut by [release-please](https://github.com/googleapis/release-please) from the Conventional Commits on `main`: it keeps a release PR open with the next version and `CHANGELOG.md`, and merging it tags the release, creates the GitHub Release with `openapi.json` attached, gives the commit's tested images their version tags on GHCR and notifies the tests repository. `0.x` releases were GitHub pre-releases; from 1.0 on they're regular releases. How it works, the setup and the tests repo's payload are in [docs/releasing.md](docs/releasing.md).
 
 ## Scripts
 
@@ -229,7 +240,7 @@ Releases are cut by [release-please](https://github.com/googleapis/release-pleas
 
 ## Tech stack
 
-TypeScript (strict) everywhere · React + Vite · NestJS · PostgreSQL + Prisma · Redis + BullMQ · Mailpit · Docker Compose · Vitest.
+TypeScript (strict) everywhere · React + Vite · NestJS on Fastify · PostgreSQL + Prisma · Redis + BullMQ · Mailpit · Caddy · Docker Compose · Prometheus + Grafana · Vitest. CI runs lint, types, unit, component and integration tests, the testing guide's examples, a dependency audit and container smoke tests on every PR.
 
 ## Roadmap
 

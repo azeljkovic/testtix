@@ -14,6 +14,7 @@ import { EditVenuePage, NewVenuePage } from '../pages/admin/VenueFormPage.js';
 import { CheckoutPage } from '../pages/CheckoutPage.js';
 import { ChooseSeatsPage } from '../pages/ChooseSeatsPage.js';
 import { EventDetailPage } from '../pages/EventDetailPage.js';
+import { ErrorPage } from '../pages/ErrorPage.js';
 import { EventsPage } from '../pages/EventsPage.js';
 import { HomePage } from '../pages/HomePage.js';
 import { LoginPage } from '../pages/LoginPage.js';
@@ -29,49 +30,55 @@ export const routes: RouteObject[] = [
   {
     element: <RootLayout />,
     children: [
-      { index: true, element: <HomePage /> },
-      { path: 'events', element: <EventsPage /> },
-      { path: 'events/:slug', element: <EventDetailPage /> },
-      { path: 'events/:slug/seats', element: <ChooseSeatsPage /> },
-      { path: 'login', element: <LoginPage /> },
-      { path: 'register', element: <RegisterPage /> },
-      // The API's verification emails link here (`VERIFY_EMAIL_PATH` in apps/api).
-      { path: 'verify-email', element: <VerifyEmailPage /> },
-      // Logged-in users only.
       {
-        element: <RequireAuth />,
+        // A page that fails to render shows the error page inside the layout (header, footer).
+        errorElement: <ErrorPage />,
         children: [
-          { path: 'account', element: <AccountPage /> },
-          // A ticket drop's waiting room (`waitingRoomEnabled`).
-          { path: 'events/:slug/queue', element: <WaitingRoomPage /> },
-          { path: 'events/:slug/checkout', element: <CheckoutPage /> },
-          { path: 'orders', element: <OrdersPage /> },
-          // The payment provider returns here, and the e-ticket email links here (apps/api).
-          { path: 'orders/:orderId', element: <OrderPage /> },
-        ],
-      },
-      // Admins only.
-      {
-        element: <RequireAuth role="ADMIN" />,
-        children: [
+          { index: true, element: <HomePage /> },
+          { path: 'events', element: <EventsPage /> },
+          { path: 'events/:slug', element: <EventDetailPage /> },
+          { path: 'events/:slug/seats', element: <ChooseSeatsPage /> },
+          { path: 'login', element: <LoginPage /> },
+          { path: 'register', element: <RegisterPage /> },
+          // The API's verification emails link here (`VERIFY_EMAIL_PATH` in apps/api).
+          { path: 'verify-email', element: <VerifyEmailPage /> },
+          // Logged-in users only.
           {
-            path: 'admin',
-            element: <AdminLayout />,
+            element: <RequireAuth />,
             children: [
-              { index: true, element: <Navigate to="/admin/events" replace /> },
-              { path: 'events', element: <AdminEventsPage /> },
-              { path: 'events/new', element: <NewEventPage /> },
-              { path: 'events/:eventId', element: <AdminEventPage /> },
-              { path: 'events/:eventId/edit', element: <EditEventPage /> },
-              { path: 'events/:eventId/batches/new', element: <ReleaseBatchPage /> },
-              { path: 'venues', element: <AdminVenuesPage /> },
-              { path: 'venues/new', element: <NewVenuePage /> },
-              { path: 'venues/:venueId', element: <EditVenuePage /> },
+              { path: 'account', element: <AccountPage /> },
+              // A ticket drop's waiting room (`waitingRoomEnabled`).
+              { path: 'events/:slug/queue', element: <WaitingRoomPage /> },
+              { path: 'events/:slug/checkout', element: <CheckoutPage /> },
+              { path: 'orders', element: <OrdersPage /> },
+              // The payment provider returns here, and the e-ticket email links here (apps/api).
+              { path: 'orders/:orderId', element: <OrderPage /> },
             ],
           },
+          // Admins only.
+          {
+            element: <RequireAuth role="ADMIN" />,
+            children: [
+              {
+                path: 'admin',
+                element: <AdminLayout />,
+                children: [
+                  { index: true, element: <Navigate to="/admin/events" replace /> },
+                  { path: 'events', element: <AdminEventsPage /> },
+                  { path: 'events/new', element: <NewEventPage /> },
+                  { path: 'events/:eventId', element: <AdminEventPage /> },
+                  { path: 'events/:eventId/edit', element: <EditEventPage /> },
+                  { path: 'events/:eventId/batches/new', element: <ReleaseBatchPage /> },
+                  { path: 'venues', element: <AdminVenuesPage /> },
+                  { path: 'venues/new', element: <NewVenuePage /> },
+                  { path: 'venues/:venueId', element: <EditVenuePage /> },
+                ],
+              },
+            ],
+          },
+          { path: '*', element: <NotFoundPage /> },
         ],
       },
-      { path: '*', element: <NotFoundPage /> },
     ],
   },
 ];

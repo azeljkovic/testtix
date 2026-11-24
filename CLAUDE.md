@@ -46,7 +46,8 @@ When a decision changes, update the docs in the same PR so they stay accurate.
 - ✅ C6.2 Observability profile
 - 🟡 C6.3 Hosted demo: repo side done; live check waits for the VPS (see plan)
 - 🟡 C6.4 Release automation: repo side done; the first release (live check) follows the merge (see plan)
-- ⏭️ Next: **C6.5** (see plan)
+- ✅ C6.5 v1.0 hardening
+- ⏭️ Next: merge release-please's `1.0.0` release PR (the `Release-As: 1.0.0` footer is on `main`), then the C6.3/C6.4 live checks and the post-v1 items in the plan
 
 Update this list when a chunk is merged.
 
@@ -130,6 +131,8 @@ Run one package: `pnpm --filter @testtix/api <script>`.
 - Metrics (`/metrics`, C6.2): register on the injected `METRICS_REGISTRY` (`src/metrics/metrics.tokens.ts`; import `MetricsModule`), names `testtix_*`, labels never raw paths or user input. Per-process counts are counters/histograms; values from Postgres/Redis are gauges read in `collect()` at scrape time with the server clock, catching errors so the scrape still answers. BullMQ processors and queues get job metrics automatically (`JobMetrics`). The dashboard is `docker/observability/grafana/dashboards/ticket-drop.json` (`pnpm observability:check` runs each of its queries); document new metrics in `docs/testing-guide.md#metrics`.
 - Hosted demo (C6.3, `docs/hosted-demo.md`): `docker/demo/compose.yml` overlays the `full` profile (run it with `docker/demo/compose.sh`); `edge` (`docker/demo/Caddyfile`) serves `DEMO_DOMAIN`, `api.`, `pay.` and `mail.` with TLS and keeps `/metrics` private. Settings the demo needs go in the overlay (secrets as `${VAR:?}`) and in the `.env` the **Demo deploy** workflow writes from the `demo` environment. A new public path or host needs a check in `docker/demo-smoke-test.sh` (`pnpm demo:check`); test the setup locally with `DEMO_DOMAIN=localhost` (see the runbook).
 - Releases (C6.4, `docs/releasing.md`): release-please keeps a release PR open from the Conventional Commits on `main`; never bump versions, edit `CHANGELOG.md` or push `v*` tags by hand. One version for the repo: a new workspace `package.json` (or another file carrying the version) goes into `extra-files` in `release-please-config.json`. Releases reuse CI's `sha-<7>` images (`.github/workflows/release.yml`); the tests repo gets a `testtix-release` dispatch, whose payload is a documented contract.
+- Security headers (C6.5): the web image's Caddy (`security-headers` snippet in `apps/web/Caddyfile`) sends a CSP of `'self'` only, so the web app may not use inline `<style>`/`<script>`, `style="…"` strings, `eval`/`new Function` or other origins (React's `style` prop is fine). A library that injects any of these gets a workaround in `apps/web/src/csp.ts` (React Aria's pressable style, Zod's JIT probe), never `'unsafe-inline'`. `pnpm dev` has no CSP: check with `pnpm full:up --build` and the browser console. API headers come from `securityHeadersFor()` (`app.setup.ts`); HSTS only in `docker/demo/Caddyfile`. Route render errors show `ErrorPage` (`errorElement` in `routes.tsx`).
+- Dependencies: CI's `audit` job runs `pnpm audit --audit-level high`. Fix a vulnerable transitive version with a `pnpm.overrides` entry in the root `package.json` (parent-scoped, e.g. `"@prisma/config>effect"`) and drop it once upstream has the fix.
 - Local infra is `docker/compose.yml`, driven by `pnpm infra:*` from the repo root (`--project-directory .`, so the root `.env` overrides the compose defaults). Pin image tags to an exact version. New services get a health check, and `docker/smoke-test.sh` checks them.
 
 ## Repo

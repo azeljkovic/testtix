@@ -1,3 +1,4 @@
+import './csp.js';
 import './index.css';
 
 import { StrictMode } from 'react';

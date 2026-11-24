@@ -58,6 +58,26 @@ export function buildOpenApiDocument(app: NestFastifyApplication): OpenAPIObject
   );
 }
 
+/** Swagger UI (`/docs`) is the API's only HTML page; it brings its own scripts and styles. */
+const DOCS_PATH = /^\/docs(?:[/?#.-]|$)/;
+
+/**
+ * Security headers of every API response (C6.5). The API answers JSON, problem+json and PDFs, none
+ * of which should be sniffed as something else, framed or allowed to load anything; Swagger UI keeps
+ * everything but the policy, which would block it.
+ */
+export function securityHeadersFor(url: string): Record<string, string> {
+  const headers: Record<string, string> = {
+    'X-Content-Type-Options': 'nosniff',
+    'X-Frame-Options': 'DENY',
+    'Referrer-Policy': 'no-referrer',
+  };
+  if (!DOCS_PATH.test(url)) {
+    headers['Content-Security-Policy'] = "default-src 'none'; frame-ancestors 'none'";
+  }
+  return headers;
+}
+
 /**
  * App-level setup shared by `main.ts` and the tests, so tests exercise the real configuration.
  * Call before `init()` / `listen()`.
@@ -70,6 +90,7 @@ export function configureApp(app: NestFastifyApplication): void {
     .getInstance()
     .addHook('onRequest', (request, reply, done) => {
       void reply.header(REQUEST_ID_HEADER, request.id);
+      void reply.headers(securityHeadersFor(request.url));
       done();
     });
   SwaggerModule.setup('docs', app, () => buildOpenApiDocument(app), {

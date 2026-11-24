@@ -10,6 +10,8 @@ How to test TestTix from the outside: what the API promises, and the hooks it gi
 - Every page has the same landmarks: a header (`banner`) with the main navigation (`navigation` named "Main"), one `main` and a footer (`contentinfo`). The current navigation link has `aria-current="page"`.
 - The first Tab stop is a "Skip to main content" link. Activating it moves focus to `main` without changing the URL.
 - Each route sets the document title to `<page> · TestTix` (just `TestTix` on the home page). Unknown paths render a "Page not found" page with that title; the server still answers 200, since routing happens in the browser.
+- A page that fails to render shows "Something went wrong" (title `Something went wrong · TestTix`) inside the usual header and footer, with a "Reload the page" button and a link home; the error itself goes to the browser console, never the page. v1 has no way to trigger it on purpose.
+- The containerised web app (`pnpm full:up`, the hosted demo) sends [security headers](#security-headers), among them a strict `Content-Security-Policy`; `pnpm dev` doesn't (Vite's hot reload needs inline scripts).
 - Locate elements by role and accessible name. `data-testid` is only added where no good accessible locator exists.
 
 ### Account pages
@@ -174,9 +176,22 @@ It is shared, so it differs from a local instance in a few ways:
 
 - [`POST /__test/reset`](#resetting-the-data) and [`POST /__test/clock`](#the-server-clock) need the [`X-Test-Key`](#test-api-key) header, and the key isn't public. Build your data with [seed scenarios](#seed-scenarios) and [test sessions](#logging-in-through-the-test-api), which only add rows (see [Keeping tests independent](#keeping-tests-independent)), and don't rely on the clock. For the same reason, this guide's examples (each starts with a reset) don't run there as written.
 - [Rate limits](#rate-limits) are on, with the defaults. Authorised load runs send `X-Load-Test-Key`.
-- Cookies are `Secure` (HTTPS only).
+- Cookies are `Secure` (HTTPS only), and every host sends `Strict-Transport-Security` ([security headers](#security-headers)).
 - The data is reset every night at about 03:17 UTC: accounts, orders and sessions you created are gone, and Mailpit is emptied. The seed data comes back relative to the new day.
 - `/metrics` isn't public.
+
+## Security headers
+
+| Header                       | Web app (Caddy, `full` profile and demo)                                                                                                                                      | API (every response, also under the web app's `/api`)         |
+| ---------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------- |
+| `Content-Security-Policy`    | `default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self'; connect-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'` | `default-src 'none'; frame-ancestors 'none'` (not on `/docs`) |
+| `X-Content-Type-Options`     | `nosniff`                                                                                                                                                                     | `nosniff`                                                     |
+| `X-Frame-Options`            | `DENY`                                                                                                                                                                        | `DENY`                                                        |
+| `Referrer-Policy`            | `strict-origin-when-cross-origin`                                                                                                                                             | `no-referrer`                                                 |
+| `Permissions-Policy`         | `camera=(), microphone=(), geolocation=(), payment=(), usb=()`                                                                                                                | —                                                             |
+| `Cross-Origin-Opener-Policy` | `same-origin`                                                                                                                                                                 | —                                                             |
+
+The web app's policy allows nothing but its own origin: no inline scripts or styles, no third-party hosts, no framing. A CSP violation in the browser console of the containerised app is a bug (unless a browser extension caused it). Caddy sends no `Server` header. The [payment page](#payment-page) has its own policy (`form-action` allows the shop it returns to). On the [hosted demo](#hosted-demo), every host also sends `Strict-Transport-Security: max-age=31536000` (no `includeSubDomains`).
 
 ## Request IDs
 
@@ -900,7 +915,7 @@ Events (`tickets`), batches and batch sections report `{ total, available, held,
 
 ### Pagination
 
-List endpoints take `page` (from 1, default 1) and `pageSize` (1–100, default 20) and answer `{ items, page, pageSize, total, totalPages }`. A page past the last one has no items but the same `total`; an empty list has `totalPages: 0`. Every list has a stable order with `id` as the last tiebreaker, so paging never skips or repeats an item while the data doesn't change.
+List endpoints take `page` (a whole number from 1, default 1) and `pageSize` (1–100, default 20) and answer `{ items, page, pageSize, total, totalPages }`. A page past the last one has no items but the same `total`; an empty list has `totalPages: 0`. Every list has a stable order with `id` as the last tiebreaker, so paging never skips or repeats an item while the data doesn't change.
 
 ## Email
 

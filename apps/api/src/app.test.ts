@@ -263,4 +263,27 @@ describe('headers', () => {
     const res = await request((await start()).getHttpServer()).get('/health');
     expect(res.headers).not.toHaveProperty('x-powered-by');
   });
+
+  it.each([
+    ['a JSON response', '/health'],
+    ['an unknown route', '/no-such-route'],
+    ['an error', '/__probe/crash'],
+  ])('sends security headers with %s', async (_label, path) => {
+    const res = await request((await start()).getHttpServer()).get(path);
+    expect(res.headers).toMatchObject({
+      'x-content-type-options': 'nosniff',
+      'x-frame-options': 'DENY',
+      'referrer-policy': 'no-referrer',
+      'content-security-policy': "default-src 'none'; frame-ancestors 'none'",
+    });
+  });
+
+  it('lets Swagger UI load its scripts and styles', async () => {
+    const server = (await start()).getHttpServer();
+    for (const path of ['/docs', '/docs/swagger-ui-init.js']) {
+      const res = await request(server).get(path);
+      expect(res.headers['x-content-type-options']).toBe('nosniff');
+      expect(res.headers).not.toHaveProperty('content-security-policy');
+    }
+  });
 });

@@ -17,6 +17,12 @@
 	}
 }
 
+# Browsers that have seen one HTTPS answer refuse plain HTTP for a year (C6.5). Not for subdomains
+# or the preload list: DEMO_DOMAIN's other names aren't the demo's to decide. Every site imports it.
+(hsts) {
+	header Strict-Transport-Security "max-age=31536000"
+}
+
 # Prometheus metrics stay private (Prometheus scrapes the replicas directly), and so does every
 # other path but the payment page on the provider. `path` matching is case-insensitive and
 # Caddy cleans the path first (`//metrics`, `/./metrics`); the regexp covers `/metrics/…`.
@@ -26,16 +32,19 @@
 }
 
 {$DEMO_DOMAIN} {
+	import hsts
 	import no-metrics /api
 	reverse_proxy web:8080
 }
 
 api.{$DEMO_DOMAIN} {
+	import hsts
 	import no-metrics ""
 	reverse_proxy web:3000
 }
 
 pay.{$DEMO_DOMAIN} {
+	import hsts
 	# The payment page and its stylesheet. The rest (sessions, health) is for the API only.
 	@page path /pay/* /assets/*
 	handle @page {
@@ -47,6 +56,7 @@ pay.{$DEMO_DOMAIN} {
 }
 
 mail.{$DEMO_DOMAIN} {
+	import hsts
 	# Mailpit asks for the MAILPIT_UI_AUTH credentials itself (UI and API).
 	reverse_proxy mailpit:8025
 }
