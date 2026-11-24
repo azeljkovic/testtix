@@ -17,15 +17,15 @@ How to test TestTix from the outside: what the API promises, and the hooks it gi
 
 ### Account pages
 
-| Path                    | Who       | What it shows                                                                                               |
-| ----------------------- | --------- | ----------------------------------------------------------------------------------------------------------- |
-| `/register`             | anyone    | Name, Email, Password. Creates a customer, logs it in and goes to `/account`                                |
-| `/login`                | anyone    | Email, Password. Goes to `redirectTo` (or `/`) afterwards                                                   |
-| `/verify-email?token=…` | anyone    | The landing page of the [verification email](#email-verification): verifies the token and shows the outcome |
-| `/account`              | logged in | Name, email, verification status and account type; unverified users get "Send a new verification email"     |
-| `/orders`               | logged in | [Your orders](#checkout-and-order-pages), newest first                                                      |
-| `/orders/<order id>`    | logged in | [One order](#order-page): its status, and its tickets once confirmed                                        |
-| `/admin`                | admins    | The [admin area](#admin-pages); redirects to `/admin/events`                                                |
+| Path                    | Who       | What it shows                                                                                                                                                                              |
+| ----------------------- | --------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `/register`             | anyone    | Name, Email, Password. Creates a customer, logs it in and goes to `/account`                                                                                                               |
+| `/login`                | anyone    | Email, Password. Goes to `redirectTo` (or `/`) afterwards. Below the form, **Test accounts** lists the [seeded accounts](#seeded-accounts), with a copy button for each email and password |
+| `/verify-email?token=…` | anyone    | The landing page of the [verification email](#email-verification): verifies the token and shows the outcome                                                                                |
+| `/account`              | logged in | Name, email, verification status and account type; unverified users get "Send a new verification email"                                                                                    |
+| `/orders`               | logged in | [Your orders](#checkout-and-order-pages), newest first                                                                                                                                     |
+| `/orders/<order id>`    | logged in | [One order](#order-page): its status, and its tickets once confirmed                                                                                                                       |
+| `/admin`                | admins    | The [admin area](#admin-pages); redirects to `/admin/events`                                                                                                                               |
 
 - **Header.** Visitors see "Log in" and "Register" links, which return to the current page. A logged-in user gets a menu button named `<name>, account menu` with "Account", "Your orders", "Admin" (admins only) and "Log out". Logging out goes to the home page.
 - **Guards.** A visitor opening `/account`, a waiting room, checkout or order page, or any `/admin/…` page is sent to `/login?redirectTo=<path>`. A customer opening an admin page stays on the URL and sees "Access denied". `redirectTo` must be a path on the same site; anything else (`https://…`, `//host`) is ignored and the login goes to `/`.
@@ -1123,7 +1123,7 @@ The baseline has three [accounts](#seeded-accounts) and no holds or orders: ever
 | `customer@testtix.test`   | `TestTix-customer-1`   | `019b76da-a800-7599-864c-1d5467501b78` | `CUSTOMER` | yes            |
 | `unverified@testtix.test` | `TestTix-unverified-1` | `019b76da-a800-78a5-9bed-edb1c9007204` | `CUSTOMER` | no             |
 
-They are shared by everyone using the server: on a shared instance, prefer [`POST /__test/sessions`](#logging-in-through-the-test-api) or a registration with a unique email, so tests don't log each other out or change each other's data.
+The web app's login page lists them too, each email and password with a copy button ("Copy admin email", "Copy admin password", …) that says "Copied the admin email." in the panel's status line. Copying never fills in the form. They are shared by everyone using the server: on a shared instance, prefer [`POST /__test/sessions`](#logging-in-through-the-test-api) or a registration with a unique email, so tests don't log each other out or change each other's data.
 
 ### Venues
 
