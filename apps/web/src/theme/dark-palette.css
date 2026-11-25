@@ -75,6 +75,17 @@
     --color-indigo-800: light-dark(oklch(39.8% 0.195 277.366), oklch(80.3% 0.065 277.4));
     --color-indigo-900: light-dark(oklch(35.9% 0.144 278.697), oklch(84% 0.034 278.7));
     --color-indigo-950: light-dark(oklch(25.7% 0.09 281.288), oklch(94.6% 0.018 281.3));
+    --color-violet-50: light-dark(oklch(96.9% 0.016 293.756), oklch(24.1% 0.134 293.8));
+    --color-violet-100: light-dark(oklch(94.3% 0.029 294.588), oklch(27.4% 0.151 294.6));
+    --color-violet-200: light-dark(oklch(89.4% 0.057 293.283), oklch(32.6% 0.181 293.3));
+    --color-violet-300: light-dark(oklch(81.1% 0.111 293.571), oklch(40.8% 0.226 293.6));
+    --color-violet-400: light-dark(oklch(70.2% 0.183 293.541), oklch(51.5% 0.281 293.5));
+    --color-violet-500: light-dark(oklch(60.6% 0.25 292.717), oklch(60.6% 0.236 292.7));
+    --color-violet-600: light-dark(oklch(54.1% 0.281 293.009), oklch(67% 0.183 293));
+    --color-violet-700: light-dark(oklch(49.1% 0.27 292.581), oklch(71.8% 0.111 292.6));
+    --color-violet-800: light-dark(oklch(43.2% 0.232 292.759), oklch(77.6% 0.057 292.8));
+    --color-violet-900: light-dark(oklch(38% 0.189 293.745), oklch(82.9% 0.029 293.7));
+    --color-violet-950: light-dark(oklch(28.3% 0.141 291.089), oklch(93% 0.016 291.1));
     --color-slate-50: light-dark(oklch(98.4% 0.003 247.858), oklch(20.3% 0.042 247.9));
     --color-slate-100: light-dark(oklch(96.8% 0.007 247.896), oklch(22.3% 0.042 247.9));
     --color-slate-200: light-dark(oklch(92.9% 0.013 255.508), oklch(26.5% 0.041 255.5));
