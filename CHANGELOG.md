@@ -1,5 +1,32 @@
 # Changelog
 
+## [1.0.0](https://github.com/azeljkovic/testtix/compare/v0.1.0...v1.0.0) (2026-11-25)
+
+
+### Features
+
+* security headers for the web app, the API and the hosted demo (C6.5) ([d8ecf5f](https://github.com/azeljkovic/testtix/commit/d8ecf5f8ca90facb40b0855ebc48cb843dad18e2))
+* v1.0 hardening — security headers, error page, audit (C6.5) ([9757736](https://github.com/azeljkovic/testtix/commit/9757736fa617222a384531b46d6ffa61ebee2b23))
+* **web:** dark theme with a System/Light/Dark switcher ([3603274](https://github.com/azeljkovic/testtix/commit/3603274a5ad29b20b653e261badd16495cc3bbed))
+* **web:** dark theme with a System/Light/Dark switcher ([4c012ec](https://github.com/azeljkovic/testtix/commit/4c012eccac2099520fac5f851bb327c8604cd896))
+* **web:** error page for pages that fail to render (C6.5) ([6694925](https://github.com/azeljkovic/testtix/commit/6694925ef1b44f6e4efe126aef02f37772db7569))
+* **web:** redesigned home page ([f9148d5](https://github.com/azeljkovic/testtix/commit/f9148d567b88836812ac7f0c26d1c8ae8838ce9a))
+* **web:** redesigned home page ([3d913cc](https://github.com/azeljkovic/testtix/commit/3d913cce16acf495e2bdcb9b47f217c39cd66277))
+* **web:** test accounts with copy buttons on the login page ([eb5c3fd](https://github.com/azeljkovic/testtix/commit/eb5c3fd5c6afa6b3235a6e5815bc34b517f2a733))
+* **web:** test accounts with copy buttons on the login page ([75e769d](https://github.com/azeljkovic/testtix/commit/75e769dbcf4ff69eb5d65188aca38e92d5264110))
+* **web:** theme menu with an icon in the header ([5d03b7c](https://github.com/azeljkovic/testtix/commit/5d03b7c7fd5bd278dcd44ff5f4e748da4a7dbea7))
+
+
+### Bug Fixes
+
+* **deps:** patch vulnerable transitive packages and audit in CI (C6.5) ([3c34370](https://github.com/azeljkovic/testtix/commit/3c34370f740604c1cdbb31a32dc160c83f1ac236))
+* **shared:** readable page and pageSize validation messages (C6.5) ([7e509f5](https://github.com/azeljkovic/testtix/commit/7e509f5cdbf66424c6b513f36eeacb5bb467f678))
+
+
+### Documentation
+
+* v1.0 hardening notes, security headers and a README for v1 (C6.5) ([6c7bdf8](https://github.com/azeljkovic/testtix/commit/6c7bdf80b379e3a1ad304fd38d3a5395fa59e619))
+
 ## 0.1.0 (2026-11-23)
 
 
