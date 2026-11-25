@@ -4107,7 +4107,7 @@
   "info": {
     "title": "TestTix API",
     "description": "REST API of TestTix, a sample event ticket shop for software testing practice. Errors are `application/problem+json`; every response carries an `X-Request-Id` header. Requests are rate limited per client address (429 `rate-limited` with `Retry-After`); authorised load runs send the server's `X-Load-Test-Key` header to skip the limits.",
-    "version": "0.1.0",
+    "version": "1.0.0",
     "contact": {}
   },
   "tags": [],
